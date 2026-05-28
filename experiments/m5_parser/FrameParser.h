@@ -33,7 +33,7 @@ class FrameParser {
     using OnFrameCallback = std::function<void(const Frame&)>;
     FrameParser() = default;
 
-    void feed(uint8_t bute);
+    void feed(uint8_t byte);
 
     void setOnFrame(OnFrameCallback cb) {onFrame_ = std::move(cb);}
 
@@ -46,7 +46,7 @@ class FrameParser {
     uint8_t len_ = 0;
     uint8_t type_ = 0;
     std::vector<uint8_t> payload_buffer_;
-    int bytes_received_  = 0;
+    uint8_t bytes_received_ = 0;
 
     CRC16 crc_;
     uint8_t crc_lo_ = 0;

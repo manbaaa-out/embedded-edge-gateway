@@ -79,7 +79,7 @@ void FrameParser::feed(uint8_t byte) {
         state_ = State::WAIT_CRC_HI;
         break;
     
-    case State:: WAIT_CRC_HI:
+    case State::WAIT_CRC_HI:
         crc_hi_ = byte;
         state_ = State::DELIVER;
         handleDeliver();
@@ -101,7 +101,7 @@ void FrameParser::feed(uint8_t byte) {
 }
 
 void FrameParser::handleDeliver() {
-    u_int16_t computed_crc = crc_.value();
+    uint16_t computed_crc = crc_.value();
     uint16_t received_crc = (static_cast<uint16_t>(crc_hi_) << 8) | crc_lo_;
 
     if (computed_crc == received_crc) {
