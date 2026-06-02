@@ -27,6 +27,9 @@ experiments/m3_log/test_timed_flush
 experiments/m7_epoll/server
 experiments/m7_epoll/zuse
 experiments/m7_epoll/channel_et
+experiments/m9_timerfd/reactor_timerfd
+experiments/m9_timerfd/timer_server
+experiments/m9_timerfd/timerfd_create_test
 experiments/**/*.out
 experiments/**/a.out
 
