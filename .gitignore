@@ -31,6 +31,7 @@ experiments/m9_timerfd/reactor_timerfd
 experiments/m9_timerfd/timer_server
 experiments/m9_timerfd/timerfd_create_test
 experiments/m11_http/test_http
+experiments/m11_http/http_server
 experiments/**/*.out
 experiments/**/a.out
 
