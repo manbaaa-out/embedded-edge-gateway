@@ -32,8 +32,15 @@ experiments/m9_timerfd/timer_server
 experiments/m9_timerfd/timerfd_create_test
 experiments/m11_http/test_http
 experiments/m11_http/http_server
+experiments/m12_sqlite/exec
+experiments/m12_sqlite/insert
+experiments/m12_sqlite/select
+experiments/m12_sqlite/test_reset
+experiments/m12_sqlite/hello
+experiments/m12_sqlite/raii
 experiments/**/*.out
 experiments/**/a.out
+experiments/**/*.db
 
 # IDE
 .vscode/
