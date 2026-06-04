@@ -38,6 +38,10 @@ experiments/m12_sqlite/select
 experiments/m12_sqlite/test_reset
 experiments/m12_sqlite/hello
 experiments/m12_sqlite/raii
+experiments/m10_mqtt/mqtt_sub
+experiments/m10_mqtt/mqtt_pub
+experiments/m10_mqtt/mqtt_client
+experiments/m10_mqtt/pipeline
 experiments/**/*.out
 experiments/**/a.out
 experiments/**/*.db
