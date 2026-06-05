@@ -22,6 +22,19 @@ int main () {
         mosquitto_lib_cleanup();
         return 1;
     }
-    mosquitto_subscribe(mosq, NULL, "gateway/#", 1);
-    mosquitto_loop_forever(mosq, -1, 1);
+    
+    rc = mosquitto_subscribe(mosq, NULL, "gateway/#", 1);
+    if (rc != MOSQ_ERR_SUCCESS) {
+        fprintf(stderr, "subscribe failed: %s\n", mosquitto_strerror(rc));
+        mosquitto_disconnect(mosq);
+        mosquitto_destroy(mosq);
+        mosquitto_lib_cleanup();
+        return 1;
+    }
+
+    rc = mosquitto_loop_forever(mosq, -1, 1);
+    // 循环结束后(断开或出错)才会走到这
+    fprintf(stderr, "loop exited: %s\n", mosquitto_strerror(rc));
+    mosquitto_destroy(mosq);
+    mosquitto_lib_cleanup();
 }
