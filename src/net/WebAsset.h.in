@@ -1,0 +1,9 @@
+#pragma once
+// ⚠ 本文件由 CMake 在配置期从 web/ 下的静态资源自动生成,请勿手改。
+//   嵌入式 asset embedding:前端(html+uPlot js/css)编进二进制,
+//   单文件部署、离线可用,不依赖外部文件路径或 CDN。
+namespace gateway {
+static const char* const kIndexHtml = R"GWHTML(@WEB_INDEX_HTML@)GWHTML";
+static const char* const kUplotJs   = R"UPLOTJS(@WEB_UPLOT_JS@)UPLOTJS";
+static const char* const kUplotCss  = R"UPLOTCSS(@WEB_UPLOT_CSS@)UPLOTCSS";
+}

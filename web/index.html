@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edge Gateway Monitor</title>
+<link rel="stylesheet" href="/uplot.css">
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --line: #2a2e3a;
+    --txt: #e4e6eb; --muted: #8a8f9c; --accent: #22c55e; --warn: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--txt);
+    max-width: 860px; margin: 0 auto; padding: 32px 16px;
+  }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); transition: background .3s; }
+  .dot.dead { background: var(--warn); }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 20px; cursor: pointer; transition: border-color .2s;
+  }
+  .card:hover { border-color: #3a4050; }
+  .card.active { border-color: var(--accent); }
+  .card .label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .card .value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .card .unit { font-size: 14px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .card .time { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .card.stale .value { color: var(--muted); }
+  .chart-wrap {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 20px; margin-top: 18px;
+  }
+  .chart-title { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
+  /* uPlot 深色适配 */
+  .u-legend { color: var(--txt); }
+  .uplot { font-family: inherit; }
+  footer { margin-top: 26px; font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Edge Gateway Monitor</h1>
+    <span class="status"><span class="dot" id="dot"></span><span id="conn">连接中…</span></span>
+  </header>
+  <p class="sub">实时传感器数据 · 每 2 秒自动刷新 · 数据源:本地 SQLite(只读连接,WAL 读写并发)</p>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="chart-wrap">
+    <div class="chart-title" id="chartTitle">历史曲线</div>
+    <div id="chart"></div>
+  </div>
+
+  <footer>STM32 → UART → 网关(FSM 解析 / 线程池 / 落库 / MQTT 上云) → 本页查询</footer>
+
+<script src="/uplot.js"></script>
+<script>
+const DEVICES = [
+  { id: "temperature",   name: "温度",     unit: "°C",  color: "#22c55e" },
+  { id: "humidity",      name: "湿度",     unit: "%",   color: "#3b82f6" },
+  { id: "illuminance",   name: "光照",     unit: "lux", color: "#f59e0b" },
+  { id: "device_status", name: "设备状态", unit: "",    color: "#a855f7" },
+];
+const HISTORY_N = 40;       // 曲线取最近 40 个点
+let selected = "temperature";  // 当前曲线显示的设备
+let chart = null;
+
+function fmtTime(ts) { return new Date(ts * 1000).toLocaleTimeString(); }
+function setConn(ok) {
+  document.getElementById("dot").className = ok ? "dot" : "dot dead";
+  document.getElementById("conn").textContent = ok ? "已连接" : "连接异常";
+}
+
+// 拉某设备的历史数据 → {ts:[], val:[]}(uPlot 要求升序:旧→新)
+async function fetchHistory(devId, n) {
+  const resp = await fetch(`/api/data?dev=${devId}&n=${n}`);
+  const arr = await resp.json();        // 后端 ORDER BY ts DESC(新→旧)
+  arr.reverse();                         // 反转成 旧→新,符合时间轴
+  return {
+    ts:  arr.map(r => r.ts),
+    val: arr.map(r => r.value),
+    latest: arr.length ? arr[arr.length - 1] : null,
+  };
+}
+
+// 创建/重建 uPlot 图表(切换设备时重建)
+function makeChart(dev) {
+  const el = document.getElementById("chart");
+  el.innerHTML = "";
+  const opts = {
+    width: el.clientWidth || 800,
+    height: 280,
+    cursor: { drag: { x: true, y: false } },
+    scales: { x: { time: true } },
+    series: [
+      {},  // x 轴(时间)
+      {
+        label: dev.name + (dev.unit ? ` (${dev.unit})` : ""),
+        stroke: dev.color,
+        width: 2,
+        points: { show: true, size: 4 },
+      },
+    ],
+    axes: [
+      { stroke: "#8a8f9c", grid: { stroke: "#2a2e3a" }, ticks: { stroke: "#2a2e3a" } },
+      { stroke: "#8a8f9c", grid: { stroke: "#2a2e3a" }, ticks: { stroke: "#2a2e3a" } },
+    ],
+  };
+  chart = new uPlot(opts, [[], []], el);
+}
+
+async function refresh() {
+  let allOk = true;
+
+  // 1) 卡片:每个设备取最新 1 条(从历史第一条复用,少发请求)
+  //    这里为简单各发一次 n=1;曲线单独发 n=HISTORY_N
+  const cards = await Promise.all(DEVICES.map(async dev => {
+    try {
+      const resp = await fetch(`/api/data?dev=${dev.id}&n=1`);
+      const arr = await resp.json();
+      const cls = (dev.id === selected) ? "card active" : "card";
+      if (arr.length === 0)
+        return `<div class="${cls} stale" data-dev="${dev.id}"><div class="label">${dev.name}</div><div class="value">—</div><div class="time">无数据</div></div>`;
+      const r = arr[0];
+      return `<div class="${cls}" data-dev="${dev.id}"><div class="label">${dev.name}</div>
+              <div class="value">${r.value}<span class="unit">${dev.unit}</span></div>
+              <div class="time">采集于 ${fmtTime(r.ts)}</div></div>`;
+    } catch (e) { allOk = false;
+      return `<div class="card stale" data-dev="${dev.id}"><div class="label">${dev.name}</div><div class="value" style="color:var(--warn)">错误</div><div class="time">${e}</div></div>`;
+    }
+  }));
+  document.getElementById("grid").innerHTML = cards.join("");
+
+  // 卡片点击 → 切换曲线设备
+  document.querySelectorAll(".card").forEach(c => {
+    c.onclick = () => { selected = c.dataset.dev; redrawChart(); refresh(); };
+  });
+
+  // 2) 曲线:取选中设备的历史
+  await redrawChart();
+  setConn(allOk);
+}
+
+async function redrawChart() {
+  const dev = DEVICES.find(d => d.id === selected);
+  document.getElementById("chartTitle").textContent = `历史曲线 — ${dev.name}`;
+  try {
+    const h = await fetchHistory(selected, HISTORY_N);
+    if (!chart) makeChart(dev);
+    // 切换设备时颜色/label 要变 → 重建
+    if (chart.series[1].label.indexOf(dev.name) === -1) makeChart(dev);
+    chart.setData([h.ts, h.val]);
+  } catch (e) { /* 忽略单次失败 */ }
+}
+
+// 初次 + 定时
+refresh();
+setInterval(refresh, 2000);
+window.addEventListener("resize", () => { const d = DEVICES.find(x=>x.id===selected); makeChart(d); redrawChart(); });
+</script>
+</body>
+</html>
