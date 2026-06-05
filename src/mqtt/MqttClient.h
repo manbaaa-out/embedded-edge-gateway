@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <cstdio>
+#include <mutex>
 
 namespace gateway {
 
@@ -54,6 +55,7 @@ public:
 
     void publish(const std::string& topic, const std::string& payload,
                  int qos = 0, bool retain = false) {
+        std::lock_guard<std::mutex> lock(mtx_);
         int rc = mosquitto_publish(mosq_, nullptr, topic.c_str(),
                                    static_cast<int>(payload.size()),
                                    payload.data(), qos, retain);
@@ -76,6 +78,7 @@ private:
 
     struct mosquitto* mosq_ = nullptr;
     MessageHandler    handler_;
+    std::mutex mtx_;
 };
 
 } // namespace gateway
