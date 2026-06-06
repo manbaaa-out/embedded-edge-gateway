@@ -32,6 +32,7 @@ add_subdirectory(src/concurrent)
 add_subdirectory(src/net)
 add_subdirectory(src/db)
 add_subdirectory(src/mqtt)
+add_subdirectory(src/config) 
 
 # 6. 主程序
 add_executable(gateway src/main.cpp)
@@ -44,4 +45,5 @@ target_link_libraries(gateway PRIVATE
     db                    # M12 SQLite 持久化模块
     mqtt                  # M10 MQTT 客户端模块
     net
+    config
 )
