@@ -1,0 +1,81 @@
+<svg width="680" height="620" viewBox="0 0 680 620" xmlns="http://www.w3.org/2000/svg" role="img" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<title>Embedded edge gateway data flow</title>
+<desc>Sensor data flows from an STM32 node over UART into the gateway process, where a frame parser decodes it, a thread pool dispatches each record to both a SQLite database and an MQTT publish to the cloud. A separate HTTP monitor thread reads the database over a read-only connection and serves a browser dashboard. A config manager reloads on SIGHUP.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#73726c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+</defs>
+
+<rect x="0" y="0" width="680" height="620" fill="#ffffff"/>
+
+<!-- External: STM32 -->
+<rect x="40" y="40" width="150" height="50" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="115" y="62" text-anchor="middle" font-size="14" font-weight="500" fill="#2C2C2A">STM32 node</text>
+<text x="115" y="80" text-anchor="middle" font-size="12" fill="#5F5E5A">sensors, UART out</text>
+
+<text x="115" y="111" text-anchor="middle" font-size="12" fill="#5F5E5A">UART · binary frames</text>
+<line x1="115" y1="90" x2="115" y2="124" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<!-- Gateway process container -->
+<rect x="40" y="124" width="600" height="386" rx="20" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="60" y="150" font-size="14" font-weight="500" fill="#0C447C">gateway process (single binary)</text>
+
+<!-- Main reactor sub-container -->
+<rect x="60" y="166" width="270" height="324" rx="12" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="80" y="190" font-size="14" font-weight="500" fill="#085041">main thread · event loop</text>
+
+<!-- Serial channel -->
+<rect x="80" y="204" width="230" height="44" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="195" y="222" text-anchor="middle" font-size="14" font-weight="500" fill="#085041">serial channel</text>
+<text x="195" y="239" text-anchor="middle" font-size="12" fill="#0F6E56">epoll ET, read to EAGAIN</text>
+<line x1="195" y1="248" x2="195" y2="268" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<!-- Frame parser -->
+<rect x="80" y="268" width="230" height="44" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="195" y="286" text-anchor="middle" font-size="14" font-weight="500" fill="#085041">frame parser → decode</text>
+<text x="195" y="303" text-anchor="middle" font-size="12" fill="#0F6E56">state machine + CRC16</text>
+<line x1="195" y1="312" x2="195" y2="332" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<!-- Thread pool -->
+<rect x="80" y="332" width="230" height="44" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="195" y="350" text-anchor="middle" font-size="14" font-weight="500" fill="#3C3489">thread pool</text>
+<text x="195" y="367" text-anchor="middle" font-size="12" fill="#534AB7">submit per record, double write</text>
+
+<!-- signal channel -->
+<rect x="80" y="430" width="230" height="44" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="195" y="448" text-anchor="middle" font-size="14" font-weight="500" fill="#2C2C2A">signal channel</text>
+<text x="195" y="465" text-anchor="middle" font-size="12" fill="#5F5E5A">SIGHUP → config reload</text>
+
+<!-- SQLite -->
+<rect x="380" y="268" width="240" height="56" rx="8" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.5"/>
+<text x="500" y="290" text-anchor="middle" font-size="14" font-weight="500" fill="#633806">SQLite</text>
+<text x="500" y="308" text-anchor="middle" font-size="12" fill="#854F0B">WAL, rw conn · /tmp/gateway.db</text>
+
+<!-- HTTP monitor thread -->
+<rect x="380" y="386" width="240" height="104" rx="12" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="500" y="410" text-anchor="middle" font-size="14" font-weight="500" fill="#085041">HTTP monitor thread</text>
+<text x="500" y="428" text-anchor="middle" font-size="12" fill="#0F6E56">event loop + idle timeout</text>
+<rect x="400" y="438" width="200" height="40" rx="8" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.5"/>
+<text x="500" y="462" text-anchor="middle" font-size="12" fill="#854F0B">read-only conn → query</text>
+
+<!-- pool to SQLite -->
+<text x="355" y="334" text-anchor="middle" font-size="12" fill="#5F5E5A">write</text>
+<path d="M310 354 L345 354 L345 296 L378 296" fill="none" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<!-- SQLite to HTTP read -->
+<text x="640" y="357" text-anchor="end" font-size="12" fill="#5F5E5A">WAL read</text>
+<path d="M500 324 L500 386" fill="none" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<!-- MQTT broker -->
+<rect x="490" y="166" width="150" height="50" rx="8" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+<text x="565" y="188" text-anchor="middle" font-size="14" font-weight="500" fill="#712B13">MQTT broker</text>
+<text x="565" y="206" text-anchor="middle" font-size="12" fill="#993C1D">cloud uplink</text>
+<text x="425" y="234" text-anchor="middle" font-size="12" fill="#5F5E5A">publish gateway/up/&lt;dev&gt;</text>
+<path d="M310 350 L345 350 L345 191 L488 191" fill="none" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+<!-- Browser -->
+<rect x="445" y="540" width="195" height="50" rx="8" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="542" y="562" text-anchor="middle" font-size="14" font-weight="500" fill="#2C2C2A">browser dashboard</text>
+<text x="542" y="580" text-anchor="middle" font-size="12" fill="#5F5E5A">cards + uPlot curves</text>
+<text x="430" y="527" text-anchor="end" font-size="12" fill="#5F5E5A">HTTP :8888 /api/data</text>
+<line x1="500" y1="490" x2="500" y2="538" stroke="#73726c" stroke-width="1.5" marker-end="url(#arrow)"/>
+</svg>
