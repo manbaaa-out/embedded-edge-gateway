@@ -112,25 +112,29 @@ static void handleAck(const gateway::Frame& f,
     }
 
     // 3. 配对成功 → 立刻销账(无论结果码,一问一答已结束)
+    uint8_t orig_type = it->second.type;        // ← 新增: 先记原命令类型
     inflight.erase(it);
     LOG_INFO("ACK matched seq=%u rc=0x%02X, inflight=%zu", seq, rc, inflight.size());
 
     // 4. 结果码分流发 MQTT
     if (rc == 0x00) {
         if (f.type == 0x05) {
-            // 查询应答带数据(payload[2..],大端 uint16)
-            std::string data;
-            if (f.payload.size() >= 4) {
-                uint16_t val = (static_cast<uint16_t>(f.payload[2]) << 8) | f.payload[3];
-                data = std::to_string(val);
+            if (orig_type == 0x21 && f.payload.size() >= 6) {          // query_th: 温×10 + 湿×10
+                double t = ((f.payload[2] << 8) | f.payload[3]) / 10.0;
+                double h = ((f.payload[4] << 8) | f.payload[5]) / 10.0;
+                client.publish("gateway/resp/" + std::to_string(seq),
+                            "ok," + std::to_string(t) + "," + std::to_string(h));
+            } else if (f.payload.size() >= 4) {                        // query_light: 光照原值
+                uint16_t val = (f.payload[2] << 8) | f.payload[3];
+                client.publish("gateway/resp/" + std::to_string(seq), "ok," + std::to_string(val));
+            } else {
+                client.publish("gateway/resp/" + std::to_string(seq), "ok,");
             }
-            client.publish("gateway/resp/" + std::to_string(seq), "ok," + data);
         } else {
             client.publish("gateway/ack/" + std::to_string(seq), "ok");
         }
     } else {
-        client.publish("gateway/ack/" + std::to_string(seq),
-                       "err," + std::to_string(rc));
+        client.publish("gateway/ack/" + std::to_string(seq), "err," + std::to_string(rc));
     }
 }
 
