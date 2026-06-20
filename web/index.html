@@ -34,6 +34,13 @@
   .card .unit { font-size: 14px; color: var(--muted); font-weight: 400; margin-left: 4px; }
   .card .time { font-size: 12px; color: var(--muted); margin-top: 10px; }
   .card.stale .value { color: var(--muted); }
+  /* 健康状态卡片:在线/故障用色块点 + 文字,区别于数值卡的大字号 */
+  .card .health { display: inline-flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 700; }
+  .card .health-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .health.online  .health-dot { background: var(--accent); }
+  .health.offline .health-dot { background: var(--warn); }
+  .health.online  { color: var(--accent); }
+  .health.offline { color: var(--warn); }
   .chart-wrap {
     background: var(--card); border: 1px solid var(--line); border-radius: 12px;
     padding: 18px 20px; margin-top: 18px;
@@ -63,11 +70,16 @@
 
 <script src="/uplot.js"></script>
 <script>
+// 设备清单。
+//   传感器数值量:temperature / humidity / illuminance。
+//   健康状态量:status_dht11 / status_bh1750 —— 由网关把 0x04 状态帧的 bitmask
+//   (bit0=DHT11 OK, bit1=BH1750 OK)按位拆开后落库,值 1.0=在线 0.0=故障。
 const DEVICES = [
-  { id: "temperature",   name: "温度",     unit: "°C",  color: "#22c55e" },
-  { id: "humidity",      name: "湿度",     unit: "%",   color: "#3b82f6" },
-  { id: "illuminance",   name: "光照",     unit: "lux", color: "#f59e0b" },
-  { id: "device_status", name: "设备状态", unit: "",    color: "#a855f7" },
+  { id: "temperature",   name: "温度",   unit: "°C",  color: "#22c55e" },
+  { id: "humidity",      name: "湿度",   unit: "%",   color: "#3b82f6" },
+  { id: "illuminance",   name: "光照",   unit: "lux", color: "#f59e0b" },
+  { id: "status_dht11",  name: "DHT11",  unit: "",    color: "#a855f7", isStatus: true },
+  { id: "status_bh1750", name: "BH1750", unit: "",    color: "#ec4899", isStatus: true },
 ];
 const HISTORY_N = 40;       // 曲线取最近 40 个点
 let selected = "temperature";  // 当前曲线显示的设备
@@ -95,23 +107,45 @@ async function fetchHistory(devId, n) {
 function makeChart(dev) {
   const el = document.getElementById("chart");
   el.innerHTML = "";
+
+  const isStatus = !!dev.isStatus;
+
+  const seriesOpts = {
+    label: dev.name + (dev.unit ? ` (${dev.unit})` : ""),
+    stroke: dev.color,
+    width: 2,
+    points: { show: true, size: 4 },
+  };
+  if (isStatus) {
+    // 状态量是离散 0/1,用阶梯线;align:1 = 值在采样点处跳变,
+    // 贴合"状态保持到下次上报"的语义(平滑折线会出现误导性的斜坡)
+    seriesOpts.paths = uPlot.paths.stepped({ align: 1 });
+    seriesOpts.value = (u, v) => (v == null ? "—" : (v >= 0.5 ? "在线" : "故障"));
+  }
+
   const opts = {
     width: el.clientWidth || 800,
     height: 280,
     cursor: { drag: { x: true, y: false } },
-    scales: { x: { time: true } },
+    scales: {
+      x: { time: true },
+      // 状态量锁定 y 轴 [-0.1, 1.1],0/1 不贴边;数值量保持 auto
+      y: isStatus ? { range: [-0.1, 1.1] } : {},
+    },
     series: [
       {},  // x 轴(时间)
-      {
-        label: dev.name + (dev.unit ? ` (${dev.unit})` : ""),
-        stroke: dev.color,
-        width: 2,
-        points: { show: true, size: 4 },
-      },
+      seriesOpts,
     ],
     axes: [
       { stroke: "#8a8f9c", grid: { stroke: "#2a2e3a" }, ticks: { stroke: "#2a2e3a" } },
-      { stroke: "#8a8f9c", grid: { stroke: "#2a2e3a" }, ticks: { stroke: "#2a2e3a" } },
+      isStatus
+        ? {
+            stroke: "#8a8f9c",
+            grid: { stroke: "#2a2e3a" }, ticks: { stroke: "#2a2e3a" },
+            splits: () => [0, 1],                                  // 只在 0/1 处打刻度
+            values: (u, splits) => splits.map(v => (v >= 0.5 ? "在线" : "故障")),
+          }
+        : { stroke: "#8a8f9c", grid: { stroke: "#2a2e3a" }, ticks: { stroke: "#2a2e3a" } },
     ],
   };
   chart = new uPlot(opts, [[], []], el);
@@ -120,8 +154,7 @@ function makeChart(dev) {
 async function refresh() {
   let allOk = true;
 
-  // 1) 卡片:每个设备取最新 1 条(从历史第一条复用,少发请求)
-  //    这里为简单各发一次 n=1;曲线单独发 n=HISTORY_N
+  // 1) 卡片:每个设备取最新 1 条
   const cards = await Promise.all(DEVICES.map(async dev => {
     try {
       const resp = await fetch(`/api/data?dev=${dev.id}&n=1`);
@@ -130,8 +163,20 @@ async function refresh() {
       if (arr.length === 0)
         return `<div class="${cls} stale" data-dev="${dev.id}"><div class="label">${dev.name}</div><div class="value">—</div><div class="time">无数据</div></div>`;
       const r = arr[0];
+
+      let valueHtml;
+      if (dev.isStatus) {
+        // 健康状态:1.0=在线 0.0=故障,用 0.5 阈值避免浮点等值比较
+        const online = r.value >= 0.5;
+        valueHtml = `<span class="health ${online ? "online" : "offline"}">
+                       <span class="health-dot"></span>${online ? "在线" : "故障"}
+                     </span>`;
+      } else {
+        valueHtml = `${r.value}<span class="unit">${dev.unit}</span>`;
+      }
+
       return `<div class="${cls}" data-dev="${dev.id}"><div class="label">${dev.name}</div>
-              <div class="value">${r.value}<span class="unit">${dev.unit}</span></div>
+              <div class="value">${valueHtml}</div>
               <div class="time">采集于 ${fmtTime(r.ts)}</div></div>`;
     } catch (e) { allOk = false;
       return `<div class="card stale" data-dev="${dev.id}"><div class="label">${dev.name}</div><div class="value" style="color:var(--warn)">错误</div><div class="time">${e}</div></div>`;
@@ -154,9 +199,12 @@ async function redrawChart() {
   document.getElementById("chartTitle").textContent = `历史曲线 — ${dev.name}`;
   try {
     const h = await fetchHistory(selected, HISTORY_N);
-    if (!chart) makeChart(dev);
-    // 切换设备时颜色/label 要变 → 重建
-    if (chart.series[1].label.indexOf(dev.name) === -1) makeChart(dev);
+    // 用 _devId 记住当前图表画的是哪个设备,切换设备就重建
+    //(比原来的 label 包含判断更可靠:设备名互含也不会漏重建)
+    if (!chart || chart._devId !== selected) {
+      makeChart(dev);
+      chart._devId = selected;
+    }
     chart.setData([h.ts, h.val]);
   } catch (e) { /* 忽略单次失败 */ }
 }
@@ -164,7 +212,7 @@ async function redrawChart() {
 // 初次 + 定时
 refresh();
 setInterval(refresh, 2000);
-window.addEventListener("resize", () => { const d = DEVICES.find(x=>x.id===selected); makeChart(d); redrawChart(); });
+window.addEventListener("resize", () => { const d = DEVICES.find(x=>x.id===selected); makeChart(d); chart._devId = selected; redrawChart(); });
 </script>
 </body>
 </html>
