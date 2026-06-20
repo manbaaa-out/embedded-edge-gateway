@@ -60,7 +60,11 @@ std::vector<Record> decodeFrame(const gateway::Frame& f) {
     }
     case frame_type::kStatus: {
         if (p.size() < 1) return out;
-        out.emplace_back(Record{"device_status", static_cast<double>(p[0])});
+        uint8_t st = p[0];
+        // 0x04 状态帧 payload 是 bitmask:bit0=DHT11 OK, bit1=BH1750 OK
+        // 拆成两路健康状态,1.0=在线 0.0=故障,与设备名一一对应
+        out.emplace_back(Record{"status_dht11",  (st & 0x01) ? 1.0 : 0.0});
+        out.emplace_back(Record{"status_bh1750", (st & 0x02) ? 1.0 : 0.0});
         break;
     }
     case frame_type::kHeartbeat:
