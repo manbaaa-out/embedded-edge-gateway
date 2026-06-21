@@ -1,75 +1,251 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="680" viewBox="0 0 1440 680" font-family="Helvetica,Arial,sans-serif">
-  <defs>
-    <marker id="ah" markerWidth="10" markerHeight="10" refX="7.5" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L7,3 L0,6 Z" fill="#555"/>
-    </marker>
-    <marker id="ahd" markerWidth="10" markerHeight="10" refX="7.5" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L7,3 L0,6 Z" fill="#8a6d3b"/>
-    </marker>
-  </defs>
-  <rect width="1440" height="680" fill="#ffffff"/>
-
-  <text x="60" y="50" font-size="23" fill="#222" font-weight="bold">Edge IoT Gateway — System Architecture</text>
-
-  <!-- ===== STM32 node (coarse) ===== -->
-  <rect x="40" y="296" width="182" height="176" rx="9" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
-  <text x="131" y="324" text-anchor="middle" font-size="15" fill="#333" font-weight="bold">STM32 Sensor Node</text>
-  <rect x="64" y="346" width="134" height="44" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.5"/>
-  <text x="131" y="373" text-anchor="middle" font-size="14" fill="#333">DHT11</text>
-  <rect x="64" y="402" width="134" height="44" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.5"/>
-  <text x="131" y="429" text-anchor="middle" font-size="14" fill="#333">BH1750</text>
-
-  <!-- ===== Gateway container ===== -->
-  <rect x="300" y="150" width="664" height="404" rx="10" fill="#FCFCFD" stroke="#B6B6B6" stroke-width="1.5"/>
-  <text x="322" y="184" font-size="16" fill="#333" font-weight="bold">Edge Gateway · Raspberry Pi  ·  single process</text>
-
-  <rect x="332" y="330" width="216" height="66" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
-  <text x="440" y="357" text-anchor="middle" font-size="14.5" fill="#333"><tspan x="440" dy="0">epoll Reactor +</tspan><tspan x="440" dy="17">Frame Parser · CRC16</tspan></text>
-
-  <rect x="592" y="330" width="140" height="66" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
-  <text x="662" y="357" text-anchor="middle" font-size="14.5" fill="#333"><tspan x="662" dy="0">Thread Pool</tspan><tspan x="662" dy="17">(workers)</tspan></text>
-
-  <rect x="780" y="248" width="158" height="56" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
-  <text x="859" y="281" text-anchor="middle" font-size="14.5" fill="#333">MQTT Client</text>
-
-  <rect x="780" y="418" width="158" height="56" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
-  <text x="859" y="451" text-anchor="middle" font-size="14.5" fill="#333">SQLite (WAL)</text>
-
-  <!-- ===== external sinks ===== -->
-  <rect x="1052" y="246" width="222" height="60" rx="9" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
-  <text x="1163" y="281" text-anchor="middle" font-size="15" fill="#333">MQTT Broker / Cloud</text>
-  <rect x="1052" y="418" width="222" height="60" rx="9" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
-  <text x="1163" y="453" text-anchor="middle" font-size="15" fill="#333">Web Dashboard</text>
-
-  <!-- ===== solid data-plane arrows ===== -->
-  <line x1="222" y1="352" x2="328" y2="356" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="275" y="340" text-anchor="middle" font-size="13" fill="#666">UART frame</text>
-  <line x1="548" y1="363" x2="588" y2="363" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <line x1="732" y1="348" x2="778" y2="288" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <line x1="732" y1="380" x2="778" y2="440" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="757" y="405" font-size="12.5" fill="#666">double-write</text>
-  <line x1="938" y1="276" x2="1048" y2="276" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="993" y="265" text-anchor="middle" font-size="13" fill="#666">publish</text>
-  <line x1="938" y1="448" x2="1048" y2="448" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="993" y="437" text-anchor="middle" font-size="13" fill="#666">HTTP (read-only)</text>
-
-  <!-- ===== dashed control-plane (command) arrows ===== -->
-  <line x1="328" y1="392" x2="224" y2="406" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
-  <text x="276" y="424" text-anchor="middle" font-size="13" fill="#8a6d3b">command</text>
-  <line x1="1048" y1="300" x2="942" y2="300" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
-  <text x="995" y="316" text-anchor="middle" font-size="13" fill="#8a6d3b">command</text>
-
-  <!-- ===== legend ===== -->
-  <g font-size="13" fill="#555">
-    <rect x="332" y="588" width="14" height="14" rx="3" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.4"/>
-    <text x="352" y="599">gateway core</text>
-    <rect x="470" y="588" width="14" height="14" rx="3" fill="#EAF4EC" stroke="#55A868" stroke-width="1.4"/>
-    <text x="490" y="599">I/O (sensor / DB / MQTT)</text>
-    <rect x="700" y="588" width="14" height="14" rx="3" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.4"/>
-    <text x="720" y="599">external</text>
-    <line x1="820" y1="595" x2="852" y2="595" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-    <text x="858" y="599">data plane (uplink)</text>
-    <line x1="1010" y1="595" x2="1042" y2="595" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
-    <text x="1048" y="599">control plane (command, with ACK)</text>
-  </g>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 15.0.0 (20260523.1842)
+ -->
+<!-- Title: gateway Pages: 1 -->
+<svg width="1803pt" height="403pt"
+ viewBox="0.00 0.00 1803.00 403.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 399.21)">
+<title>gateway</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-399.21 1798.73,-399.21 1798.73,4 -4,4"/>
+<text xml:space="preserve" text-anchor="start" x="756.21" y="-374.21" font-family="Helvetica,sans-Serif" font-weight="bold" font-size="20.00">Edge Gateway — Architecture</text>
+<g id="clust1" class="cluster">
+<title>cluster_main</title>
+<path fill="#f6f9fd" stroke="#afc6e2" stroke-width="1.4" d="M157.39,-146.41C157.39,-146.41 1049.05,-146.41 1049.05,-146.41 1055.05,-146.41 1061.05,-152.41 1061.05,-158.41 1061.05,-158.41 1061.05,-297.41 1061.05,-297.41 1061.05,-303.41 1055.05,-309.41 1049.05,-309.41 1049.05,-309.41 157.39,-309.41 157.39,-309.41 151.39,-309.41 145.39,-303.41 145.39,-297.41 145.39,-297.41 145.39,-158.41 145.39,-158.41 145.39,-152.41 151.39,-146.41 157.39,-146.41"/>
+<text xml:space="preserve" text-anchor="middle" x="603.22" y="-293.71" font-family="Helvetica,sans-Serif" font-size="13.00" fill="#37527a">Main thread · epoll Reactor (EventLoop)</text>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_pool</title>
+<path fill="white" stroke="#c9c9c9" stroke-dasharray="5,2" d="M909.74,-54.41C909.74,-54.41 1068.55,-54.41 1068.55,-54.41 1074.55,-54.41 1080.55,-60.41 1080.55,-66.41 1080.55,-66.41 1080.55,-126.41 1080.55,-126.41 1080.55,-132.41 1074.55,-138.41 1068.55,-138.41 1068.55,-138.41 909.74,-138.41 909.74,-138.41 903.74,-138.41 897.74,-132.41 897.74,-126.41 897.74,-126.41 897.74,-66.41 897.74,-66.41 897.74,-60.41 903.74,-54.41 909.74,-54.41"/>
+<text xml:space="preserve" text-anchor="middle" x="989.15" y="-123.61" font-family="Helvetica,sans-Serif" font-size="12.00" fill="#666666">Worker pool</text>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_mosq</title>
+<path fill="white" stroke="#c9c9c9" stroke-dasharray="5,2" d="M1195.9,-114.41C1195.9,-114.41 1322.59,-114.41 1322.59,-114.41 1328.59,-114.41 1334.59,-120.41 1334.59,-126.41 1334.59,-126.41 1334.59,-186.41 1334.59,-186.41 1334.59,-192.41 1328.59,-198.41 1322.59,-198.41 1322.59,-198.41 1195.9,-198.41 1195.9,-198.41 1189.9,-198.41 1183.9,-192.41 1183.9,-186.41 1183.9,-186.41 1183.9,-126.41 1183.9,-126.41 1183.9,-120.41 1189.9,-114.41 1195.9,-114.41"/>
+<text xml:space="preserve" text-anchor="middle" x="1259.25" y="-183.61" font-family="Helvetica,sans-Serif" font-size="12.00" fill="#666666">mosquitto thread</text>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_http</title>
+<path fill="white" stroke="#c9c9c9" stroke-dasharray="5,2" d="M1474.95,-28.41C1474.95,-28.41 1601.98,-28.41 1601.98,-28.41 1607.98,-28.41 1613.98,-34.41 1613.98,-40.41 1613.98,-40.41 1613.98,-100.41 1613.98,-100.41 1613.98,-106.41 1607.98,-112.41 1601.98,-112.41 1601.98,-112.41 1474.95,-112.41 1474.95,-112.41 1468.95,-112.41 1462.95,-106.41 1462.95,-100.41 1462.95,-100.41 1462.95,-40.41 1462.95,-40.41 1462.95,-34.41 1468.95,-28.41 1474.95,-28.41"/>
+<text xml:space="preserve" text-anchor="middle" x="1538.47" y="-97.61" font-family="Helvetica,sans-Serif" font-size="12.00" fill="#666666">http thread</text>
+</g>
+<!-- stm32 -->
+<g id="node1" class="node">
+<title>stm32</title>
+<path fill="#f2f2f2" stroke="#8c8c8c" stroke-width="1.4" d="M250.8,-363.21C250.8,-363.21 175.88,-363.21 175.88,-363.21 169.88,-363.21 163.88,-357.21 163.88,-351.21 163.88,-351.21 163.88,-329.61 163.88,-329.61 163.88,-323.61 169.88,-317.61 175.88,-317.61 175.88,-317.61 250.8,-317.61 250.8,-317.61 256.8,-317.61 262.8,-323.61 262.8,-329.61 262.8,-329.61 262.8,-351.21 262.8,-351.21 262.8,-357.21 256.8,-363.21 250.8,-363.21"/>
+<text xml:space="preserve" text-anchor="middle" x="213.34" y="-344.31" font-family="Helvetica,sans-Serif" font-size="13.00">STM32</text>
+<text xml:space="preserve" text-anchor="middle" x="213.34" y="-328.71" font-family="Helvetica,sans-Serif" font-size="13.00">Sensor Node</text>
+</g>
+<!-- serial_ch -->
+<g id="node6" class="node">
+<title>serial_ch</title>
+<path fill="#eaf0f8" stroke="#4c72b0" stroke-width="1.4" d="M526.31,-278.21C526.31,-278.21 441.3,-278.21 441.3,-278.21 435.3,-278.21 429.3,-272.21 429.3,-266.21 429.3,-266.21 429.3,-244.61 429.3,-244.61 429.3,-238.61 435.3,-232.61 441.3,-232.61 441.3,-232.61 526.31,-232.61 526.31,-232.61 532.31,-232.61 538.31,-238.61 538.31,-244.61 538.31,-244.61 538.31,-266.21 538.31,-266.21 538.31,-272.21 532.31,-278.21 526.31,-278.21"/>
+<text xml:space="preserve" text-anchor="middle" x="483.8" y="-259.31" font-family="Helvetica,sans-Serif" font-size="13.00">Serial Channel</text>
+<text xml:space="preserve" text-anchor="middle" x="483.8" y="-243.71" font-family="Helvetica,sans-Serif" font-size="13.00">EPOLLIN · ET</text>
+</g>
+<!-- stm32&#45;&gt;serial_ch -->
+<g id="edge1" class="edge">
+<title>stm32&#45;&gt;serial_ch</title>
+<path fill="none" stroke="#555555" stroke-width="1.3" d="M263.27,-324.92C307.17,-311.02 371.86,-290.54 419.65,-275.41"/>
+<polygon fill="#555555" stroke="#555555" stroke-width="1.3" points="420.44,-277.91 426.8,-273.14 418.86,-272.91 420.44,-277.91"/>
+<text xml:space="preserve" text-anchor="middle" x="347.67" y="-311.03" font-family="Helvetica,sans-Serif" font-size="10.00">frame in (UART)</text>
+</g>
+<!-- cloud -->
+<g id="node2" class="node">
+<title>cloud</title>
+<path fill="#f2f2f2" stroke="#8c8c8c" stroke-width="1.4" d="M1577.35,-245.21C1577.35,-245.21 1499.59,-245.21 1499.59,-245.21 1493.59,-245.21 1487.59,-239.21 1487.59,-233.21 1487.59,-233.21 1487.59,-211.61 1487.59,-211.61 1487.59,-205.61 1493.59,-199.61 1499.59,-199.61 1499.59,-199.61 1577.35,-199.61 1577.35,-199.61 1583.35,-199.61 1589.35,-205.61 1589.35,-211.61 1589.35,-211.61 1589.35,-233.21 1589.35,-233.21 1589.35,-239.21 1583.35,-245.21 1577.35,-245.21"/>
+<text xml:space="preserve" text-anchor="middle" x="1538.47" y="-226.31" font-family="Helvetica,sans-Serif" font-size="13.00">MQTT Broker</text>
+<text xml:space="preserve" text-anchor="middle" x="1538.47" y="-210.71" font-family="Helvetica,sans-Serif" font-size="13.00">/ Cloud</text>
+</g>
+<!-- mqtt -->
+<g id="node14" class="node">
+<title>mqtt</title>
+<path fill="#eaf4ec" stroke="#55a868" stroke-width="1.4" d="M1314.59,-168.21C1314.59,-168.21 1203.9,-168.21 1203.9,-168.21 1197.9,-168.21 1191.9,-162.21 1191.9,-156.21 1191.9,-156.21 1191.9,-134.61 1191.9,-134.61 1191.9,-128.61 1197.9,-122.61 1203.9,-122.61 1203.9,-122.61 1314.59,-122.61 1314.59,-122.61 1320.59,-122.61 1326.59,-128.61 1326.59,-134.61 1326.59,-134.61 1326.59,-156.21 1326.59,-156.21 1326.59,-162.21 1320.59,-168.21 1314.59,-168.21"/>
+<text xml:space="preserve" text-anchor="middle" x="1259.25" y="-149.31" font-family="Helvetica,sans-Serif" font-size="13.00">MQTT Client</text>
+<text xml:space="preserve" text-anchor="middle" x="1259.25" y="-133.71" font-family="Helvetica,sans-Serif" font-size="13.00">publish + subscribe</text>
+</g>
+<!-- cloud&#45;&gt;mqtt -->
+<g id="edge11" class="edge">
+<title>cloud&#45;&gt;mqtt</title>
+<path fill="none" stroke="#8a6d3b" stroke-width="1.3" stroke-dasharray="5,2" d="M1487.04,-226.6C1451.87,-227.89 1404.31,-226.35 1364.59,-213.41 1339.18,-205.14 1313.98,-189 1294.72,-174.53"/>
+<polygon fill="#8a6d3b" stroke="#8a6d3b" stroke-width="1.3" points="1296.48,-172.57 1288.93,-170.07 1293.27,-176.73 1296.48,-172.57"/>
+<text xml:space="preserve" text-anchor="middle" x="1398.77" y="-228.51" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#8a6d3b">cmd (sub)</text>
+</g>
+<!-- browser -->
+<g id="node3" class="node">
+<title>browser</title>
+<path fill="#f2f2f2" stroke="#8c8c8c" stroke-width="1.4" d="M1782.73,-82.21C1782.73,-82.21 1720.09,-82.21 1720.09,-82.21 1714.09,-82.21 1708.09,-76.21 1708.09,-70.21 1708.09,-70.21 1708.09,-48.61 1708.09,-48.61 1708.09,-42.61 1714.09,-36.61 1720.09,-36.61 1720.09,-36.61 1782.73,-36.61 1782.73,-36.61 1788.73,-36.61 1794.73,-42.61 1794.73,-48.61 1794.73,-48.61 1794.73,-70.21 1794.73,-70.21 1794.73,-76.21 1788.73,-82.21 1782.73,-82.21"/>
+<text xml:space="preserve" text-anchor="middle" x="1751.41" y="-63.31" font-family="Helvetica,sans-Serif" font-size="13.00">Web</text>
+<text xml:space="preserve" text-anchor="middle" x="1751.41" y="-47.71" font-family="Helvetica,sans-Serif" font-size="13.00">Dashboard</text>
+</g>
+<!-- db -->
+<g id="node4" class="node">
+<title>db</title>
+<path fill="#eaf4ec" stroke="#55a868" stroke-width="1.4" d="M1310.86,-85.06C1310.86,-88.21 1287.72,-90.76 1259.25,-90.76 1230.77,-90.76 1207.63,-88.21 1207.63,-85.06 1207.63,-85.06 1207.63,-33.76 1207.63,-33.76 1207.63,-30.62 1230.77,-28.06 1259.25,-28.06 1287.72,-28.06 1310.86,-30.62 1310.86,-33.76 1310.86,-33.76 1310.86,-85.06 1310.86,-85.06"/>
+<path fill="none" stroke="#55a868" stroke-width="1.4" d="M1310.86,-85.06C1310.86,-81.92 1287.72,-79.36 1259.25,-79.36 1230.77,-79.36 1207.63,-81.92 1207.63,-85.06"/>
+<text xml:space="preserve" text-anchor="middle" x="1259.25" y="-63.31" font-family="Helvetica,sans-Serif" font-size="13.00">SQLite (WAL)</text>
+<text xml:space="preserve" text-anchor="middle" x="1259.25" y="-47.71" font-family="Helvetica,sans-Serif" font-size="13.00">rw + ro</text>
+</g>
+<!-- http -->
+<g id="node15" class="node">
+<title>http</title>
+<path fill="#eaf4ec" stroke="#55a868" stroke-width="1.4" d="M1593.98,-82.21C1593.98,-82.21 1482.95,-82.21 1482.95,-82.21 1476.95,-82.21 1470.95,-76.21 1470.95,-70.21 1470.95,-70.21 1470.95,-48.61 1470.95,-48.61 1470.95,-42.61 1476.95,-36.61 1482.95,-36.61 1482.95,-36.61 1593.98,-36.61 1593.98,-36.61 1599.98,-36.61 1605.98,-42.61 1605.98,-48.61 1605.98,-48.61 1605.98,-70.21 1605.98,-70.21 1605.98,-76.21 1599.98,-82.21 1593.98,-82.21"/>
+<text xml:space="preserve" text-anchor="middle" x="1538.47" y="-63.31" font-family="Helvetica,sans-Serif" font-size="13.00">HTTP Server :8888</text>
+<text xml:space="preserve" text-anchor="middle" x="1538.47" y="-47.71" font-family="Helvetica,sans-Serif" font-size="13.00">read&#45;only</text>
+</g>
+<!-- db&#45;&gt;http -->
+<g id="edge7" class="edge">
+<title>db&#45;&gt;http</title>
+<path fill="none" stroke="#555555" stroke-width="1.3" d="M1311.42,-59.41C1353.36,-59.41 1413.37,-59.41 1461.02,-59.41"/>
+<polygon fill="#555555" stroke="#555555" stroke-width="1.3" points="1460.9,-62.04 1468.4,-59.41 1460.9,-56.79 1460.9,-62.04"/>
+<text xml:space="preserve" text-anchor="middle" x="1398.77" y="-62.41" font-family="Helvetica,sans-Serif" font-size="10.00">query (ro)</text>
+</g>
+<!-- cmdq -->
+<g id="node5" class="node">
+<title>cmdq</title>
+<path fill="#faf4e0" stroke="#b8973a" stroke-width="1.4" d="M1588.21,-167.21C1588.21,-167.21 1488.72,-167.21 1488.72,-167.21 1482.72,-167.21 1476.72,-161.21 1476.72,-155.21 1476.72,-155.21 1476.72,-133.61 1476.72,-133.61 1476.72,-127.61 1482.72,-121.61 1488.72,-121.61 1488.72,-121.61 1588.21,-121.61 1588.21,-121.61 1594.21,-121.61 1600.21,-127.61 1600.21,-133.61 1600.21,-133.61 1600.21,-155.21 1600.21,-155.21 1600.21,-161.21 1594.21,-167.21 1588.21,-167.21"/>
+<text xml:space="preserve" text-anchor="middle" x="1538.47" y="-148.31" font-family="Helvetica,sans-Serif" font-size="13.00">DownCmd queue</text>
+<text xml:space="preserve" text-anchor="middle" x="1538.47" y="-132.71" font-family="Helvetica,sans-Serif" font-size="13.00">+ eventfd notify</text>
+</g>
+<!-- evt_ch -->
+<g id="node9" class="node">
+<title>evt_ch</title>
+<path fill="#eaf0f8" stroke="#4c72b0" stroke-width="1.4" d="M260.2,-200.21C260.2,-200.21 166.48,-200.21 166.48,-200.21 160.48,-200.21 154.48,-194.21 154.48,-188.21 154.48,-188.21 154.48,-166.61 154.48,-166.61 154.48,-160.61 160.48,-154.61 166.48,-154.61 166.48,-154.61 260.2,-154.61 260.2,-154.61 266.2,-154.61 272.2,-160.61 272.2,-166.61 272.2,-166.61 272.2,-188.21 272.2,-188.21 272.2,-194.21 266.2,-200.21 260.2,-200.21"/>
+<text xml:space="preserve" text-anchor="middle" x="213.34" y="-181.31" font-family="Helvetica,sans-Serif" font-size="13.00">eventfd Channel</text>
+<text xml:space="preserve" text-anchor="middle" x="213.34" y="-165.71" font-family="Helvetica,sans-Serif" font-size="13.00">→ FrameBuilder</text>
+</g>
+<!-- cmdq&#45;&gt;evt_ch -->
+<g id="edge13" class="edge">
+<title>cmdq&#45;&gt;evt_ch</title>
+<path fill="none" stroke="#8a6d3b" stroke-width="1.3" stroke-dasharray="5,2" d="M1476.11,-126.95C1471.37,-124.21 1466.9,-121.05 1462.95,-117.41 1439.29,-95.55 1456.29,-73.63 1432.95,-51.41 1351.81,25.84 1295.74,-5.79 1183.9,-12.41 841.31,-32.69 439,-122.84 281.93,-160.64"/>
+<polygon fill="#8a6d3b" stroke="#8a6d3b" stroke-width="1.3" points="281.43,-158.07 274.75,-162.38 282.66,-163.17 281.43,-158.07"/>
+<text xml:space="preserve" text-anchor="middle" x="829.11" y="-61.05" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#8a6d3b">eventfd wake</text>
+</g>
+<!-- parser -->
+<g id="node7" class="node">
+<title>parser</title>
+<path fill="#eaf0f8" stroke="#4c72b0" stroke-width="1.4" d="M740.48,-200.21C740.48,-200.21 634.54,-200.21 634.54,-200.21 628.54,-200.21 622.54,-194.21 622.54,-188.21 622.54,-188.21 622.54,-166.61 622.54,-166.61 622.54,-160.61 628.54,-154.61 634.54,-154.61 634.54,-154.61 740.48,-154.61 740.48,-154.61 746.48,-154.61 752.48,-160.61 752.48,-166.61 752.48,-166.61 752.48,-188.21 752.48,-188.21 752.48,-194.21 746.48,-200.21 740.48,-200.21"/>
+<text xml:space="preserve" text-anchor="middle" x="687.51" y="-181.31" font-family="Helvetica,sans-Serif" font-size="13.00">FrameParser FSM</text>
+<text xml:space="preserve" text-anchor="middle" x="687.51" y="-165.71" font-family="Helvetica,sans-Serif" font-size="13.00">CRC16 check</text>
+</g>
+<!-- serial_ch&#45;&gt;parser -->
+<g id="edge2" class="edge">
+<title>serial_ch&#45;&gt;parser</title>
+<path fill="none" stroke="#555555" stroke-width="1.3" d="M538.86,-234.51C562.97,-225.19 591.67,-214.09 617.33,-204.17"/>
+<polygon fill="#555555" stroke="#555555" stroke-width="1.3" points="618.02,-206.71 624.07,-201.56 616.13,-201.82 618.02,-206.71"/>
+</g>
+<!-- inflight -->
+<g id="node8" class="node">
+<title>inflight</title>
+<path fill="#faf4e0" stroke="#b8973a" stroke-width="1.4" d="M1041.05,-246.21C1041.05,-246.21 937.25,-246.21 937.25,-246.21 931.25,-246.21 925.25,-240.21 925.25,-234.21 925.25,-234.21 925.25,-212.61 925.25,-212.61 925.25,-206.61 931.25,-200.61 937.25,-200.61 937.25,-200.61 1041.05,-200.61 1041.05,-200.61 1047.05,-200.61 1053.05,-206.61 1053.05,-212.61 1053.05,-212.61 1053.05,-234.21 1053.05,-234.21 1053.05,-240.21 1047.05,-246.21 1041.05,-246.21"/>
+<text xml:space="preserve" text-anchor="middle" x="989.15" y="-227.31" font-family="Helvetica,sans-Serif" font-size="13.00">inflight table</text>
+<text xml:space="preserve" text-anchor="middle" x="989.15" y="-211.71" font-family="Helvetica,sans-Serif" font-size="13.00">seq · single writer</text>
+</g>
+<!-- parser&#45;&gt;inflight -->
+<g id="edge9" class="edge">
+<title>parser&#45;&gt;inflight</title>
+<path fill="none" stroke="#8a6d3b" stroke-width="1.3" stroke-dasharray="5,2" d="M753.16,-187.34C800.94,-194.67 866.02,-204.66 915.58,-212.27"/>
+<polygon fill="#8a6d3b" stroke="#8a6d3b" stroke-width="1.3" points="914.89,-214.82 922.7,-213.37 915.69,-209.63 914.89,-214.82"/>
+<text xml:space="preserve" text-anchor="middle" x="829.11" y="-207.53" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#8a6d3b">ACK match</text>
+</g>
+<!-- pool -->
+<g id="node13" class="node">
+<title>pool</title>
+<path fill="#eaf0f8" stroke="#4c72b0" stroke-width="1.4" d="M1060.55,-108.21C1060.55,-108.21 917.74,-108.21 917.74,-108.21 911.74,-108.21 905.74,-102.21 905.74,-96.21 905.74,-96.21 905.74,-74.61 905.74,-74.61 905.74,-68.61 911.74,-62.61 917.74,-62.61 917.74,-62.61 1060.55,-62.61 1060.55,-62.61 1066.55,-62.61 1072.55,-68.61 1072.55,-74.61 1072.55,-74.61 1072.55,-96.21 1072.55,-96.21 1072.55,-102.21 1066.55,-108.21 1060.55,-108.21"/>
+<text xml:space="preserve" text-anchor="middle" x="989.15" y="-89.31" font-family="Helvetica,sans-Serif" font-size="13.00">Thread Pool</text>
+<text xml:space="preserve" text-anchor="middle" x="989.15" y="-73.71" font-family="Helvetica,sans-Serif" font-size="13.00">N workers · double&#45;write</text>
+</g>
+<!-- parser&#45;&gt;pool -->
+<g id="edge3" class="edge">
+<title>parser&#45;&gt;pool</title>
+<path fill="none" stroke="#555555" stroke-width="1.3" d="M753.16,-157.56C796.97,-144.11 855.33,-126.19 902.93,-111.58"/>
+<polygon fill="#555555" stroke="#555555" stroke-width="1.3" points="903.41,-114.18 909.81,-109.47 901.87,-109.16 903.41,-114.18"/>
+<text xml:space="preserve" text-anchor="middle" x="829.11" y="-148.03" font-family="Helvetica,sans-Serif" font-size="10.00">decoded records</text>
+</g>
+<!-- inflight&#45;&gt;mqtt -->
+<g id="edge10" class="edge">
+<title>inflight&#45;&gt;mqtt</title>
+<path fill="none" stroke="#8a6d3b" stroke-width="1.3" stroke-dasharray="5,2" d="M1053.68,-204.93C1092.26,-193.7 1141.74,-179.31 1182.37,-167.49"/>
+<polygon fill="#8a6d3b" stroke="#8a6d3b" stroke-width="1.3" points="1183.07,-170.02 1189.54,-165.4 1181.6,-164.98 1183.07,-170.02"/>
+<text xml:space="preserve" text-anchor="middle" x="1132.23" y="-189.75" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#8a6d3b">resp / ack</text>
+</g>
+<!-- evt_ch&#45;&gt;stm32 -->
+<g id="edge14" class="edge">
+<title>evt_ch&#45;&gt;stm32</title>
+<path fill="none" stroke="#8a6d3b" stroke-width="1.3" stroke-dasharray="5,2" d="M153.95,-190.24C120.35,-200.86 81.09,-219.71 60.72,-252.41 34.82,-294.01 101.13,-318.01 154.37,-330.15"/>
+<polygon fill="#8a6d3b" stroke="#8a6d3b" stroke-width="1.3" points="153.64,-332.67 161.53,-331.71 154.77,-327.55 153.64,-332.67"/>
+<text xml:space="preserve" text-anchor="middle" x="75.94" y="-255.41" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#8a6d3b">frame out (UART)</text>
+</g>
+<!-- tmr_ch -->
+<g id="node10" class="node">
+<title>tmr_ch</title>
+<path fill="#eaf0f8" stroke="#4c72b0" stroke-width="1.4" d="M738.69,-278.21C738.69,-278.21 636.34,-278.21 636.34,-278.21 630.34,-278.21 624.34,-272.21 624.34,-266.21 624.34,-266.21 624.34,-244.61 624.34,-244.61 624.34,-238.61 630.34,-232.61 636.34,-232.61 636.34,-232.61 738.69,-232.61 738.69,-232.61 744.69,-232.61 750.69,-238.61 750.69,-244.61 750.69,-244.61 750.69,-266.21 750.69,-266.21 750.69,-272.21 744.69,-278.21 738.69,-278.21"/>
+<text xml:space="preserve" text-anchor="middle" x="687.51" y="-259.31" font-family="Helvetica,sans-Serif" font-size="13.00">timerfd Channel</text>
+<text xml:space="preserve" text-anchor="middle" x="687.51" y="-243.71" font-family="Helvetica,sans-Serif" font-size="13.00">retry scan 200 ms</text>
+</g>
+<!-- tmr_ch&#45;&gt;inflight -->
+<g id="edge15" class="edge">
+<title>tmr_ch&#45;&gt;inflight</title>
+<path fill="none" stroke="#8a6d3b" stroke-width="1.3" stroke-dasharray="5,2" d="M751.33,-248.7C799.23,-243.59 865.28,-236.53 915.47,-231.18"/>
+<polygon fill="#8a6d3b" stroke="#8a6d3b" stroke-width="1.3" points="915.51,-233.81 922.69,-230.4 914.95,-228.59 915.51,-233.81"/>
+<text xml:space="preserve" text-anchor="middle" x="829.11" y="-247.15" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#8a6d3b">timeout → resend</text>
+</g>
+<!-- sig_ch -->
+<g id="node11" class="node">
+<title>sig_ch</title>
+<path fill="#eaf0f8" stroke="#4c72b0" stroke-width="1.4" d="M261.28,-278.21C261.28,-278.21 165.39,-278.21 165.39,-278.21 159.39,-278.21 153.39,-272.21 153.39,-266.21 153.39,-266.21 153.39,-244.61 153.39,-244.61 153.39,-238.61 159.39,-232.61 165.39,-232.61 165.39,-232.61 261.28,-232.61 261.28,-232.61 267.28,-232.61 273.28,-238.61 273.28,-244.61 273.28,-244.61 273.28,-266.21 273.28,-266.21 273.28,-272.21 267.28,-278.21 261.28,-278.21"/>
+<text xml:space="preserve" text-anchor="middle" x="213.34" y="-259.31" font-family="Helvetica,sans-Serif" font-size="13.00">signalfd Channel</text>
+<text xml:space="preserve" text-anchor="middle" x="213.34" y="-243.71" font-family="Helvetica,sans-Serif" font-size="13.00">SIGHUP</text>
+</g>
+<!-- config -->
+<g id="node12" class="node">
+<title>config</title>
+<path fill="#eaf0f8" stroke="#4c72b0" stroke-width="1.4" d="M533.54,-200.21C533.54,-200.21 434.06,-200.21 434.06,-200.21 428.06,-200.21 422.06,-194.21 422.06,-188.21 422.06,-188.21 422.06,-166.61 422.06,-166.61 422.06,-160.61 428.06,-154.61 434.06,-154.61 434.06,-154.61 533.54,-154.61 533.54,-154.61 539.54,-154.61 545.54,-160.61 545.54,-166.61 545.54,-166.61 545.54,-188.21 545.54,-188.21 545.54,-194.21 539.54,-200.21 533.54,-200.21"/>
+<text xml:space="preserve" text-anchor="middle" x="483.8" y="-181.31" font-family="Helvetica,sans-Serif" font-size="13.00">ConfigManager</text>
+<text xml:space="preserve" text-anchor="middle" x="483.8" y="-165.71" font-family="Helvetica,sans-Serif" font-size="13.00">atomic hot&#45;reload</text>
+</g>
+<!-- sig_ch&#45;&gt;config -->
+<g id="edge16" class="edge">
+<title>sig_ch&#45;&gt;config</title>
+<path fill="none" stroke="#999999" stroke-width="1.3" stroke-dasharray="1,5" d="M273.92,-238.1C314.88,-226.2 369.43,-210.35 412.52,-197.83"/>
+<polygon fill="#999999" stroke="#999999" stroke-width="1.3" points="413.17,-200.38 419.64,-195.77 411.7,-195.34 413.17,-200.38"/>
+<text xml:space="preserve" text-anchor="middle" x="347.67" y="-228.69" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#999999">reload</text>
+</g>
+<!-- pool&#45;&gt;db -->
+<g id="edge4" class="edge">
+<title>pool&#45;&gt;db</title>
+<path fill="none" stroke="#555555" stroke-width="1.3" d="M1073.14,-77.36C1113.54,-73.45 1161.22,-68.82 1198.07,-65.25"/>
+<polygon fill="#555555" stroke="#555555" stroke-width="1.3" points="1198.03,-67.89 1205.24,-64.55 1197.52,-62.67 1198.03,-67.89"/>
+<text xml:space="preserve" text-anchor="middle" x="1132.23" y="-76.19" font-family="Helvetica,sans-Serif" font-size="10.00">insert</text>
+</g>
+<!-- pool&#45;&gt;mqtt -->
+<g id="edge5" class="edge">
+<title>pool&#45;&gt;mqtt</title>
+<path fill="none" stroke="#555555" stroke-width="1.3" d="M1073.14,-103.99C1108.01,-111.79 1148.3,-120.81 1182.36,-128.43"/>
+<polygon fill="#555555" stroke="#555555" stroke-width="1.3" points="1181.53,-130.93 1189.42,-130.01 1182.68,-125.81 1181.53,-130.93"/>
+<text xml:space="preserve" text-anchor="middle" x="1132.23" y="-123.79" font-family="Helvetica,sans-Serif" font-size="10.00">publish</text>
+</g>
+<!-- mqtt&#45;&gt;cloud -->
+<g id="edge6" class="edge">
+<title>mqtt&#45;&gt;cloud</title>
+<path fill="none" stroke="#555555" stroke-width="1.3" d="M1327,-163.95C1373.02,-176.74 1433.63,-193.57 1477.99,-205.89"/>
+<polygon fill="#555555" stroke="#555555" stroke-width="1.3" points="1477.09,-208.37 1485.02,-207.85 1478.5,-203.31 1477.09,-208.37"/>
+<text xml:space="preserve" text-anchor="middle" x="1398.77" y="-196.07" font-family="Helvetica,sans-Serif" font-size="10.00">up · resp · ack</text>
+</g>
+<!-- mqtt&#45;&gt;cmdq -->
+<g id="edge12" class="edge">
+<title>mqtt&#45;&gt;cmdq</title>
+<path fill="none" stroke="#8a6d3b" stroke-width="1.3" stroke-dasharray="5,2" d="M1327,-145.17C1369.24,-145.02 1423.79,-144.82 1466.77,-144.67"/>
+<polygon fill="#8a6d3b" stroke="#8a6d3b" stroke-width="1.3" points="1466.57,-147.29 1474.06,-144.64 1466.55,-142.04 1466.57,-147.29"/>
+<text xml:space="preserve" text-anchor="middle" x="1398.77" y="-148.03" font-family="Helvetica,sans-Serif" font-size="10.00" fill="#8a6d3b">enqueue</text>
+</g>
+<!-- http&#45;&gt;browser -->
+<g id="edge8" class="edge">
+<title>http&#45;&gt;browser</title>
+<path fill="none" stroke="#555555" stroke-width="1.3" d="M1606.5,-59.41C1636.2,-59.41 1670.6,-59.41 1698.33,-59.41"/>
+<polygon fill="#555555" stroke="#555555" stroke-width="1.3" points="1697.99,-62.04 1705.49,-59.41 1697.99,-56.79 1697.99,-62.04"/>
+<text xml:space="preserve" text-anchor="middle" x="1657.03" y="-62.41" font-family="Helvetica,sans-Serif" font-size="10.00">HTTP</text>
+</g>
+</g>
 </svg>

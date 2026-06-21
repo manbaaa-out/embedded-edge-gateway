@@ -48,9 +48,12 @@ STM32 节点  ──UART(自定义帧)──▶  网关  ──┬──▶  SQL
 
 ## 架构
 
-单进程把「采集 → 双写 → 上云」与「下发 → 串口 → ACK」两条链路串到一起。下图为系统总体框架:**实线 = 上行数据面**,**虚线 = 下行控制面(命令,带 ACK)**;STM32 节点画为单元,其内部架构见[节点项目](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos)。
+单进程把「采集 → 双写 → 上云」与「下发 → 串口 → ACK」两条链路串到一起。下图为网关架构,STM32 节点 / 云端 / 浏览器画为边界单元(节点内部见[节点项目](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos)):
 
-![系统架构](docs/architecture.png)
+- **虚线框 = 线程边界** —— 主线程 epoll Reactor、线程池、mosquitto、HTTP 各成一域;
+- **实线 = 上行数据面**,**虚线 = 下行控制 / 命令面(带 ACK)**,**点线 = SIGHUP 配置热加载**。
+
+![网关架构](docs/architecture.png)
 
 **上行(采集)** — STM32 经 UART 把传感器数据按自定义二进制帧发来。主线程的 epoll 循环把串口、eventfd、timerfd、信号(SIGHUP)统统作为 channel 挂在一起;串口数据经帧解析状态机(CRC16 校验)解码成一条条记录后提交线程池,每个 worker 同时**落本地 SQLite + 向 MQTT 上行发布**,即「双写」。
 
