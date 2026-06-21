@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="680" viewBox="0 0 1440 680" font-family="Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="ah" markerWidth="10" markerHeight="10" refX="7.5" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#555"/>
+    </marker>
+    <marker id="ahd" markerWidth="10" markerHeight="10" refX="7.5" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#8a6d3b"/>
+    </marker>
+  </defs>
+  <rect width="1440" height="680" fill="#ffffff"/>
+
+  <text x="60" y="50" font-size="23" fill="#222" font-weight="bold">Edge IoT Gateway — System Architecture</text>
+
+  <!-- ===== STM32 node (coarse) ===== -->
+  <rect x="40" y="296" width="182" height="176" rx="9" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
+  <text x="131" y="324" text-anchor="middle" font-size="15" fill="#333" font-weight="bold">STM32 Sensor Node</text>
+  <rect x="64" y="346" width="134" height="44" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.5"/>
+  <text x="131" y="373" text-anchor="middle" font-size="14" fill="#333">DHT11</text>
+  <rect x="64" y="402" width="134" height="44" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.5"/>
+  <text x="131" y="429" text-anchor="middle" font-size="14" fill="#333">BH1750</text>
+
+  <!-- ===== Gateway container ===== -->
+  <rect x="300" y="150" width="664" height="404" rx="10" fill="#FCFCFD" stroke="#B6B6B6" stroke-width="1.5"/>
+  <text x="322" y="184" font-size="16" fill="#333" font-weight="bold">Edge Gateway · Raspberry Pi  ·  single process</text>
+
+  <rect x="332" y="330" width="216" height="66" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
+  <text x="440" y="357" text-anchor="middle" font-size="14.5" fill="#333"><tspan x="440" dy="0">epoll Reactor +</tspan><tspan x="440" dy="17">Frame Parser · CRC16</tspan></text>
+
+  <rect x="592" y="330" width="140" height="66" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
+  <text x="662" y="357" text-anchor="middle" font-size="14.5" fill="#333"><tspan x="662" dy="0">Thread Pool</tspan><tspan x="662" dy="17">(workers)</tspan></text>
+
+  <rect x="780" y="248" width="158" height="56" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
+  <text x="859" y="281" text-anchor="middle" font-size="14.5" fill="#333">MQTT Client</text>
+
+  <rect x="780" y="418" width="158" height="56" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
+  <text x="859" y="451" text-anchor="middle" font-size="14.5" fill="#333">SQLite (WAL)</text>
+
+  <!-- ===== external sinks ===== -->
+  <rect x="1052" y="246" width="222" height="60" rx="9" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
+  <text x="1163" y="281" text-anchor="middle" font-size="15" fill="#333">MQTT Broker / Cloud</text>
+  <rect x="1052" y="418" width="222" height="60" rx="9" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
+  <text x="1163" y="453" text-anchor="middle" font-size="15" fill="#333">Web Dashboard</text>
+
+  <!-- ===== solid data-plane arrows ===== -->
+  <line x1="222" y1="352" x2="328" y2="356" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
+  <text x="275" y="340" text-anchor="middle" font-size="13" fill="#666">UART frame</text>
+  <line x1="548" y1="363" x2="588" y2="363" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
+  <line x1="732" y1="348" x2="778" y2="288" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
+  <line x1="732" y1="380" x2="778" y2="440" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
+  <text x="757" y="405" font-size="12.5" fill="#666">double-write</text>
+  <line x1="938" y1="276" x2="1048" y2="276" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
+  <text x="993" y="265" text-anchor="middle" font-size="13" fill="#666">publish</text>
+  <line x1="938" y1="448" x2="1048" y2="448" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
+  <text x="993" y="437" text-anchor="middle" font-size="13" fill="#666">HTTP (read-only)</text>
+
+  <!-- ===== dashed control-plane (command) arrows ===== -->
+  <line x1="328" y1="392" x2="224" y2="406" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
+  <text x="276" y="424" text-anchor="middle" font-size="13" fill="#8a6d3b">command</text>
+  <line x1="1048" y1="300" x2="942" y2="300" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
+  <text x="995" y="316" text-anchor="middle" font-size="13" fill="#8a6d3b">command</text>
+
+  <!-- ===== legend ===== -->
+  <g font-size="13" fill="#555">
+    <rect x="332" y="588" width="14" height="14" rx="3" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.4"/>
+    <text x="352" y="599">gateway core</text>
+    <rect x="470" y="588" width="14" height="14" rx="3" fill="#EAF4EC" stroke="#55A868" stroke-width="1.4"/>
+    <text x="490" y="599">I/O (sensor / DB / MQTT)</text>
+    <rect x="700" y="588" width="14" height="14" rx="3" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.4"/>
+    <text x="720" y="599">external</text>
+    <line x1="820" y1="595" x2="852" y2="595" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
+    <text x="858" y="599">data plane (uplink)</text>
+    <line x1="1010" y1="595" x2="1042" y2="595" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
+    <text x="1048" y="599">control plane (command, with ACK)</text>
+  </g>
+</svg>

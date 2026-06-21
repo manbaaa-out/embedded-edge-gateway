@@ -48,79 +48,15 @@ STM32 节点  ──UART(自定义帧)──▶  网关  ──┬──▶  SQL
 
 ## 架构
 
-按「总览 → 内部」两级视图呈现:先看系统边界,再看网关单进程内部如何把数据「采集 → 双写 → 上云」、把命令「下发 → 串口 → ACK」。
+单进程把「采集 → 双写 → 上云」与「下发 → 串口 → ACK」两条链路串到一起。下图为系统总体框架:**实线 = 上行数据面**,**虚线 = 下行控制面(命令,带 ACK)**;STM32 节点画为单元,其内部架构见[节点项目](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos)。
 
-**系统总览**
-
-```mermaid
-flowchart LR
-  STM32["STM32 传感节点<br/>DHT11 · BH1750"]:::edge
-  GW["边缘网关<br/>树莓派 · 单进程"]:::core
-  CLOUD["MQTT Broker / 云端"]:::edge
-  WEB["浏览器监控"]:::edge
-  STM32 <-->|"UART · 自定义帧"| GW
-  GW <-->|"MQTT 上行 / 下行命令"| CLOUD
-  GW -->|"HTTP :8888"| WEB
-  classDef core fill:#dbeafe,stroke:#2563eb,stroke-width:2px
-  classDef edge fill:#f1f5f9,stroke:#64748b
-```
-
-**网关内部**（实线 = 上行数据面,虚线 = 下行控制面）
-
-```mermaid
-flowchart LR
-  STM32["STM32 节点"]:::edge
-  SER["串口收 Channel"]:::core
-  PARSE["FrameParser FSM<br/>CRC16 校验"]:::core
-  POOL["线程池<br/>N workers"]:::core
-  DB[("SQLite · WAL")]:::io
-  MQ["MQTT Client"]:::io
-  HTTP["HTTP 监控 :8888"]:::io
-  INFL["inflight 在途表"]:::core
-  EVT["命令发送 Channel<br/>eventfd + timerfd"]:::core
-  STM32 -->|上行帧| SER --> PARSE
-  PARSE -->|传感数据| POOL
-  POOL --> DB --> HTTP
-  POOL --> MQ
-  PARSE -.命令应答.-> INFL
-  MQ -.下行命令.-> EVT
-  INFL -.重发.-> EVT
-  EVT -.下行帧.-> STM32
-  classDef core fill:#dbeafe,stroke:#2563eb
-  classDef io fill:#dcfce7,stroke:#16a34a
-  classDef edge fill:#f1f5f9,stroke:#64748b
-```
+![系统架构](docs/architecture.png)
 
 **上行(采集)** — STM32 经 UART 把传感器数据按自定义二进制帧发来。主线程的 epoll 循环把串口、eventfd、timerfd、信号(SIGHUP)统统作为 channel 挂在一起;串口数据经帧解析状态机(CRC16 校验)解码成一条条记录后提交线程池,每个 worker 同时**落本地 SQLite + 向 MQTT 上行发布**,即「双写」。
 
 **下行(命令)** — 运维往 `gateway/cmd/<命令>` 发 MQTT 消息,mosquitto 网络线程把它翻译成命令、塞进线程安全队列、戳一下 eventfd 唤醒主循环——**自己绝不碰串口**。主循环在 eventfd 回调里分配 seq、组帧、写串口,并登记到「在途表」。STM32 的 ACK / 查询应答经串口回来,由解析器配对在途表后销账、再经 MQTT 回发结果;另有 timerfd 周期扫描在途表,超时未收 ACK 就按同一 seq 重发(幂等),重试耗尽判失败。
 
 **监控** — HTTP 服务跑在独立线程,持有一个**只读** SQLite 连接,靠 WAL 与主链读写连接并发——查询不阻塞落库。浏览器访问即可看到实时设备卡片与 uPlot 历史曲线。
-
-**STM32 节点内部** — 节点固件的数据通路:三任务按 命令(P3)> 发送(P2)> 采样上报(P1)分工,经 `xTxQueue` / `StreamBuffer` / `g_sensor_mutex` 解耦;USART1 `ReceiveToIdle + DMA` 收、RX-IDLE 中断 `FromISR` 唤醒命令任务。完整节点架构(含全员报到看门狗)见 [STM32 FreeRTOS 传感节点](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos)。
-
-```mermaid
-flowchart LR
-  DHT["DHT11"]:::sens
-  BH["BH1750"]:::sens
-  RX["USART1 RX<br/>DMA + IDLE 中断"]:::hw
-  RXS(["StreamBuffer"]):::ipc
-  CMD["vCmdTask · P3<br/>解析下行命令"]:::task
-  SAMP["vSampleReportTask · P1<br/>采样 / 心跳"]:::task
-  TXQ(["xTxQueue"]):::ipc
-  TX["vTxTask · P2<br/>串口发送"]:::task
-  OUT["USART1 TX<br/>115200 8N1"]:::hw
-  DHT --> SAMP
-  BH --> SAMP
-  RX --> RXS --> CMD
-  CMD --> TXQ
-  SAMP --> TXQ
-  TXQ --> TX --> OUT
-  classDef sens fill:#dcfce7,stroke:#16a34a
-  classDef hw fill:#dcfce7,stroke:#16a34a
-  classDef ipc fill:#fef3c7,stroke:#d97706
-  classDef task fill:#dbeafe,stroke:#2563eb
-```
 
 ## 协议速览
 
