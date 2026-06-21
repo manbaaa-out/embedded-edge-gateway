@@ -10,7 +10,7 @@
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Raspberry%20Pi%204B-555)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-一条 epoll 主循环统一调度**串口 I/O、下行命令、超时重试、信号热加载**;配合**单一写者** + **线程池双写** + **读写分离**,在资源受限的树莓派上把「采集上云」与「云端控制」两条链路做得稳、省、可观测。配套的 STM32 节点固件见 [stm32-learning · N6_freertos](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos)。
+一条 epoll 主循环统一调度**串口 I/O、下行命令、超时重试、信号热加载**;配合**单一写者** + **线程池双写** + **读写分离**,在资源受限的树莓派上把「采集上云」与「云端控制」两条链路做得稳、省、可观测。配套的 STM32 节点固件见 [STM32 FreeRTOS 传感节点](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos)。
 
 ```
 STM32 节点  ──UART(自定义帧)──▶  网关  ──┬──▶  SQLite(本地历史)
@@ -32,7 +32,6 @@ STM32 节点  ──UART(自定义帧)──▶  网关  ──┬──▶  SQL
   - [下行命令](#下行命令)
 - [配置](#配置)
 - [部署](#部署)
-- [里程碑](#里程碑)
 - [项目结构](#项目结构)
 - [许可证](#许可证)
 
@@ -49,7 +48,7 @@ STM32 节点  ──UART(自定义帧)──▶  网关  ──┬──▶  SQL
 
 ## 架构
 
-下图把**两端内部**都画了出来:左侧是 STM32 节点([N6_freertos](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos))的 FreeRTOS 任务 / IPC / 看门狗,右侧是网关单进程内的 epoll Reactor、线程池、双写与监控;中间一条 UART 串起**上行采集**与**下行命令**两条链路。
+下图把**两端内部**都画了出来:左侧是 [STM32 传感节点](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos) 的 FreeRTOS 任务 / IPC / 看门狗,右侧是网关单进程内的 epoll Reactor、线程池、双写与监控;中间一条 UART 串起**上行采集**与**下行命令**两条链路。
 
 ```mermaid
 flowchart LR
@@ -57,7 +56,7 @@ flowchart LR
   BROKER["MQTT Broker<br/>mosquitto"]:::ext
   WEB["浏览器<br/>实时卡片 + uPlot 曲线"]:::ext
 
-  subgraph NODE["STM32 节点 · N6_freertos (F103 + FreeRTOS)"]
+  subgraph NODE["STM32 传感节点 (F103 + FreeRTOS)"]
     direction TB
     DHT["DHT11 · 单总线 GPIO"]:::sens
     BH["BH1750 · I2C1"]:::sens
@@ -191,7 +190,7 @@ g++ -std=c++17 -Wall CRC16.cpp fake_stm32.cpp -o fake_stm32
 
 ### 方式二:真实 STM32(真机联调)
 
-在树莓派上用真实 STM32 节点经 UART 通信。节点固件按 [帧协议](docs/m5_frame_protocol.md) 组帧上报,并响应下行命令(`0x20/0x21/0x22`)回 ACK(`0x06`)/ 查询应答(`0x05`)—— 即配套的 [N6_freertos](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos)。
+在树莓派上用真实 STM32 节点经 UART 通信。节点固件按 [帧协议](docs/m5_frame_protocol.md) 组帧上报,并响应下行命令(`0x20/0x21/0x22`)回 ACK(`0x06`)/ 查询应答(`0x05`)—— 即配套的 [STM32 FreeRTOS 节点固件](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos)。
 
 **① 接线**(STM32 与树莓派都是 3.3V TTL 电平,可直连;**切勿**接 RS232 或 5V,会烧片)。二选一:
 
@@ -289,43 +288,25 @@ journalctl -u gateway -f                   # 看日志
 
 服务单元见 [src/deploy/gateway.service](src/deploy/gateway.service)(`ExecReload` 发 SIGHUP、`Restart=on-failure`、含 `ProtectSystem` 等安全加固选项)。
 
-## 里程碑
-
-按里程碑迭代搭起整条链路,每步都可独立验证;模块解耦,逐层往上叠:
-
-| | 里程碑 | 能力 |
-|---|---|---|
-| M2 | 配置 | 配置解析 + load-then-swap 热加载 |
-| M3 | 日志 | 异步双缓冲日志(后台线程落盘) |
-| M4 | 串口 | termios 串口 RAII(读 + 写,非阻塞) |
-| M5 | 协议 | 帧解析 FSM + CRC16 + 下行组帧 |
-| M6 / M8 | 并发 | 线程安全队列 + 线程池 |
-| M7 / M9 | Reactor | epoll 事件循环 + timerfd 定时 |
-| M10 | 上云 | MQTT 客户端(上行发布 + 下行订阅) |
-| M11 | 监控 | epoll HTTP 服务 + 内嵌网页 + uPlot 曲线 |
-| M12 | 持久化 | SQLite 封装(读写 / 只读连接 + WAL) |
-| 方案B | 下行闭环 | seq 分配 / ACK 配对 / 超时重发(幂等) |
-| M15 | 落地 | systemd 服务 + 优雅退出 + 安全加固 |
-
 ## 项目结构
 
 ```
 embedded-edge-gateway/
 ├── src/
-│   ├── log/         # M3 异步双缓冲日志
-│   ├── serial/      # M4 串口 termios RAII(读 + 写)
-│   ├── protocol/    # M5 帧解析 FSM + CRC16 + 下行组帧 FrameBuilder
-│   ├── concurrent/  # M6 线程安全队列 + M8 线程池
-│   ├── net/         # M7 epoll Reactor + M9 timerfd + M11 HTTP + 内嵌监控服务
-│   ├── db/          # M12 SQLite 封装(读写连接 / 只读连接 / WAL)
-│   ├── mqtt/        # M10 MQTT 客户端(上行发布 + 下行订阅)
-│   ├── config/      # M2 配置解析 + 热加载(load-then-swap)
+│   ├── log/         # 异步双缓冲日志
+│   ├── serial/      # 串口 termios RAII(读 + 写)
+│   ├── protocol/    # 帧解析 FSM + CRC16 + 下行组帧 FrameBuilder
+│   ├── concurrent/  # 线程安全队列 + 线程池
+│   ├── net/         # epoll Reactor + timerfd + HTTP + 内嵌监控服务
+│   ├── db/          # SQLite 封装(读写连接 / 只读连接 / WAL)
+│   ├── mqtt/        # MQTT 客户端(上行发布 + 下行订阅)
+│   ├── config/      # 配置解析 + 热加载(load-then-swap)
 │   ├── deploy/      # systemd unit + 配置文件示例
 │   └── main.cpp     # 装配全链路:采集→双写→上云 + 下行命令 + 热加载
 ├── web/             # 内嵌监控页(编译期 asset embedding)
 ├── docs/            # 帧协议规约 + 各模块速记
 ├── scripts/         # 虚拟串口 + 实体 STM32 端到端联调脚本
-├── experiments/     # 学习沙箱(各里程碑原型 + fake_stm32 模拟节点)
+├── experiments/     # 各模块原型 + fake_stm32 模拟节点
 └── CMakeLists.txt
 ```
 
