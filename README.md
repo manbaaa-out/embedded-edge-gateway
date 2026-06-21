@@ -48,10 +48,7 @@ STM32 节点  ──UART(自定义帧)──▶  网关  ──┬──▶  SQL
 
 ## 架构
 
-单进程把「采集 → 双写 → 上云」与「下发 → 串口 → ACK」两条链路串到一起。下图为网关架构,STM32 节点 / 云端 / 浏览器画为边界单元(节点内部见[节点项目](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos)):
-
-- **虚线框 = 线程边界** —— 主线程 epoll Reactor、线程池、mosquitto、HTTP 各成一域;
-- **实线 = 上行数据面**,**虚线 = 下行控制 / 命令面(带 ACK)**,**点线 = SIGHUP 配置热加载**。
+单进程把「采集 → 双写 → 上云」与「下发 → 串口 → ACK」两条链路串到一起。下图分两栏:**(a) 上行数据通路** 与 **(b) 下行命令通路**(单一写者 + 超时重发)。**实线 = 数据面**,**虚线 = 控制 / 命令面**;颜色见图例(蓝 = 主线程 Reactor、绿 = I/O 线程、琥珀 = 队列/在途表、灰 = 外部)。STM32 节点 / 云端 / 浏览器为边界单元,节点内部见[节点项目](https://github.com/manbaaa-out/stm32-learning/tree/main/N6_freertos);SIGHUP 配置热加载见下文[配置](#配置)。
 
 ![网关架构](docs/architecture.png)
 
