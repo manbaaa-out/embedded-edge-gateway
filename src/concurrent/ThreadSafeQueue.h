@@ -16,14 +16,15 @@ public:
     ThreadSafeQueue(const ThreadSafeQueue& other) = delete;
     ThreadSafeQueue& operator=(const ThreadSafeQueue& other) = delete;
 
-    void push(T value) {
+    bool push(T value) {
         std::unique_lock<std::mutex> lock(mtx_);
         not_full_cv_.wait(lock, [this](){return capacity_ == 0 || queue_.size() < capacity_ || shutdown_;});
 
-        if (shutdown_) return;
+        if (shutdown_) return false;
         queue_.push(std::move(value));
         lock.unlock();
         not_empty_cv_.notify_one();
+        return true;
     }
 
     std::optional<T> pop() {
