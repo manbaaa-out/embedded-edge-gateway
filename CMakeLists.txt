@@ -34,16 +34,12 @@ add_subdirectory(src/db)
 add_subdirectory(src/mqtt)
 add_subdirectory(src/config) 
 
-# 6. 主程序
+add_subdirectory(src/app)     # GatewayApp:网关应用对象(资源+装配+主循环)
+
+# 6. 主程序:main 只负责 配置 init + 建 GatewayApp + run,具体装配在 app 模块。
+#    app PUBLIC 依赖各 lib,故这里链接 app 即可拿到全部传递依赖。
 add_executable(gateway src/main.cpp)
 target_link_libraries(gateway PRIVATE
     gateway_options       # 编译选项
-    log                   # 日志模块
-    serial                # 串口模块
-    protocol              # M5 协议解析模块
-    concurrent            # M6+M8 队列与线程池模块
-    db                    # M12 SQLite 持久化模块
-    mqtt                  # M10 MQTT 客户端模块
-    net
-    config
+    app                   # 网关应用对象(传递依赖 log/serial/protocol/concurrent/db/mqtt/net/config)
 )
