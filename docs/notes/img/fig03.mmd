@@ -1,9 +1,0 @@
-flowchart TB
-    subgraph P["进程 (独立地址空间)"]
-      direction TB
-      CODE["代码段 / 数据段 / 堆 / fd表 / 信号<br/>(进程内线程共享)"]
-      S1["线程1<br/>独立栈 / PC / 寄存器"]
-      S2["线程2<br/>独立栈 / PC / 寄存器"]
-      CODE -.->|共享| S1
-      CODE -.->|共享| S2
-    end

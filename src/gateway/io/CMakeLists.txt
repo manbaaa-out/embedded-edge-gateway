@@ -20,8 +20,12 @@ add_library(gw_event STATIC
 target_link_libraries(gw_event PUBLIC gateway_includes PRIVATE gateway_options)
 
 # ---- http:内嵌监控页 + 只读查询接口 ----
-# 编译期把 web/ 静态资源嵌进二进制:单文件部署、离线自包含、不依赖 CDN。
-set(WEB_DIR ${CMAKE_SOURCE_DIR}/web)
+# 编译期把 http/assets/ 下的静态资源嵌进二进制:单文件部署、离线自包含、不依赖 CDN。
+#
+# 资源与消费它的模块放在一起,而不是仓库根的 web/ —— 那个位置会让人以为
+# 这是个独立的前端工程,实际上它连构建产物都不是,而是本模块的【编译期输入】:
+# 改了 index.html 就得重新 configure(见下面的 CMAKE_CONFIGURE_DEPENDS)。
+set(WEB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/http/assets)
 file(READ ${WEB_DIR}/index.html WEB_INDEX_HTML)
 file(READ ${WEB_DIR}/uplot.js   WEB_UPLOT_JS)
 file(READ ${WEB_DIR}/uplot.css  WEB_UPLOT_CSS)

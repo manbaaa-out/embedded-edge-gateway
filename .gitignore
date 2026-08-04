@@ -23,5 +23,5 @@ compile_commands.json
 # WSL mark-of-the-web 垃圾(NTFS ADS)
 *:Zone.Identifier
 
-# CMake 配置期从 web/ 资源生成的嵌入头(产物,不入库;源在 web/ + WebAsset.h.in)
+# CMake 配置期从 http/assets/ 生成的嵌入头(产物,不入库;源在 assets/ + WebAsset.h.in)
 **/WebAsset.h

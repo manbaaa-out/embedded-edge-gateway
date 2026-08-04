@@ -1,8 +1,0 @@
-flowchart TB
-    A["epoll_wait 返回一批就绪 Channel"] --> B["遍历调用各 Channel 回调"]
-    B --> C{"回调要删 Channel?"}
-    C -- 是 --> D["放进 dying_ 待销毁列表<br/>(不立即 delete)"]
-    C -- 否 --> B
-    B --> E["本轮遍历全部结束"]
-    E --> F["统一清空 dying_,真正销毁"]
-    F --> A

@@ -1,5 +1,0 @@
-classDiagram
-    class Base { +vptr +virtual foo() }
-    class Derived { +vptr +foo() override }
-    Base <|-- Derived
-    note for Derived "对象内存:[vptr | 成员...]\nvptr → Derived::vtable → &Derived::foo"

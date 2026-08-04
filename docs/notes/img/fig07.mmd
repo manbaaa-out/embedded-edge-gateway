@@ -1,5 +1,0 @@
-flowchart LR
-    A["慢启动<br/>cwnd 指数增长"] -- "cwnd≥ssthresh" --> B["拥塞避免<br/>线性增长"]
-    B -- "3 个重复 ACK" --> C["快重传+快恢复<br/>ssthresh=cwnd/2"]
-    C --> B
-    B -- "超时" --> A

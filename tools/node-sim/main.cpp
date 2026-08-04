@@ -180,7 +180,9 @@ private:
     void sendFrame(uint8_t type, const uint8_t* payload, uint8_t len) {
         if (roll(opt_.garbage)) {
             const uint8_t noise[3] = {0xFF, 0xAA, 0x13};   // 含一个 0xAA 以考验帧头自环
-            ::write(fd_, noise, sizeof noise);
+            // 噪声本来就是"能到就到"的东西,写失败无需处理;
+            // 但返回值要显式吃掉 —— glibc 给 write 标了 warn_unused_result。
+            if (::write(fd_, noise, sizeof noise) < 0) { /* 故意忽略 */ }
         }
         uint8_t       frame[EDGE_FRAME_MAX];
         const uint8_t n = edge_frame_encode(type, payload, len, frame);

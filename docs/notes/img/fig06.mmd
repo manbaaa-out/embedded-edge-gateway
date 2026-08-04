@@ -1,7 +1,0 @@
-sequenceDiagram
-    participant A as 主动关闭方
-    participant B as 被动关闭方
-    A->>B: FIN              (A: FIN_WAIT_1)
-    B->>A: ACK              (B: CLOSE_WAIT / A: FIN_WAIT_2)
-    B->>A: FIN              (B: LAST_ACK)
-    A->>B: ACK              (A: TIME_WAIT 等 2MSL → CLOSED / B: CLOSED)

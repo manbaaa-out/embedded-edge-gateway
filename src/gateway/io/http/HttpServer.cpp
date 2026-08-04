@@ -1,7 +1,8 @@
 #include "gateway/io/http/HttpServer.h"
+#include "gateway/core/log/Logger.h"
 #include "gateway/io/event/EventLoop.h"
 #include "gateway/io/http/HttpRequest.h"   // gateway::HttpRequest, gateway::Buffer
-#include "gateway/io/http/WebAsset.h"      // [S6] kIndexHtml(CMake 编译期从 web/index.html 嵌入)
+#include "gateway/io/http/WebAsset.h"      // [S6] kIndexHtml(CMake 编译期从 assets/index.html 嵌入)
 
 #include <map>
 #include <vector>
@@ -77,7 +78,7 @@ static std::string makeResponse(int code, const std::string& reason,
     return resp;
 }
 
-// [S6] 监控页:返回编译期从 web/index.html 嵌入的 HTML(asset embedding)。
+// [S6] 监控页:返回编译期从 assets/index.html 嵌入的 HTML(asset embedding)。
 static std::string monitorPage() {
     return kIndexHtml;
 }
@@ -185,7 +186,11 @@ void runHttpServer(Database& roDb) {
     timer_channel->events = EPOLLIN;
     timer_channel->on_read = [timerfd, &loop, TIMEOUT]() {
         uint64_t exp = 0;
-        read(timerfd, &exp, sizeof(exp));
+        // 必须读掉计数器,否则 LT 模式下会反复触发。读失败不影响下面的超时扫描
+        // (扫描依据是各连接的 last_active,不依赖这个计数),故只记不处理。
+        if (read(timerfd, &exp, sizeof(exp)) != static_cast<ssize_t>(sizeof(exp))) {
+            LOG_DEBUG("%s", "http timerfd read short");
+        }
         time_t now = time(nullptr);
         std::vector<int> timeout_fds;
         loop.forEachChannel([&](channel* ch) {

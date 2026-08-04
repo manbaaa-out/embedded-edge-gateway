@@ -297,22 +297,28 @@ embedded-edge-gateway/
 ├── protocol/           # ★ 与 STM32 固件共享的 C99 协议核心 + 金标准向量
 ├── src/gateway/
 │   ├── core/           #   日志 · 配置 · 并发原语
-│   ├── io/             #   串口 · epoll Reactor · HTTP(内嵌监控页)
 │   ├── protocol/       #   edge_proto 的薄 C++ 封装
 │   ├── storage/        #   SQLite(读写连接 / 只读连接 / WAL)
 │   ├── cloud/          #   MQTT 客户端 · 下行命令翻译
+│   ├── io/
+│   │   ├── serial/     #   串口 termios RAII
+│   │   ├── event/      #   epoll Reactor + channel
+│   │   └── http/       #   HTTP 服务
+│   │       └── assets/ #     监控页资源(编译期嵌进二进制,见下)
 │   ├── link/           #   与节点的链路:收发帧 · 在途命令表
 │   ├── pipeline/       #   遥测解码 · 双写扇出
 │   └── app/            #   GatewayApp(装配 + 主循环)· main.cpp
 ├── tools/node-sim/     # 节点模拟器(响应命令 + 故障注入)
-├── tests/              # GoogleTest + CTest
+├── tests/              # GoogleTest + CTest,按层与 src 一一对应
 ├── scripts/            # 联调脚本 · 协议漂移守卫
 ├── deploy/             # systemd unit + 配置样例
-├── web/                # 内嵌监控页(编译期 asset embedding)
-└── docs/
-    ├── protocol.md     # 串口帧协议规约 v1.2
-    └── notes/          # 学习笔记(与工程无关)
+├── cmake/              # 编译选项 · sanitizer
+└── docs/protocol.md    # 串口帧协议规约 v1.2
 ```
+
+> 监控页资源放在 `io/http/assets/` 而不是仓库根的 `web/`:它不是独立的前端工程,
+> 也不是构建产物,而是 HTTP 模块的**编译期输入** —— CMake 在配置期把它读进
+> `WebAsset.h`,改了 `index.html` 就要重新 configure。资源与唯一消费它的模块同处一地。
 
 ## 许可证
 

@@ -31,6 +31,20 @@ jobs:
       - name: 单测
         run: ctest --preset dev
 
+      # Release 走 -O2,glibc 的 _FORTIFY_SOURCE 才会生效 —— read/write 的
+      # warn_unused_result 这类警告【只在优化开启时出现】。只构建 Debug 是抓不到的。
+      - name: Release 构建(优化开启后才暴露的警告)
+        run: |
+          cmake --preset release -DGATEWAY_WARNINGS_AS_ERRORS=ON
+          cmake --build --preset release
+
+      - name: 安装可重定位性
+        run: |
+          cmake --install build/release --prefix /tmp/install_check
+          test -x /tmp/install_check/bin/gateway
+          test -f /tmp/install_check/etc/gateway.conf
+          test -f /tmp/install_check/lib/systemd/system/gateway.service
+
   # ------------------------------------------------------------
   # 2. Sanitizer。ASan 查 use-after-free —— 正是热加载 reset db_/client_
   #    时最怕的那类 bug;UBSan 查协议解析里的移位与窄化。
