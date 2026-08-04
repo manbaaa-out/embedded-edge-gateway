@@ -8,7 +8,7 @@ SERIAL_BAUD="${SERIAL_BAUD:-115200}"
 BROKER_HOST="${BROKER_HOST:-localhost}"
 DB_PATH="${DB_PATH:-/tmp/gateway.db}"
 CONF_OUT="${CONF_OUT:-/tmp/gateway.e2e.conf}"
-SRC_CONF="${SRC_CONF:-src/deploy/gateway.conf}"
+SRC_CONF="${SRC_CONF:-deploy/gateway.conf}"
 
 red()   { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -41,7 +41,7 @@ info "=== 3. 必备工具 ==="
 check "mosquitto_sub 存在" command -v mosquitto_sub
 check "mosquitto_pub 存在" command -v mosquitto_pub
 check "sqlite3 存在"       command -v sqlite3
-check "网关已编译"          test -x ./build/gateway
+check "网关已编译"          test -x ./build/dev/gateway
 
 info "=== 4. MQTT broker ==="
 if mosquitto_sub -h "$BROKER_HOST" -t '$SYS/#' -C 1 -W 2 >/dev/null 2>&1; then
@@ -88,7 +88,7 @@ fi
 echo
 if [[ $fail -eq 0 ]]; then
   green "预检通过。下一步在【单独终端】前台启动网关:"
-  echo  "    ./build/gateway $CONF_OUT"
+  echo  "    ./build/dev/gateway $CONF_OUT"
   echo  "然后回到本终端跑: ./scripts/e2e_verify.sh"
 else
   red "预检有 FAIL 项,先修复再继续。"

@@ -1,0 +1,6 @@
+flowchart LR
+    T1["任务1 打卡 bit0"] --> EG{"事件组<br/>三位集齐?"}
+    T2["任务2 打卡 bit1"] --> EG
+    T3["任务3 打卡 bit2"] --> EG
+    EG -- "齐(0b111)" --> FEED["喂狗 IWDG_Refresh<br/>清空事件组"]
+    EG -- "缺任一位>2s" --> RST["看门狗超时 → 复位"]

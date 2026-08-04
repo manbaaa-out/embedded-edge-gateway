@@ -1,0 +1,7 @@
+sequenceDiagram
+    participant C as 客户端
+    participant S as 服务端
+    Note over C,S: 三次握手(建立连接)
+    C->>S: SYN seq=x          (C: SYN_SENT)
+    S->>C: SYN+ACK seq=y ack=x+1  (S: SYN_RCVD)
+    C->>S: ACK ack=y+1        (双方 ESTABLISHED)

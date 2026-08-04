@@ -1,0 +1,5 @@
+flowchart LR
+    RX["UART 收字节"] --> DMA["DMA 自动搬到 rx_buf<br/>(不打扰 CPU)"]
+    DMA --> IDLE["一帧结束→IDLE 空闲中断"]
+    IDLE --> SEM["ISR 释放信号量"]
+    SEM --> TASK["命令解析任务<br/>走协议状态机解码"]

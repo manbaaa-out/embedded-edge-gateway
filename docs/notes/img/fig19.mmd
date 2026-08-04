@@ -1,0 +1,14 @@
+flowchart LR
+    subgraph 传感器
+      DHT["DHT11(单总线)"]
+      BH["BH1750(I2C)"]
+    end
+    DHT --> SAMP["采样上报任务(prio1)"]
+    BH --> SAMP
+    SAMP -->|封帧入队| TXQ["发送队列"]
+    TXQ --> TX["串口发送任务(prio2)"]
+    TX -->|UART| GW["边缘网关"]
+    GW -->|下行命令 UART+DMA+IDLE| CMD["命令解析任务(prio3)"]
+    CMD -->|执行+回执| TXQ
+    SAMP & TX & CMD -->|打卡| EG["事件组"]
+    EG -->|集齐三位| WD["喂 IWDG 看门狗"]

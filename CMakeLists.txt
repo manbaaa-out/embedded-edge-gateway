@@ -68,4 +68,7 @@ endif()
 include(GNUInstallDirs)
 install(TARGETS gateway RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES deploy/gateway.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR} RENAME gateway.conf)
-install(FILES deploy/gateway.service DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/systemd/system)
+# DESTINATION 用相对路径:写成 ${CMAKE_INSTALL_PREFIX}/lib/... 会在配置期展开成
+# 绝对路径,于是 `cmake --install --prefix <别处>` 重定位不了它,装到一半会因为
+# 往 /usr/local 写而失败。相对路径才随 prefix 走。
+install(FILES deploy/gateway.service DESTINATION lib/systemd/system)

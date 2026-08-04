@@ -1,0 +1,12 @@
+flowchart TB
+    subgraph 高地址
+      S["栈 Stack ↓<br/>局部变量/参数/返回地址"]
+    end
+    M["内存映射段<br/>动态库 / mmap"]
+    H["堆 Heap ↑<br/>new / malloc"]
+    BSS[".bss<br/>未初始化全局/静态(清零)"]
+    DATA[".data<br/>已初始化全局/静态"]
+    subgraph 低地址
+      TEXT[".text 代码段(只读)"]
+    end
+    S --> M --> H --> BSS --> DATA --> TEXT

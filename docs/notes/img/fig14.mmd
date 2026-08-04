@@ -1,0 +1,9 @@
+stateDiagram-v2
+    [*] --> Ready: 创建
+    Ready --> Running: 调度器选中(最高优先级)
+    Running --> Ready: 被更高优先级抢占/时间片到
+    Running --> Blocked: 等队列/信号量/延时
+    Blocked --> Ready: 事件到达/超时
+    Running --> Suspended: vTaskSuspend
+    Suspended --> Ready: vTaskResume
+    Running --> [*]: vTaskDelete

@@ -1,0 +1,6 @@
+flowchart LR
+    OT["其它线程<br/>(云端命令)"] -->|1.入队| Q["线程安全队列"]
+    OT -->|2.写 eventfd| EFD["eventfd"]
+    EFD -->|3.唤醒| LOOP["主循环(EventLoop线程)"]
+    LOOP -->|4.取队列| Q
+    LOOP -->|5.主线程写| SER["串口(无需加锁)"]

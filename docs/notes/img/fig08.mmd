@@ -1,0 +1,6 @@
+flowchart LR
+    R["recv 到的字节流<br/>(可能粘/半包)"] --> B["接收缓冲 Buffer"]
+    B --> FSM{"状态机逐字节解析"}
+    FSM -- "未收齐" --> WAIT["保留 Buffer,等下次 recv"]
+    FSM -- "解析出完整一帧/请求" --> CB["回调上层处理"]
+    CB --> FSM

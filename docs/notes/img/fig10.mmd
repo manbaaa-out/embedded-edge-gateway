@@ -1,0 +1,5 @@
+flowchart LR
+    CTL["epoll_ctl 注册<br/>(一次)"] --> RBT["内核红黑树<br/>管理所有 fd"]
+    EV["fd 就绪(中断/回调)"] --> RDL["就绪链表 rdllist"]
+    WAIT["epoll_wait"] --> RDL
+    RDL --> RET["只返回就绪 fd O(就绪数)"]

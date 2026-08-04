@@ -1,58 +1,23 @@
-# build artifacts
+# ---- 构建产物 ----
 build/
+build*/
 *.o
 *.a
 *.so
 
-# experiments binaries (各练习目录下的可执行产物)
-experiments/m5_fsm/fsm_demo
-experiments/m5_parser/crc_test
-experiments/m5_parser/m5_demo
-experiments/m5_parser/fake_stm32
-experiments/m5_parser/gateway
-experiments/m5_parser/test_crc16
-experiments/m6_queue/demo_cv
-experiments/m6_queue/demo_safe
-experiments/m6_queue/demo_safe_tsan
-experiments/m6_queue/demo_tsan
-experiments/m6_queue/demo_unsafe
-experiments/m6_queue/test_bounded
-experiments/m6_queue/test_queue
-experiments/m6_queue/test_shutdown
-experiments/m8_pool/test_future_pool
-experiments/m8_pool/test_pool
-experiments/m3_log/test_compile
-experiments/m3_log/test_conpile
-experiments/m3_log/test_throughput
-experiments/m3_log/test_timed_flush
-experiments/m7_epoll/server
-experiments/m7_epoll/zuse
-experiments/m7_epoll/channel_et
-experiments/m9_timerfd/reactor_timerfd
-experiments/m9_timerfd/timer_server
-experiments/m9_timerfd/timerfd_create_test
-experiments/m11_http/test_http
-experiments/m11_http/http_server
-experiments/m12_sqlite/exec
-experiments/m12_sqlite/insert
-experiments/m12_sqlite/select
-experiments/m12_sqlite/test_reset
-experiments/m12_sqlite/hello
-experiments/m12_sqlite/raii
-experiments/m10_mqtt/mqtt_sub
-experiments/m10_mqtt/mqtt_pub
-experiments/m10_mqtt/mqtt_client
-experiments/m10_mqtt/pipeline
-experiments/**/*.out
-experiments/**/a.out
-experiments/**/*.db
+# CMake 用户本地覆盖(preset 的个人化配置,不入库)
+CMakeUserPresets.json
 
-# IDE
+# ---- 运行期产物 ----
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# ---- 编辑器 / 工具 ----
 .vscode/
 .idea/
 .cache/
-
-# compile_commands (clangd)
 compile_commands.json
 
 # WSL mark-of-the-web 垃圾(NTFS ADS)

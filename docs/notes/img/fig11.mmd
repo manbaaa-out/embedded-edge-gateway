@@ -1,0 +1,4 @@
+flowchart LR
+    SIG["SIGHUP 到达"] --> SFD["signalfd 变可读"]
+    SFD --> EP["epoll_wait 返回"]
+    EP --> LOOP["主循环线程内<br/>安全重载配置"]
