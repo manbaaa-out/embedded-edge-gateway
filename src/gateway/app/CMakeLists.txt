@@ -15,5 +15,6 @@ target_link_libraries(gw_app
             gw_log gw_config gw_concurrent
             gw_serial gw_event gw_http
             gw_protocol gw_storage gw_cloud
+            gw_link gw_pipeline
     PRIVATE gateway_options
 )
