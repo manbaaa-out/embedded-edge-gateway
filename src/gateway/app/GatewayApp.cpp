@@ -25,6 +25,19 @@ namespace {
 constexpr long kCmdScanIntervalNs = 200L * 1000 * 1000;
 }  // namespace
 
+// 见头文件:必须在任何线程被创建之前调用,否则 SIGHUP 会落到某个
+// 没屏蔽它的线程上、按默认行为把进程杀掉。
+bool GatewayApp::blockReloadSignal() {
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGHUP);
+    if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
+        LOG_WARN("sigprocmask failed: %s — 热加载不可用", strerror(errno));
+        return false;
+    }
+    return true;
+}
+
 // ============================================================
 // 构造:RAII 资源。db_ / client_ 用 shared_ptr 而非 unique_ptr,
 // 因为线程池 task 要捕获它们的快照(见 TelemetryPipeline 头文件)。
@@ -309,12 +322,8 @@ void GatewayApp::setupSignal() {
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGHUP);
-    // 命门:先 block SIGHUP 的默认递送。不 block,SIGHUP 的默认行为是
-    //       【终止进程】,signalfd 根本读不到。
-    if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
-        LOG_WARN("sigprocmask failed: %s — 热加载不可用", strerror(errno));
-        return;
-    }
+    // 屏蔽动作已由 main 在建任何线程之前做过(见 blockReloadSignal 的注释)。
+    // 这里只把同一个 mask 交给 signalfd —— signalfd 需要知道自己负责哪些信号。
     sfd_ = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
     if (sfd_ == -1) {
         LOG_WARN("signalfd failed: %s — 热加载不可用", strerror(errno));

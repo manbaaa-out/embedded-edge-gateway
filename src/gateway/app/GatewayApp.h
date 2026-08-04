@@ -38,6 +38,20 @@ namespace gateway {
 
 class GatewayApp {
 public:
+    // 【必须在创建任何线程之前调用】屏蔽 SIGHUP 的默认递送。
+    //
+    // 信号掩码是【每线程】的,新线程从创建它的线程继承。若等到 run() 里
+    // 才屏蔽,构造函数起的 HTTP 线程、线程池 worker、以及 mosquitto 网络线程
+    // 都已带着「不屏蔽 SIGHUP」的掩码在跑了 —— kill -HUP 时内核会挑一个
+    // 没屏蔽它的线程递送,于是 SIGHUP 的默认行为(终止进程)生效。
+    //
+    // 这正是重构前热加载「时灵时不灵」的原因:sigprocmask 当时写在
+    // setupSignal() 里,而它是 run() 的最后一步。
+    //
+    // 返回 false 表示屏蔽失败,调用方可据此判定热加载不可用(非致命)。
+    static bool blockReloadSignal();
+
+
     // 构造:读 ConfigManager::current() 的启动快照,打开 db / MQTT / 只读连接 +
     // HTTP 线程 / 线程池 / 串口。任一失败抛异常 —— 由 main 致命退出交 systemd 重启。
     // (ConfigManager::init 仍由 main 负责:配置读不出是更早的致命错。)
