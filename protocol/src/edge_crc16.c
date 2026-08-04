@@ -2,7 +2,11 @@
 
 /* CRC16-MODBUS 查找表(256 项 × 2B = 512B)。
  * 空间换时间:每字节一次查表 + 一次异或,替代 8 次移位判断。
- * 512 字节常量放 Flash,对 STM32F103 的 64KB Flash 完全可接受。 */
+ * 512 字节常量放 Flash,对 STM32F103 的 64KB Flash 完全可接受。
+ *
+ * 手工排成 8 列 32 行:对着 CRC 表调试时按行定位最方便。
+ * clang-format 会把它揉成不规则的长行,故在此关掉格式化。 */
+/* clang-format off */
 static const uint16_t kCrc16Table[256] = {
     0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
     0xC601, 0x06C0, 0x0780, 0xC741, 0x0500, 0xC5C1, 0xC481, 0x0440,
@@ -37,6 +41,7 @@ static const uint16_t kCrc16Table[256] = {
     0x4400, 0x84C1, 0x8581, 0x4540, 0x8701, 0x47C0, 0x4680, 0x8641,
     0x8201, 0x42C0, 0x4380, 0x8341, 0x4100, 0x81C1, 0x8081, 0x4040
 };
+/* clang-format on */
 
 uint16_t edge_crc16_update(uint16_t crc, uint8_t byte) {
     return (uint16_t) ((crc >> 8) ^ kCrc16Table[(crc ^ byte) & 0xFFu]);

@@ -36,8 +36,7 @@ extern "C" {
  *
  * 注意:本函数【不分配 seq】。seq 属于请求-响应模型(§6.2),归上层命令管理,
  *       重发时必须复用原 seq —— 这个决定权不能落在组帧函数手里。 */
-uint8_t edge_frame_encode(uint8_t type, const uint8_t* payload, uint8_t payload_len,
-                          uint8_t* out);
+uint8_t edge_frame_encode(uint8_t type, const uint8_t* payload, uint8_t payload_len, uint8_t* out);
 
 /* ============================================================
  * 收帧 FSM(接收侧)
@@ -71,16 +70,16 @@ typedef void (*edge_frame_cb_t)(uint8_t type, const uint8_t* payload, uint8_t pa
 
 typedef struct {
     edge_state_t state;
-    uint8_t      len;  /* 本帧 LEN */
-    uint8_t      type; /* 本帧 TYPE */
-    uint8_t      payload[EDGE_PAYLOAD_MAX];
-    uint8_t      received; /* payload 已收字节数 */
-    uint16_t     crc;      /* CRC 累加值 */
-    uint8_t      crc_lo;
-    uint8_t      crc_hi;
+    uint8_t len;  /* 本帧 LEN */
+    uint8_t type; /* 本帧 TYPE */
+    uint8_t payload[EDGE_PAYLOAD_MAX];
+    uint8_t received; /* payload 已收字节数 */
+    uint16_t crc;     /* CRC 累加值 */
+    uint8_t crc_lo;
+    uint8_t crc_hi;
 
-    edge_frame_cb_t     on_frame;
-    void*               user;
+    edge_frame_cb_t on_frame;
+    void* user;
     edge_parser_stats_t stats;
 } edge_parser_t;
 

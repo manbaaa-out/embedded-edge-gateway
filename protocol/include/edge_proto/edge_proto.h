@@ -51,9 +51,9 @@ extern "C" {
 #define EDGE_LEN_MIN 1u  /* LEN 下限:只有 TYPE、无 payload(心跳帧) */
 #define EDGE_LEN_MAX 64u /* LEN 上限:业务最大 33B 取 2 倍余量向上取 2 的幂(§3.2) */
 
-#define EDGE_PAYLOAD_MAX (EDGE_LEN_MAX - 1u)      /* 63:LEN 含 TYPE 一字节 */
-#define EDGE_FRAME_MIN   (2u + 1u + 1u + 2u)      /* 6:心跳帧整帧长度 */
-#define EDGE_FRAME_MAX   (2u + 1u + EDGE_LEN_MAX + 2u) /* 69 */
+#define EDGE_PAYLOAD_MAX (EDGE_LEN_MAX - 1u)         /* 63:LEN 含 TYPE 一字节 */
+#define EDGE_FRAME_MIN (2u + 1u + 1u + 2u)           /* 6:心跳帧整帧长度 */
+#define EDGE_FRAME_MAX (2u + 1u + EDGE_LEN_MAX + 2u) /* 69 */
 
 /* ============================================================
  * 3. TYPE 字典(§3.3)
@@ -65,17 +65,17 @@ extern "C" {
  * ============================================================ */
 typedef enum {
     /* ---- 上行:STM32 → 网关 ---- */
-    EDGE_TYPE_DHT11      = 0x01, /* 温湿度:温 2B + 湿 2B + 校验 1B(均 ×10 大端) */
-    EDGE_TYPE_BH1750     = 0x02, /* 光照:  2B 大端 uint16,单位 lux */
-    EDGE_TYPE_HEARTBEAT  = 0x03, /* 心跳:  无 payload */
-    EDGE_TYPE_STATUS     = 0x04, /* 设备状态:1B bitmask,见 EDGE_STATUS_BIT_* */
+    EDGE_TYPE_DHT11 = 0x01,      /* 温湿度:温 2B + 湿 2B + 校验 1B(均 ×10 大端) */
+    EDGE_TYPE_BH1750 = 0x02,     /* 光照:  2B 大端 uint16,单位 lux */
+    EDGE_TYPE_HEARTBEAT = 0x03,  /* 心跳:  无 payload */
+    EDGE_TYPE_STATUS = 0x04,     /* 设备状态:1B bitmask,见 EDGE_STATUS_BIT_* */
     EDGE_TYPE_QUERY_RESP = 0x05, /* 查询应答:[seq][rc][数据…] */
-    EDGE_TYPE_ACK        = 0x06, /* 命令确认:[seq][rc] */
+    EDGE_TYPE_ACK = 0x06,        /* 命令确认:[seq][rc] */
 
     /* ---- 下行:网关 → STM32 ---- */
     EDGE_TYPE_QUERY_LIGHT = 0x20, /* 查光照:  [seq] */
-    EDGE_TYPE_QUERY_TH    = 0x21, /* 查温湿度:[seq] */
-    EDGE_TYPE_SET_PERIOD  = 0x22  /* 设采样周期:[seq][周期 2B 大端,单位秒] */
+    EDGE_TYPE_QUERY_TH = 0x21,    /* 查温湿度:[seq] */
+    EDGE_TYPE_SET_PERIOD = 0x22   /* 设采样周期:[seq][周期 2B 大端,单位秒] */
 } edge_type_t;
 
 /* 0x00 与 0xFF 保留为非法:全 0 / 全 1 最易因空线、短路被误读,留作异常检测 */
@@ -84,7 +84,7 @@ typedef enum {
 
 /* 方向判定 —— 把「上下行分段」这条口头铁律变成可调用的判断。
  * 节点收到上行 TYPE 时据此回 EDGE_RC_UNSUPPORTED,而不是靠 switch 漏网到 default。 */
-#define EDGE_IS_UPLINK(t)   ((uint8_t) (t) >= 0x01u && (uint8_t) (t) <= 0x1Fu)
+#define EDGE_IS_UPLINK(t) ((uint8_t) (t) >= 0x01u && (uint8_t) (t) <= 0x1Fu)
 #define EDGE_IS_DOWNLINK(t) ((uint8_t) (t) >= 0x20u && (uint8_t) (t) <= 0x2Fu)
 
 /* ============================================================
@@ -94,10 +94,10 @@ typedef enum {
  *       必须回一个携带对应结果码的应答,让运维据码定位。
  * ============================================================ */
 typedef enum {
-    EDGE_RC_OK          = 0x00, /* 成功 */
-    EDGE_RC_BAD_PARAM   = 0x01, /* 参数非法 / 超范围(如周期 = 0) */
+    EDGE_RC_OK = 0x00,          /* 成功 */
+    EDGE_RC_BAD_PARAM = 0x01,   /* 参数非法 / 超范围(如周期 = 0) */
     EDGE_RC_UNSUPPORTED = 0x02, /* 不支持的命令(TYPE 不在下行字典,含收到上行 TYPE) */
-    EDGE_RC_BUSY        = 0x03  /* 设备忙 / 暂时无法执行(如传感器读失败),可稍后重试 */
+    EDGE_RC_BUSY = 0x03 /* 设备忙 / 暂时无法执行(如传感器读失败),可稍后重试 */
 } edge_rc_t;
 
 /* ============================================================
@@ -106,7 +106,7 @@ typedef enum {
 
 /* 下行命令与上行应答的 payload 首字节恒为 seq(§6.2),应答第二字节为结果码 */
 #define EDGE_OFF_SEQ 0u
-#define EDGE_OFF_RC  1u
+#define EDGE_OFF_RC 1u
 
 /* ---- 采样周期(0x22)----
  * 【单位:秒】。协议 v1.1 文档曾误写为 ms,而两端实现一直按秒处理;
@@ -122,7 +122,7 @@ typedef enum {
 
 /* ---- 设备状态(0x04)bitmask ----
  * 【注意】这是按位标志,不是连续枚举。接收端必须逐位 AND,不能当单一数值解释。 */
-#define EDGE_STATUS_BIT_DHT11  0x01u
+#define EDGE_STATUS_BIT_DHT11 0x01u
 #define EDGE_STATUS_BIT_BH1750 0x02u
 
 /* ============================================================
@@ -131,7 +131,7 @@ typedef enum {
  * 协议层只定契约,不定实现:定时器怎么做、重试放在哪个线程,由各端自行决定。
  * ============================================================ */
 #define EDGE_ACK_TIMEOUT_MS 500u /* 节点收到合法命令后的应答时限 */
-#define EDGE_MAX_RETRY      3u   /* 网关对单条命令的建议最大重试次数(重发复用同 seq) */
+#define EDGE_MAX_RETRY 3u /* 网关对单条命令的建议最大重试次数(重发复用同 seq) */
 
 /* ============================================================
  * 7. 共享工具函数(header-only,两端零成本复用)
@@ -153,16 +153,26 @@ static inline void edge_u16_be_write(uint8_t* p, uint16_t v) {
  * 校验口径从此只有一处。0x05 是变长应答,故只约束下限(seq + rc)。 */
 static inline int edge_min_payload_len(uint8_t type) {
     switch (type) {
-    case EDGE_TYPE_DHT11:       return 5; /* 温 2B + 湿 2B + 校验 1B */
-    case EDGE_TYPE_BH1750:      return 2;
-    case EDGE_TYPE_HEARTBEAT:   return 0;
-    case EDGE_TYPE_STATUS:      return 1;
-    case EDGE_TYPE_QUERY_RESP:  return 2; /* [seq][rc],数据段变长 */
-    case EDGE_TYPE_ACK:         return 2; /* [seq][rc] */
-    case EDGE_TYPE_QUERY_LIGHT: return 1; /* [seq] */
-    case EDGE_TYPE_QUERY_TH:    return 1; /* [seq] */
-    case EDGE_TYPE_SET_PERIOD:  return 3; /* [seq][周期 2B] */
-    default:                    return -1;
+    case EDGE_TYPE_DHT11:
+        return 5; /* 温 2B + 湿 2B + 校验 1B */
+    case EDGE_TYPE_BH1750:
+        return 2;
+    case EDGE_TYPE_HEARTBEAT:
+        return 0;
+    case EDGE_TYPE_STATUS:
+        return 1;
+    case EDGE_TYPE_QUERY_RESP:
+        return 2; /* [seq][rc],数据段变长 */
+    case EDGE_TYPE_ACK:
+        return 2; /* [seq][rc] */
+    case EDGE_TYPE_QUERY_LIGHT:
+        return 1; /* [seq] */
+    case EDGE_TYPE_QUERY_TH:
+        return 1; /* [seq] */
+    case EDGE_TYPE_SET_PERIOD:
+        return 3; /* [seq][周期 2B] */
+    default:
+        return -1;
     }
 }
 

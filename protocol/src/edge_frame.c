@@ -6,8 +6,7 @@
  *   CRC 覆盖 LEN..payload(帧头是固定值,损坏由 FSM 在头部阶段丢弃,
  *   不进 CRC;CRC 字段本身也不自校验)。CRC 按小端写入帧尾。
  * ============================================================ */
-uint8_t edge_frame_encode(uint8_t type, const uint8_t* payload, uint8_t payload_len,
-                          uint8_t* out) {
+uint8_t edge_frame_encode(uint8_t type, const uint8_t* payload, uint8_t payload_len, uint8_t* out) {
     if (out == NULL) {
         return 0;
     }
@@ -18,22 +17,22 @@ uint8_t edge_frame_encode(uint8_t type, const uint8_t* payload, uint8_t payload_
         return 0; /* payload 为 NULL 时长度必须为 0 */
     }
 
-    uint8_t  n   = 0;
+    uint8_t n = 0;
     uint16_t crc = EDGE_CRC16_INIT;
 
     out[n++] = (uint8_t) EDGE_HDR0; /* 帧头不进 CRC */
     out[n++] = (uint8_t) EDGE_HDR1;
 
     const uint8_t len = (uint8_t) (1u + payload_len); /* LEN 含 TYPE 一字节 */
-    out[n++]          = len;
-    crc               = edge_crc16_update(crc, len);
+    out[n++] = len;
+    crc = edge_crc16_update(crc, len);
 
     out[n++] = type;
-    crc      = edge_crc16_update(crc, type);
+    crc = edge_crc16_update(crc, type);
 
     for (uint8_t i = 0; i < payload_len; ++i) {
         out[n++] = payload[i];
-        crc      = edge_crc16_update(crc, payload[i]);
+        crc = edge_crc16_update(crc, payload[i]);
     }
 
     out[n++] = (uint8_t) (crc & 0xFFu); /* CRC_LO 在前(小端) */
@@ -74,20 +73,20 @@ void edge_parser_init(edge_parser_t* p, edge_frame_cb_t cb, void* user) {
     if (p == NULL) {
         return;
     }
-    p->state    = EDGE_ST_WAIT_HDR0;
-    p->len      = 0;
-    p->type     = 0;
+    p->state = EDGE_ST_WAIT_HDR0;
+    p->len = 0;
+    p->type = 0;
     p->received = 0;
-    p->crc      = EDGE_CRC16_INIT;
-    p->crc_lo   = 0;
-    p->crc_hi   = 0;
+    p->crc = EDGE_CRC16_INIT;
+    p->crc_lo = 0;
+    p->crc_hi = 0;
     p->on_frame = cb;
-    p->user     = user;
+    p->user = user;
 
     p->stats.frames_ok = 0;
-    p->stats.len_err   = 0;
-    p->stats.crc_err   = 0;
-    p->stats.resync    = 0;
+    p->stats.len_err = 0;
+    p->stats.crc_err = 0;
+    p->stats.resync = 0;
 }
 
 void edge_parser_feed(edge_parser_t* p, uint8_t byte) {
@@ -105,7 +104,7 @@ void edge_parser_feed(edge_parser_t* p, uint8_t byte) {
 
     case EDGE_ST_WAIT_HDR1:
         if (byte == EDGE_HDR1) {
-            p->crc   = EDGE_CRC16_INIT; /* 帧头不进 CRC,从 LEN 开始累加 */
+            p->crc = EDGE_CRC16_INIT; /* 帧头不进 CRC,从 LEN 开始累加 */
             p->state = EDGE_ST_WAIT_LEN;
         } else if (byte == EDGE_HDR0) {
             /* 自环:连续的 AA AA 55 里,后一个 AA 才是真帧头 */
@@ -121,8 +120,8 @@ void edge_parser_feed(edge_parser_t* p, uint8_t byte) {
             p->stats.len_err++;
             edge_parser_resync(p);
         } else {
-            p->len   = byte;
-            p->crc   = edge_crc16_update(p->crc, byte);
+            p->len = byte;
+            p->crc = edge_crc16_update(p->crc, byte);
             p->state = EDGE_ST_WAIT_TYPE;
         }
         break;
@@ -131,10 +130,10 @@ void edge_parser_feed(edge_parser_t* p, uint8_t byte) {
         /* 本层【不校验 TYPE 是否在字典中】,只保证帧的物理结构合法。
          * TYPE 与方向的合法性交由上层业务判断 —— 关注点分离:
          * 协议层稳定,业务层迭代不牵动协议层。 */
-        p->type     = byte;
-        p->crc      = edge_crc16_update(p->crc, byte);
+        p->type = byte;
+        p->crc = edge_crc16_update(p->crc, byte);
         p->received = 0;
-        p->state    = (p->len == EDGE_LEN_MIN) ? EDGE_ST_WAIT_CRC_LO : EDGE_ST_READ_PAYLOAD;
+        p->state = (p->len == EDGE_LEN_MIN) ? EDGE_ST_WAIT_CRC_LO : EDGE_ST_READ_PAYLOAD;
         break;
 
     case EDGE_ST_READ_PAYLOAD:
@@ -150,12 +149,12 @@ void edge_parser_feed(edge_parser_t* p, uint8_t byte) {
 
     case EDGE_ST_WAIT_CRC_LO:
         p->crc_lo = byte; /* CRC 字段本身不进 CRC 累加 */
-        p->state  = EDGE_ST_WAIT_CRC_HI;
+        p->state = EDGE_ST_WAIT_CRC_HI;
         break;
 
     case EDGE_ST_WAIT_CRC_HI:
         p->crc_hi = byte;
-        p->state  = EDGE_ST_DELIVER;
+        p->state = EDGE_ST_DELIVER;
         edge_parser_deliver(p); /* 交付后立即回起点,DELIVER 不跨 feed 停留 */
         break;
 
