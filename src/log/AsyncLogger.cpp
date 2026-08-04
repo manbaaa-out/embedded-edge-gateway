@@ -10,18 +10,18 @@
 namespace gateway {
 
     static ssize_t safe_write(int fd, const void* buf, size_t n) {
-        ssize_t total = 0;
+        size_t total = 0;                       // 用无符号计数,与 n 同类型,免去来回强转
         const char* p = static_cast<const char*>(buf);
-        while(total < static_cast<ssize_t>(n)) {
+        while(total < n) {
             ssize_t n_write = write(fd, p + total, n - total);
             if (n_write < 0) {
                 if( errno == EINTR) continue;
                 return -1;
             }
-            total += n_write;
+            total += static_cast<size_t>(n_write);   // 此处 n_write >= 0,转换安全
         }
 
-        return total;
+        return static_cast<ssize_t>(total);
     }
 
     AsyncLogger& AsyncLogger::instance() {

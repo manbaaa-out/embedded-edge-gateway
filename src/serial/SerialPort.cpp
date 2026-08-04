@@ -10,6 +10,15 @@
 
 namespace gateway {
 
+namespace {
+// termios 的 c_?flag 是无符号 tcflag_t,而 ICANON / CSIZE 这类宏是 int:
+// ~ICANON 先得到一个【负 int】,直接 &= 到无符号字段上是符号转换。
+// 把「取反再转无符号」这件事在这里写一次,好过在下面十来行里散落 static_cast。
+constexpr tcflag_t clearMask(unsigned int bits) noexcept {
+    return static_cast<tcflag_t>(~bits);
+}
+}  // namespace
+
 SerialPort::SerialPort(const char* path, speed_t baud, bool nonblock) {
     int flags = O_RDWR | O_NOCTTY;
     if (nonblock) flags |= O_NONBLOCK;
@@ -62,7 +71,7 @@ ssize_t SerialPort::write(const uint8_t* data, size_t len) noexcept {
     while (total < len) {
         ssize_t n = ::write(fd_, p + total, len - total);  // 注意 ::write 全局命名空间,别递归调自己
         if (n > 0) {
-            total += n;                    // 短写:累加,继续循环写剩下的
+            total += static_cast<size_t>(n);   // 短写:累加,继续循环写剩下的(n > 0,转换安全)
         }
         else if (n < 0 && errno == EINTR) {
             continue;                       // 信号打断:重试(底层消化)
@@ -84,21 +93,21 @@ void SerialPort::configure(speed_t baud) {
         throw std::runtime_error(std::string("tcgetattr failed: ") + strerror(saved));
     }
 
-    tio.c_cflag &= ~CSIZE;
+    tio.c_cflag &= clearMask(CSIZE);
     tio.c_cflag |= CS8;
-    tio.c_cflag &= ~CSTOPB;        // 1 停止位
-    tio.c_cflag &= ~PARENB;        // 无校验
-    tio.c_cflag |= CREAD | CLOCAL; // 开接收 + 忽略 modem
-    tio.c_cflag &= ~CRTSCTS;       // 关硬件流控
+    tio.c_cflag &= clearMask(CSTOPB);    // 1 停止位
+    tio.c_cflag &= clearMask(PARENB);    // 无校验
+    tio.c_cflag |= CREAD | CLOCAL;       // 开接收 + 忽略 modem
+    tio.c_cflag &= clearMask(CRTSCTS);   // 关硬件流控
 
-    tio.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP
-                   | INLCR | IGNCR | ICRNL
-                   | IXON | IXOFF | IXANY);
+    tio.c_iflag &= clearMask(IGNBRK | BRKINT | PARMRK | ISTRIP
+                           | INLCR | IGNCR | ICRNL
+                           | IXON | IXOFF | IXANY);
 
-    tio.c_oflag &= ~OPOST;
+    tio.c_oflag &= clearMask(OPOST);
 
-    tio.c_lflag &= ~(ICANON | ECHO | ECHOE | ECHOK | ECHONL
-                   | ISIG | IEXTEN);
+    tio.c_lflag &= clearMask(ICANON | ECHO | ECHOE | ECHOK | ECHONL
+                           | ISIG | IEXTEN);
 
     tio.c_cc[VMIN]  = 1;
     tio.c_cc[VTIME] = 0;

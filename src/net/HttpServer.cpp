@@ -123,12 +123,14 @@ static std::string handleHttpRequest(const std::string& rawPath, Database& roDb)
 // ============================================================
 // 二、发送辅助
 // ============================================================
-static void sendData(EventLoop& loop, channel* ch, const char* data, ssize_t len) {
-    ssize_t total = 0;
+// len 用 size_t:它是「长度」不是「可能为负的返回值」。
+// 原先取 ssize_t,导致每处 len - total 都要与 string/size_t 来回强转。
+static void sendData(EventLoop& loop, channel* ch, const char* data, size_t len) {
+    size_t total = 0;
     if (ch->out_buf.empty()) {
         while (total < len) {
             ssize_t n = send(ch->fd, data + total, len - total, MSG_NOSIGNAL);
-            if (n > 0)                                 total += n;
+            if (n > 0)                                 total += static_cast<size_t>(n);
             else if (n < 0 && errno == EINTR)          continue;
             else if (n < 0 && errno == EAGAIN)         break;
             else                                       return;
@@ -233,7 +235,7 @@ void runHttpServer(Database& roDb) {
                         loop.removeChannel(client_fd); g_conns.erase(client_fd); return;
                     } else {
                         ch_raw->last_active = time(nullptr);
-                        conn.buf.append(tmp, n_read);
+                        conn.buf.append(tmp, static_cast<size_t>(n_read));   // 此处 n_read > 0
                         while (true) {
                             ParseResult r = conn.req.parse(&conn.buf);
                             if (r == ParseResult::kComplete) {
@@ -253,7 +255,7 @@ void runHttpServer(Database& roDb) {
                 while (!ch_raw->out_buf.empty()) {
                     ssize_t n = send(client_fd, ch_raw->out_buf.data(),
                                      ch_raw->out_buf.size(), MSG_NOSIGNAL);
-                    if (n > 0) ch_raw->out_buf.erase(0, n);
+                    if (n > 0) ch_raw->out_buf.erase(0, static_cast<size_t>(n));
                     else if (n < 0 && errno == EINTR) continue;
                     else if (n < 0 && errno == EAGAIN) break;
                     else break;

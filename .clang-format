@@ -1,0 +1,26 @@
+# 基于 LLVM 风格微调,尽量贴近本仓库既有写法,避免一次 format 把全仓 diff 掀翻。
+# 与 STM32 节点侧共享的 protocol/ 是纯 C,同一份规则也适用。
+BasedOnStyle: LLVM
+Language: Cpp
+
+IndentWidth: 4
+ColumnLimit: 100
+AccessModifierOffset: -4
+
+# 既有代码是 K&R 风格(左大括号不换行),保持
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortCaseLabelsOnASingleLine: false
+
+PointerAlignment: Left
+DerivePointerAlignment: false
+
+# 注释里有大量中文,禁止自动折行(按显示宽度折会把中文注释切碎)
+ReflowComments: false
+
+SortIncludes: false
+SpaceAfterCStyleCast: true
+AlignTrailingComments: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 2

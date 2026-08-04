@@ -1,0 +1,52 @@
+# 帧编解码金标准向量 —— 网关与 STM32 节点【两端共读同一份】
+#
+# 每一端的一致性测试都逐行跑这个文件:
+#   - 解码:把 frame_hex 逐字节喂进收帧 FSM 比对交付结果与统计
+#   - 编码:对 expect_frames=1 且无前后噪声的行 用 type+payload 反向组帧
+#           要求与 frame_hex 逐字节相同(编解码互为逆运算)
+# 任何一端改坏编解码 这里立刻变红 —— 这就是「两端协议一致」的机器化保证。
+#
+# 前 10 条与 docs/protocol.md §7 的完整帧示例逐字节一致(已用实现交叉验证)。
+#
+# 格式:name,frame_hex,expect_frames,expect_type,expect_payload,expect_len_err,expect_crc_err,note
+#   expect_frames   —— 喂完这串字节后应交付的帧数
+#   expect_type     —— 最后一帧的 TYPE(无帧交付时写 -)
+#   expect_payload  —— 最后一帧的 payload(空 payload 或无帧交付时写 -)
+#   expect_len_err  —— 期望的 LEN 越界计数
+#   expect_crc_err  —— 期望的 CRC 失配计数
+#   roundtrip 列隐含:name 不以 x_ 开头的行参与编码反向验证
+
+# ---------- 上行:传感器数据 ----------
+heartbeat,AA 55 01 03 40 21,1,0x03,-,0,0,心跳 无 payload 最小帧 6 字节
+bh1750_400lux,AA 55 03 02 01 90 A0 5C,1,0x02,01 90,0,0,光照 400lux 大端 uint16
+dht11_25.3C_60.5,AA 55 06 01 00 FD 02 5D 00 D4 2D,1,0x01,00 FD 02 5D 00,0,0,温 253 湿 605 均已 ×10
+status_both_ok,AA 55 02 04 03 92 C1,1,0x04,03,0,0,bitmask 0x03 两路传感器均在线
+status_dht11_only,AA 55 02 04 01 13 00,1,0x04,01,0,0,bitmask 0x01 光照故障
+
+# ---------- 下行:控制命令 ----------
+query_light_seq7,AA 55 02 20 07 88 02,1,0x20,07,0,0,查光照 payload 仅 seq
+query_th_seq8,AA 55 02 21 08 C9 96,1,0x21,08,0,0,查温湿度 payload 仅 seq
+set_period_2000s,AA 55 04 22 09 07 D0 0C 16,1,0x22,09 07 D0,0,0,设周期 2000 秒 大端(v1.2 澄清单位为秒)
+set_period_min_1s,AA 55 04 22 0A 00 01 3E 7A,1,0x22,0A 00 01,0,0,周期下限 1 秒
+set_period_max,AA 55 04 22 0B FF FF AF CA,1,0x22,0B FF FF,0,0,周期上限 65535 秒
+
+# ---------- 上行:应答 ----------
+query_resp_400lux,AA 55 05 05 07 00 01 90 CC C6,1,0x05,07 00 01 90,0,0,查询应答 seq7 rc=OK 光照 400
+query_resp_busy,AA 55 03 05 0C 03 55 60,1,0x05,0C 03,0,0,查询应答 rc=BUSY 传感器读失败 无数据段
+ack_ok,AA 55 03 06 09 00 E6 31,1,0x06,09 00,0,0,ACK seq9 rc=OK
+ack_bad_param,AA 55 03 06 09 01 27 F1,1,0x06,09 01,0,0,ACK seq9 rc=BAD_PARAM 如周期设为 0
+
+# ---------- 边界 ----------
+max_payload_63B,AA 55 40 05 00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F 20 21 22 23 24 25 26 27 28 29 2A 2B 2C 2D 2E 2F 30 31 32 33 34 35 36 37 38 39 3A 3B 3C 3D 3E 94 56,1,0x05,00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F 20 21 22 23 24 25 26 27 28 29 2A 2B 2C 2D 2E 2F 30 31 32 33 34 35 36 37 38 39 3A 3B 3C 3D 3E,0,0,LEN=64 上限 payload 63 字节 整帧 69 字节
+
+# ---------- 错误路径:只解码不参与编码回环(x_ 前缀)----------
+x_noise_prefix,FF 00 3C AA 55 01 03 40 21,1,0x03,-,0,0,帧前噪声应被静默丢弃 不计错误
+x_header_self_loop,AA AA 55 01 03 40 21,1,0x03,-,0,0,连续 AA 时后一个才是真帧头(WAIT_HDR1 自环)
+x_crc_corrupt,AA 55 01 03 40 22,0,-,-,0,1,CRC 末字节被改 整帧丢弃
+x_len_zero,AA 55 00 03 40 21,0,-,-,1,0,LEN=0 越界 立即 resync
+x_len_over_max,AA 55 41 03 40 21,0,-,-,1,0,LEN=65 超上限 64 立即 resync
+x_truncated,AA 55 01 03 40,0,-,-,0,0,少一个 CRC 字节 FSM 挂起等待 不算错误
+x_resync_after_crc_err,AA 55 01 03 40 22 AA 55 01 03 40 21,1,0x03,-,0,1,坏帧后紧跟好帧 证明 FSM 不卡死(§5.2)
+x_resync_after_len_err,AA 55 00 FF AA 55 03 06 09 00 E6 31,1,0x06,09 00,1,0,LEN 越界后紧跟好帧 仍能解出
+x_two_frames,AA 55 01 03 40 21 AA 55 03 06 09 00 E6 31,2,0x06,09 00,0,0,背靠背两帧 期望值描述最后一帧
+x_garbage_only,DE AD BE EF,0,-,-,0,0,纯噪声 无帧头 不交付不计错

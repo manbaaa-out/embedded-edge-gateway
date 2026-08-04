@@ -1,0 +1,80 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "dev",
+            "displayName": "dev (Debug + 测试 + 零警告基线)",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "GATEWAY_BUILD_TESTS": "ON",
+                "GATEWAY_WARNINGS_AS_ERRORS": "ON"
+            }
+        },
+        {
+            "name": "asan",
+            "displayName": "asan (ASan + UBSan, 查 use-after-free)",
+            "inherits": "dev",
+            "cacheVariables": {
+                "GATEWAY_ENABLE_ASAN": "ON"
+            }
+        },
+        {
+            "name": "tsan",
+            "displayName": "tsan (ThreadSanitizer, 查双写/队列竞态)",
+            "inherits": "dev",
+            "cacheVariables": {
+                "GATEWAY_ENABLE_TSAN": "ON"
+            }
+        },
+        {
+            "name": "release",
+            "displayName": "release (树莓派部署用)",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "GATEWAY_BUILD_TESTS": "OFF"
+            }
+        }
+    ],
+    "buildPresets": [
+        { "name": "dev",     "configurePreset": "dev" },
+        { "name": "asan",    "configurePreset": "asan" },
+        { "name": "tsan",    "configurePreset": "tsan" },
+        { "name": "release", "configurePreset": "release" }
+    ],
+    "testPresets": [
+        {
+            "name": "dev",
+            "configurePreset": "dev",
+            "output": { "outputOnFailure": true },
+            "filter": { "exclude": { "label": "e2e" } }
+        },
+        {
+            "name": "asan",
+            "configurePreset": "asan",
+            "output": { "outputOnFailure": true },
+            "filter": { "exclude": { "label": "e2e" } }
+        },
+        {
+            "name": "e2e",
+            "configurePreset": "dev",
+            "output": { "outputOnFailure": true },
+            "filter": { "include": { "label": "e2e" } }
+        }
+    ]
+}

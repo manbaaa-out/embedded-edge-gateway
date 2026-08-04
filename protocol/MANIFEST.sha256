@@ -1,0 +1,10 @@
+# edge_proto 共享文件指纹 —— 由 scripts/gen_proto_manifest.sh 生成,勿手改
+# 校验方式:./scripts/check_proto_sync.sh
+# 协议版本:1.2
+ebe8e068fc6c62f3f39e226fabc9a45da9bbf300eff108dfd587294c43703848  include/edge_proto/edge_proto.h
+2378bf3c76a99ba8b88ca6988dbc3ccc51ed38418ec095177d4f3d7ac627f370  include/edge_proto/edge_crc16.h
+5b9b5d0e7e24c09b565d9267b34ac2f1579f64bbc8e8f40e69ff80d22789894e  include/edge_proto/edge_frame.h
+d1b30af57596281ce52c413c1c7991282c1e9d4e285d107b0abee4a0b252f1b7  src/edge_crc16.c
+c70f5405da0f7999d67534b4392b6f781d436425c9fbe9d154fa2c780103a9a1  src/edge_frame.c
+f24d8debfa433f6cd32e2315945fdd51cfa0c0ebbd050f16fa6ae5fdb502b0f6  vectors/crc16.csv
+43b4ec5ed21a86250f17685475cb75a120b316db3f1035ba8312ae2baefe87c5  vectors/frames.csv

@@ -16,7 +16,9 @@ ParseResult HttpRequest::parse(Buffer* buf) {
                 // 找到完整一行 [peek(), crlf)
                 ok = parseRequestLine(buf->peek(), crlf);   // 解析请求行
                 if (ok) {
-                    buf->retrieve(crlf + 2 - buf->peek());  // 消费掉这行(含\r\n)
+                    // 指针差是 ptrdiff_t(有符号),而 retrieve 收 size_t。
+                    // crlf 由 std::search 在 [peek, beginWrite) 内找到,必 >= peek,差值非负。
+                    buf->retrieve(static_cast<size_t>(crlf + 2 - buf->peek()));  // 消费掉这行(含\r\n)
                     state_ = HttpRequestParseState::ExpectHeaders;  // 转移状态
                 }
                 else {
@@ -47,7 +49,7 @@ ParseResult HttpRequest::parse(Buffer* buf) {
                         state_ = HttpRequestParseState::GotAll;
                     }
                 }
-                buf->retrieve(crlf + 2 - buf->peek());   // 不管哪种,都消费掉这一行
+                buf->retrieve(static_cast<size_t>(crlf + 2 - buf->peek()));   // 不管哪种,都消费掉这一行
             }
             else {
                 hasMore = false;   // 半包
@@ -57,7 +59,7 @@ ParseResult HttpRequest::parse(Buffer* buf) {
             long len = contentLength();          // 已经验证过,这里 >0
             if (buf->readableBytes() >= static_cast<size_t>(len)) {
                 body_.assign(buf->peek(), buf->peek() + len);
-                buf->retrieve(len);
+                buf->retrieve(static_cast<size_t>(len));   // 上面 len > 0 已验证
                 state_ = HttpRequestParseState::GotAll;
             } else {
                 hasMore = false;
