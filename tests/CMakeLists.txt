@@ -59,3 +59,5 @@ function(gateway_add_test name)
 endfunction()
 
 add_subdirectory(protocol)
+add_subdirectory(core)
+add_subdirectory(io)

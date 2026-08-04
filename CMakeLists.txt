@@ -41,24 +41,16 @@ message(STATUS "Tests/Tools : ${GATEWAY_BUILD_TESTS} / ${GATEWAY_BUILD_TOOLS}")
 # ============================================================
 add_subdirectory(protocol)
 
-# ---- 6. 网关自身模块(依赖方向自下而上)----
-add_subdirectory(src/log)
-add_subdirectory(src/serial)
-add_subdirectory(src/protocol)      # edge_proto 的薄 C++ 封装
-add_subdirectory(src/concurrent)
-add_subdirectory(src/net)
-add_subdirectory(src/db)
-add_subdirectory(src/mqtt)
-add_subdirectory(src/config)
-add_subdirectory(src/app)           # GatewayApp:资源 + 装配 + 主循环
+# ---- 6. 网关自身模块(按职责分层,层间依赖见 src/CMakeLists.txt)----
+add_subdirectory(src)
 
 # ---- 7. 主程序 ----
-# main 只负责 配置 init + 建 GatewayApp + run,具体装配在 app 模块。
-# app PUBLIC 依赖各 lib,故这里链接 app 即可拿到全部传递依赖。
-add_executable(gateway src/main.cpp)
+# main 只负责 配置 init + 建 GatewayApp + run,具体装配在 app 层。
+# gw_app PUBLIC 依赖各层,故这里链接它即可拿到全部传递依赖。
+add_executable(gateway src/gateway/app/main.cpp)
 target_link_libraries(gateway PRIVATE
     gateway_options
-    app
+    gw_app
 )
 
 # ---- 8. 开发工具 ----
