@@ -1,21 +1,11 @@
-// ============================================================
-// node-sim —— STM32 传感节点模拟器
+// STM32 传感节点模拟器。
 //
-// 由 experiments/m5_parser/fake_stm32.cpp 提升而来。旧版只会单向发数据、
-// 不认下行命令,README 里得写一句"虚拟串口下下行命令会重试 3 次后判失败,
-// 要看完整 ACK 闭环需真实固件"。也就是说,占网关一半代码量的命令链路,
-// 在没有硬件时【完全没法验证】。
+// 周期上报遥测,并按节点固件 App/cmd_service.c 的同一套规则处理下行命令
+// 0x20/0x21/0x22、回复 0x05/0x06,含 §6.2 的同 seq 幂等。配合 socat 的一对
+// 虚拟串口即可在无硬件条件下跑通「下发 → 执行 → 应答 → 销账」全流程。
 //
-// 本版补上了这半边:解析下行 0x20/0x21/0x22,按节点固件 App/cmd_service.c
-// 的同一套规则回 0x05/0x06,含 §6.2 同 seq 幂等。于是 socat 一对虚拟串口
-// 就能跑通「下发 → 执行 → 应答 → 销账」的全流程。
-//
-// 更要紧的是它能【主动制造故障】:丢应答、丢上行帧、注入噪声字节 ——
-// 这些在真硬件上要靠拔线和运气,这里是命令行参数。
-//
-// 组帧解帧直接用与网关、固件共享的 edge_proto,不再像旧版那样自抄一份
-// buildFrame + CRC(那第三份抄本用的还是早已改名的 m5::CRC16)。
-// ============================================================
+// 支持故障注入(丢应答、丢上行帧、注入噪声字节),用于验证网关侧的容错路径。
+// 组帧解帧直接使用与网关、固件共享的 edge_proto,不另抄一份实现。
 
 #include "edge_proto/edge_frame.h"
 #include "edge_proto/edge_proto.h"
@@ -36,7 +26,7 @@
 
 namespace {
 
-// ---------------- 运行参数 ----------------
+// ---- 运行参数 ----
 struct Options {
     std::string device;
     int         period_s   = 2;      // 上报周期(秒)
@@ -44,7 +34,7 @@ struct Options {
     double      drop_ack    = 0.0;   // 丢弃应答的概率(验证网关侧超时重发)
     double      garbage     = 0.0;   // 每帧前注入噪声字节的概率(验证 FSM resync)
     bool        no_ack      = false; // 完全不回应答(验证重试耗尽判死)
-    unsigned    seed        = 42;    // 固定种子:故障注入要可复现
+    unsigned    seed        = 42;    // 固定种子,保证故障注入可复现
 };
 
 void usage(const char* argv0) {
@@ -113,9 +103,9 @@ bool parseArgs(int argc, char** argv, Options& opt) {
     return true;
 }
 
-// ---------------- 串口 ----------------
-// 与网关侧 SerialPort 同样的 raw 模式配置。虚拟串口(PTY)同样是 termios 设备,
-// 不设 raw 的话,\n 会被转成 \r\n,二进制帧当场损坏 —— 这是联调时的经典坑。
+// ---- 串口 ----
+// 与网关侧 SerialPort 相同的 raw 模式配置。PTY 同样是 termios 设备,
+// 不设 raw 时 \n 会被转成 \r\n,二进制帧随即损坏。
 int openSerial(const std::string& path) {
     const int fd = ::open(path.c_str(), O_RDWR | O_NOCTTY);
     if (fd < 0) {
@@ -128,13 +118,13 @@ int openSerial(const std::string& path) {
         cfsetispeed(&tio, B115200);
         cfsetospeed(&tio, B115200);
         tio.c_cc[VMIN]  = 0;
-        tio.c_cc[VTIME] = 1;   // 0.1s 超时,让读循环能定期回来看看该不该上报
+        tio.c_cc[VTIME] = 1;   // 0.1s 超时,使读循环能定期返回以检查上报时机
         tcsetattr(fd, TCSANOW, &tio);
     }
     return fd;
 }
 
-// ---------------- 模拟节点 ----------------
+// ---- 模拟节点 ----
 class NodeSim {
 public:
     NodeSim(int fd, const Options& opt)
@@ -147,7 +137,7 @@ public:
         auto next_report = std::chrono::steady_clock::now();
 
         while (true) {
-            // 读串口:非阻塞式轮询(VTIME=1 → 最多等 0.1s)
+            // VTIME=1,单次读最多阻塞 0.1s
             uint8_t buf[128];
             const ssize_t n = ::read(fd_, buf, sizeof buf);
             if (n > 0) {
@@ -175,14 +165,14 @@ private:
         return std::uniform_real_distribution<double>(0.0, 1.0)(rng_) < p;
     }
 
-    // 发一帧。garbage 注入发生在帧【之前】—— 模拟线路噪声,
-    // 网关的 FSM 应当把这些字节静默丢弃后照常解出后面的帧。
+    // 发送一帧。噪声注入发生在帧之前,用于模拟线路噪声;
+    // 网关 FSM 应静默丢弃这些字节并照常解出后续帧。
     void sendFrame(uint8_t type, const uint8_t* payload, uint8_t len) {
         if (roll(opt_.garbage)) {
-            const uint8_t noise[3] = {0xFF, 0xAA, 0x13};   // 含一个 0xAA 以考验帧头自环
-            // 噪声本来就是"能到就到"的东西,写失败无需处理;
-            // 但返回值要显式吃掉 —— glibc 给 write 标了 warn_unused_result。
-            if (::write(fd_, noise, sizeof noise) < 0) { /* 故意忽略 */ }
+            const uint8_t noise[3] = {0xFF, 0xAA, 0x13};   // 含 0xAA 以覆盖帧头自环路径
+            // 噪声写失败无需处理,但 glibc 为 write 标了 warn_unused_result,
+            // 故显式消费返回值。
+            if (::write(fd_, noise, sizeof noise) < 0) { /* 忽略 */ }
         }
         uint8_t       frame[EDGE_FRAME_MAX];
         const uint8_t n = edge_frame_encode(type, payload, len, frame);
@@ -192,9 +182,9 @@ private:
         }
     }
 
-    // ---- 上行:周期上报遥测(对应固件 App/report_task)----
+    // ---- 上行:周期上报遥测,对应固件 App/report_task ----
     void reportOnce() {
-        // 造点会动的假数据,便于在监控页上看出曲线
+        // 生成随时间变化的假数据,便于在监控页观察曲线
         tick_++;
         const uint16_t temp_x10 = static_cast<uint16_t>(230 + (tick_ % 50));   // 23.0 ~ 27.9 ℃
         const uint16_t humi_x10 = static_cast<uint16_t>(500 + (tick_ % 200));  // 50.0 ~ 69.9 %
@@ -221,14 +211,13 @@ private:
                     temp_x10 / 10.0, humi_x10 / 10.0, lux);
     }
 
-    // ---- 下行:命令分发(对应固件 App/cmd_service.c 的 on_frame)----
+    // ---- 下行:命令分发,对应固件 App/cmd_service.c 的 on_frame ----
     void onFrame(uint8_t type, const uint8_t* payload, uint8_t len) {
-        if (len < 1) return;   // 无 payload 的帧无从应答
+        if (len < 1) return;   // 无 payload 则取不到 seq,无法应答
         const uint8_t seq = payload[EDGE_OFF_SEQ];
 
-        // §6.2 幂等:与上次处理过的 seq 相同 → 判为重发,
-        // 不重复执行命令本体,只补发上次的应答。
-        // 这条正是网关"重发复用同 seq"的另一半,没有它整个契约只对了一半。
+        // §6.2 幂等:seq 与上次处理过的相同即判为重发,不重复执行命令本体,
+        // 只补发上次的应答。这是网关侧「重发复用同 seq」的对侧实现。
         if (have_last_ && seq == last_seq_) {
             std::printf("[命令] seq=%u 重发 → 补发上次应答(不重复执行)\n", seq);
             resendLastResponse();
@@ -261,7 +250,7 @@ private:
                 if (!edge_period_s_valid(period_s)) {
                     rc = EDGE_RC_BAD_PARAM;           // §6.3:周期 0 非法
                 } else {
-                    opt_.period_s = period_s;         // 单位是【秒】(v1.2 澄清)
+                    opt_.period_s = period_s;         // 单位为秒
                     std::printf("[命令] seq=%u 设采样周期 = %u 秒\n", seq, period_s);
                 }
             }
@@ -273,7 +262,7 @@ private:
             break;
         }
         default: {
-            // §6.3:未知下行命令,或收到本该是上行的 TYPE(说明线接反了 / 有人乱发)
+            // §6.3:未知下行命令,或收到上行段的 TYPE(通常意味着收发线接反)
             const uint8_t p[2] = {seq, EDGE_RC_UNSUPPORTED};
             std::printf("[命令] seq=%u 不支持的 TYPE 0x%02X%s\n", seq, type,
                         EDGE_IS_UPLINK(type) ? " (这是个上行 TYPE)" : "");
@@ -283,7 +272,7 @@ private:
         }
     }
 
-    // 应答统一走这里:存档以便同 seq 重发时补发,并在此处实施故障注入
+    // 所有应答统一经此发出:存档以便同 seq 重发时补发,并在此实施故障注入
     void respond(uint8_t type, const uint8_t* p, uint8_t len, uint8_t seq) {
         last_type_ = type;
         last_len_  = len;
@@ -316,7 +305,7 @@ private:
     std::mt19937 rng_;
     unsigned     tick_ = 0;
 
-    // §6.2 幂等所需的"最近一条命令"存档
+    // §6.2 幂等所需的最近一条命令存档
     bool    have_last_ = false;
     uint8_t last_seq_  = 0;
     uint8_t last_type_ = 0;
@@ -327,9 +316,8 @@ private:
 }  // namespace
 
 int main(int argc, char** argv) {
-    // 行缓冲。stdout 不是终端时(重定向到文件、管道给 tee、被测试脚本抓)
-    // 默认是【全缓冲】—— 4KB 攒满才落盘。本程序输出稀疏,于是日志会长时间
-    // 卡在缓冲区里,看上去像"什么都没发生"。联调工具的输出必须即时可见。
+    // 设为行缓冲。stdout 不是终端时(重定向、管道、被脚本捕获)默认全缓冲,
+    // 而本程序输出稀疏,日志会长时间滞留缓冲区,联调时难以观察。
     std::setvbuf(stdout, nullptr, _IOLBF, 0);
 
     Options opt;

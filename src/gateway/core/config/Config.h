@@ -23,8 +23,8 @@ struct Config {
 
 class ConfigManager {
 public:
-    static void init(const std::string& path);            // 启动调用一次,失败抛异常
-    static std::shared_ptr<const Config> current();       // 任意线程读,拿快照
+    static void init(const std::string& path);            // 启动时调用一次,失败抛异常
+    static std::shared_ptr<const Config> current();       // 可在任意线程调用,返回快照
 
     struct ReloadResult {
         bool ok             = false;
@@ -32,7 +32,7 @@ public:
         bool mqtt_changed   = false;
         bool db_changed     = false;
     };
-    static ReloadResult reload();                          // 主循环调用
+    static ReloadResult reload();                          // 仅由主循环调用
 
 private:
     static Config parseFile(const std::string& path);     // 解析失败抛异常

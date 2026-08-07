@@ -1,7 +1,4 @@
-// 遥测解码测试
-//
-// 重构前这段逻辑是 GatewayApp.cpp 匿名 namespace 里的 decodeFrame(),
-// 想验证「0x04 的 bitmask 是否被正确拆成两路」得把整条链路跑起来。
+// 遥测解码测试。decodeTelemetry 是纯函数,可脱离串口与数据库单独验证。
 
 #include "gateway/pipeline/TelemetryDecoder.h"
 
@@ -34,8 +31,8 @@ TEST(TelemetryDecoder, Bh1750DecodesBigEndianLux) {
     EXPECT_DOUBLE_EQ(r[0].value, 400.0) << "大端读反会得到 0x9001 = 36865";
 }
 
-// 状态帧是【按位标志】,必须逐位 AND —— 不能把整字节当单一数值。
-// 四种组合全测,因为「把 0x03 当成第 3 号状态」这类误解正是本注释的由来。
+// 状态帧是按位标志,必须逐位 AND,不可把整字节当作单一数值。
+// 四种组合全部覆盖,以排除「把 0x03 当成 3 号状态」这类误解。
 TEST(TelemetryDecoder, StatusBitmaskSplitsIntoTwoHealthReadings) {
     struct Case {
         uint8_t mask;
@@ -62,13 +59,13 @@ TEST(TelemetryDecoder, StatusBitmaskSplitsIntoTwoHealthReadings) {
     }
 }
 
-// 心跳只证明节点活着,不该落库 —— 否则数据库里全是没有数值的噪声行
+// 心跳仅表明节点存活,不应落库,否则会产生大量无数值的记录
 TEST(TelemetryDecoder, HeartbeatProducesNothing) {
     EXPECT_TRUE(decodeTelemetry(frame(EDGE_TYPE_HEARTBEAT, {})).empty());
 }
 
-// payload 短于该 TYPE 的要求时必须丢弃,绝不能越界读出垃圾数值落库。
-// 长度口径统一走 edge_min_payload_len,不再各处手写魔数。
+// payload 短于该 TYPE 的要求时必须丢弃,不得越界读取并落库。
+// 长度口径统一取自 edge_min_payload_len。
 TEST(TelemetryDecoder, ShortPayloadIsDroppedNotMisread) {
     EXPECT_TRUE(decodeTelemetry(frame(EDGE_TYPE_DHT11, {0x00, 0xFD})).empty())
         << "DHT11 要 5 字节,给 2 字节必须丢";
@@ -80,14 +77,14 @@ TEST(TelemetryDecoder, UnknownTypeIsDropped) {
     EXPECT_TRUE(decodeTelemetry(frame(0x99, {0x11, 0x22})).empty());
 }
 
-// 应答帧走的是命令链路,不该混进遥测。调用方本该先分流,
-// 这里兜底丢弃,免得 ACK 的 seq 被当成传感器数值落进库里。
+// 应答帧属命令链路,应由调用方先行分流;此处兜底丢弃,
+// 避免 ACK 的 seq 被当作传感器数值落库。
 TEST(TelemetryDecoder, AckFramesAreNotTelemetry) {
     EXPECT_TRUE(decodeTelemetry(frame(EDGE_TYPE_ACK, {0x09, 0x00})).empty());
     EXPECT_TRUE(decodeTelemetry(frame(EDGE_TYPE_QUERY_RESP, {0x07, 0x00, 0x01, 0x90})).empty());
 }
 
-// 超出 payload 最小长度的多余字节应被忽略而非报错 —— 为协议向后扩展留余地
+// 超出最小长度的多余字节应被忽略而非报错,为协议向后扩展留出空间
 TEST(TelemetryDecoder, ExtraPayloadBytesAreIgnored) {
     const auto r = decodeTelemetry(frame(EDGE_TYPE_BH1750, {0x01, 0x90, 0xFF, 0xFF}));
 
@@ -95,7 +92,7 @@ TEST(TelemetryDecoder, ExtraPayloadBytesAreIgnored) {
     EXPECT_DOUBLE_EQ(r[0].value, 400.0);
 }
 
-// 边界值:0 与 uint16 上限都该如实解出
+// 边界值:0 与 uint16 上限均应如实解出
 TEST(TelemetryDecoder, HandlesExtremeValues) {
     const auto zero = decodeTelemetry(frame(EDGE_TYPE_BH1750, {0x00, 0x00}));
     ASSERT_EQ(zero.size(), 1u);

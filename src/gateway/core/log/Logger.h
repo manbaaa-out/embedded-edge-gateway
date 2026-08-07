@@ -1,4 +1,3 @@
-// src/log/Logger.h(M3-1 版本,先不动 src/log/CMakeLists.txt)
 #pragma once
 #include <cstdio>
 #include <cstdarg>     // va_list, va_start, va_end
@@ -14,11 +13,11 @@ enum class LogLevel {
 
 class Logger {
 public:
-    // 全局最低输出级别(< 这个级别的日志被丢弃)
+    // 全局最低输出级别,低于该级别的日志被丢弃
     static LogLevel level() noexcept { return level_; }
     static void setLevel(LogLevel lv) noexcept { level_ = lv; }
 
-    // 核心写日志函数:格式化 + 写 stderr,一次性写完
+    // 格式化并输出一条日志,整条一次写出以避免多线程交错
     static void log(LogLevel lv, const char* file, int line, const char* fmt, ...);
 
 private:
@@ -27,7 +26,7 @@ private:
 
 } // namespace gateway
 
-// 用宏包一层:自动捕获 __FILE__ / __LINE__,且能在编译期短路(级别低就不展开)
+// 以宏包一层:自动捕获 __FILE__ / __LINE__,并在级别不足时短路,避免参数求值
 #define LOG_DEBUG(fmt, ...) \
     ::gateway::Logger::log(::gateway::LogLevel::DEBUG, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOG_INFO(fmt, ...) \

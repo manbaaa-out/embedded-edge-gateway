@@ -3,10 +3,9 @@
  
 namespace gateway {
  
-// 在【调用线程】里阻塞运行 HTTP 监控服务:
-//   epoll Reactor(M7) + timerfd 空闲超时踢出(M9) + HTTP 解析(M11)。
-// 用传入的【只读】连接 roDb 查库 —— 与主链写连接配合,靠 WAL 实现读写并发。
-// 本函数内部是 loop.loop() 永久阻塞,通常放在独立 std::thread 里运行。
+// 在调用线程中阻塞运行 HTTP 监控服务:epoll Reactor + timerfd 空闲连接回收 + HTTP 解析。
+// roDb 须为只读连接,与主链路的写连接配合,依靠 SQLite 的 WAL 模式实现读写并发。
+// 本函数内部永久阻塞,通常放在独立 std::thread 中运行。
 void runHttpServer(Database& roDb);
  
 }

@@ -1,8 +1,7 @@
-# CRC16-MODBUS 金标准向量 —— 网关与 STM32 节点【两端共读同一份】
+# CRC16-MODBUS 金标准向量 —— 网关与 STM32 节点共读同一份
 #
-# 来源:docs/protocol.md §4.3。文档原话:「只要任一向量不匹配 实现错误 绝不能上线」。
-# 这份文件让那句话变成 CI 里会红的测试 而不是文档里的一句祈使。
-# 外部交叉验证:https://crccalc.com/ 选 CRC-16/MODBUS(注意该站字节序显示需交换)
+# 来源:docs/protocol.md §4.3。任一向量不匹配即实现错误 两端 CI 均会失败。
+# 外部交叉验证:https://crccalc.com/ 选 CRC-16/MODBUS(该站字节序显示需交换)
 #
 # 格式:input_hex,expected_crc,note        (# 开头为注释 空行忽略)
 #   input_hex   —— 空格分隔的输入字节

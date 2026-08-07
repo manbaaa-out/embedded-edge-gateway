@@ -1,9 +1,7 @@
-# ============================================================
-# pipeline 层:遥测数据流 —— 帧解码 + 双写扇出
+# pipeline 层:遥测数据流,含帧解码与双写扇出。
 #
-# decodeTelemetry 是纯函数(帧 → 记录),不碰数据库也不碰 MQTT,
-# 故本层对 storage / cloud 只在 TelemetryPipeline 一处依赖。
-# ============================================================
+# decodeTelemetry 是纯函数,不依赖数据库与 MQTT,故本层对 storage / cloud
+# 的依赖集中在 TelemetryPipeline 一处。
 add_library(gw_pipeline STATIC
     TelemetryDecoder.cpp
     TelemetryPipeline.cpp

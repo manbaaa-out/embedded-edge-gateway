@@ -1,11 +1,10 @@
 #include "edge_proto/edge_crc16.h"
 
 /* CRC16-MODBUS 查找表(256 项 × 2B = 512B)。
- * 空间换时间:每字节一次查表 + 一次异或,替代 8 次移位判断。
- * 512 字节常量放 Flash,对 STM32F103 的 64KB Flash 完全可接受。
+ * 每字节一次查表 + 一次异或,替代 8 次移位判断;512 字节常量放 Flash,
+ * 对 STM32F103 的 64KB 可接受。
  *
- * 手工排成 8 列 32 行:对着 CRC 表调试时按行定位最方便。
- * clang-format 会把它揉成不规则的长行,故在此关掉格式化。 */
+ * 排成 8 列 32 行以便按索引定位;clang-format 会揉成不规则长行,故关闭格式化。 */
 /* clang-format off */
 static const uint16_t kCrc16Table[256] = {
     0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,

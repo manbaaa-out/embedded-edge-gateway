@@ -1,8 +1,7 @@
-// 在途命令表测试
+// 在途命令表测试。
 //
-// 这些路径在重构前【一条都没被测过】—— 它们埋在三个 epoll 回调里,
-// 要跑到「重试 3 次仍无应答」得开着串口等好几秒。
-// 现在注入一个假时钟,整套超时/重发/判死的时序逻辑毫秒内跑完。
+// 注入假时钟后,整套超时 / 重发 / 判死的时序逻辑可在毫秒内跑完,
+// 无需依赖真实串口与真实等待。
 
 #include "gateway/link/CommandTracker.h"
 
@@ -13,7 +12,7 @@ using namespace std::chrono_literals;
 
 namespace {
 
-// 假时钟:测试自己决定「现在几点」,不依赖真实流逝的时间
+// 假时钟:由测试决定当前时间,不依赖真实流逝
 class FakeClock {
 public:
     CommandTracker::TimePoint now() const { return base_ + elapsed_; }
@@ -63,8 +62,8 @@ TEST(CommandTracker, AckMatchesAndClearsEntry) {
     EXPECT_EQ(t.inflightCount(), 0u);
 }
 
-// 迟到的、重复的、伪造的应答:必须能识别出来交给调用方记警告,
-// 而不是把某条无关的在途命令误销账。
+// 迟到、重复或伪造的应答必须被识别并交给调用方处理,
+// 不得误销账到某条无关的在途命令上。
 TEST(CommandTracker, UnknownSeqAckIsRejected) {
     CommandTracker t;
     FakeClock      clk;
@@ -77,19 +76,17 @@ TEST(CommandTracker, UnknownSeqAckIsRejected) {
     EXPECT_FALSE(t.onAck(seq)) << "重复的应答第二次应被拒";
 }
 
-// 应答结果码不影响「已不在途」这个事实:命令被拒(rc != 0)也是一次完整的一问一答
+// 结果码不影响「已不在途」这一事实:命令被拒同样构成一次完整应答
 TEST(CommandTracker, AckClearsRegardlessOfResultCode) {
     CommandTracker t;
     FakeClock      clk;
     const uint8_t  seq = t.track(EDGE_TYPE_SET_PERIOD, {0x00, 0x00}, clk.now());
 
-    EXPECT_TRUE(t.onAck(seq));   // 调用方那边 rc 可能是 BAD_PARAM
+    EXPECT_TRUE(t.onAck(seq));   // 调用方侧 rc 可能为 BAD_PARAM
     EXPECT_EQ(t.inflightCount(), 0u);
 }
 
-// ------------------------------------------------------------
-// 超时与重发
-// ------------------------------------------------------------
+// ---- 超时与重发 ----
 
 TEST(CommandTracker, NoActionBeforeTimeout) {
     CommandTracker t(500ms, 3);
@@ -103,8 +100,8 @@ TEST(CommandTracker, NoActionBeforeTimeout) {
     EXPECT_TRUE(a.failed.empty());
 }
 
-// 协议 §6.2 的命脉:重发【必须复用原 seq】。
-// 换了新 seq,节点侧的幂等判断就失效,设置类命令会被执行两次。
+// §6.2:重发必须复用原 seq。换用新 seq 会使节点侧的幂等判断失效,
+// 导致设置类命令被执行两次。
 TEST(CommandTracker, ResendReusesSameSeqAndArgs) {
     CommandTracker t(500ms, 3);
     FakeClock      clk;
@@ -121,7 +118,7 @@ TEST(CommandTracker, ResendReusesSameSeqAndArgs) {
     EXPECT_TRUE(t.has(seq)) << "重发后仍在途,继续等应答";
 }
 
-// 重发后计时要重置,否则下一个 tick 会立刻再发一次,一瞬间烧光重试次数
+// 重发后须重置计时,否则下一个 tick 会立即再次重发,瞬间耗尽重试次数
 TEST(CommandTracker, ResendResetsTheClock) {
     CommandTracker t(500ms, 3);
     FakeClock      clk;
@@ -137,7 +134,7 @@ TEST(CommandTracker, ResendResetsTheClock) {
     EXPECT_EQ(t.tick(clk.now()).resend.size(), 1u);
 }
 
-// 完整的失败链路:发 → 超时重发 ×3 → 判死。真机上要等 2 秒,这里瞬间跑完。
+// 完整失败链路:发送 → 超时重发 ×3 → 判死
 TEST(CommandTracker, FailsAfterRetriesExhausted) {
     CommandTracker t(500ms, 3);
     FakeClock      clk;
@@ -160,7 +157,7 @@ TEST(CommandTracker, FailsAfterRetriesExhausted) {
     EXPECT_FALSE(t.has(seq)) << "判死后应从在途表移除";
 }
 
-// 在最后一次重试与判死之间收到应答,应正常销账,不该被判死
+// 在最后一次重试与判死之间收到应答,应正常销账而非判死
 TEST(CommandTracker, LateAckBeforeFailureStillMatches) {
     CommandTracker t(500ms, 3);
     FakeClock      clk;
@@ -176,7 +173,7 @@ TEST(CommandTracker, LateAckBeforeFailureStillMatches) {
     EXPECT_TRUE(t.tick(clk.now()).failed.empty()) << "已销账的命令不该再被判死";
 }
 
-// 多条命令并存时互不干扰 —— 这是 seq 存在的理由
+// 多条命令并存时互不干扰,这是 seq 存在的目的
 TEST(CommandTracker, TracksMultipleCommandsIndependently) {
     CommandTracker t(500ms, 3);
     FakeClock      clk;

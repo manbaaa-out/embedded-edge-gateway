@@ -72,8 +72,8 @@ private:
         auto* self = static_cast<MqttClient*>(obj);
         if (!self->handler_) return;
         std::string topic(msg->topic ? msg->topic : "");
-        // payloadlen 在 libmosquitto 里是 int。理论上不会为负,但既然类型允许,
-        // 就在这里挡一道 —— 负数转成 size_t 会变成天文数字,std::string 构造当场炸。
+        // libmosquitto 的 payloadlen 是 int。虽不预期为负,但类型允许,
+        // 而负数转 size_t 会得到巨大值并导致 std::string 构造越界,故在此拦一道。
         const size_t payload_len =
             (msg->payloadlen > 0) ? static_cast<size_t>(msg->payloadlen) : 0u;
         std::string payload(static_cast<const char*>(msg->payload), payload_len);

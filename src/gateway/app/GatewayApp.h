@@ -1,24 +1,13 @@
 #pragma once
 
-// ============================================================
-// GatewayApp:网关应用对象 —— 只做三件事:持有资源、把各层接起来、跑主循环。
+// 网关应用对象:持有各层资源、装配事件源、运行主循环,不含业务逻辑本身。
+// 业务分别位于 NodeLink(串口收发与组帧)、CommandTracker(seq 分配与超时重发)、
+// decodeTelemetry(帧 → 记录)、translateCommand(topic → 命令)、
+// TelemetryPipeline(双写扇出)。
 //
-// 重构前这个类有 535 行,串口读写、帧解析、ACK 配对、超时重发、MQTT 翻译、
-// 业务解码、配置热加载、双写落库全在里面,任何一块都没法单独测。
-// 现在那些逻辑各自搬去了能被测的地方:
-//     NodeLink          串口收发 + 组帧解帧
-//     CommandTracker    seq 分配 · 应答配对 · 超时重发 · 判死(纯逻辑,可单测)
-//     decodeTelemetry   帧 → 记录(纯函数,可单测)
-//     translateCommand  MQTT topic → 命令(纯函数,可单测)
-//     TelemetryPipeline 双写扇出
-// 这里只剩「谁在什么时候调谁」。
-//
-// 【铁律:成员声明顺序 == 析构逆序】
-//   pool_ 必须声明在 db_ / client_ 【之后】,才能先于它们析构。
-//   线程池析构时要 drain 在飞的 task,而那些 task 经 shared_ptr 快照持有
-//   db / client —— 若 db_ 先没了,drain 中的 task 就在用已析构的对象。
-//   不可重排!
-// ============================================================
+// 成员声明顺序即析构逆序,不可重排:pool_ 必须声明在 db_ / client_ 之后,
+// 才能先于它们析构。线程池析构时要 drain 在飞的 task,而这些 task 经
+// shared_ptr 快照持有 db / client;若 db_ 先析构,drain 中的 task 将访问已析构对象。
 
 #include "gateway/cloud/CommandTranslator.h"
 #include "gateway/cloud/MqttClient.h"
@@ -38,33 +27,29 @@ namespace gateway {
 
 class GatewayApp {
 public:
-    // 【必须在创建任何线程之前调用】屏蔽 SIGHUP 的默认递送。
+    // 屏蔽 SIGHUP 的默认递送。
     //
-    // 信号掩码是【每线程】的,新线程从创建它的线程继承。若等到 run() 里
-    // 才屏蔽,构造函数起的 HTTP 线程、线程池 worker、以及 mosquitto 网络线程
-    // 都已带着「不屏蔽 SIGHUP」的掩码在跑了 —— kill -HUP 时内核会挑一个
-    // 没屏蔽它的线程递送,于是 SIGHUP 的默认行为(终止进程)生效。
-    //
-    // 这正是重构前热加载「时灵时不灵」的原因:sigprocmask 当时写在
-    // setupSignal() 里,而它是 run() 的最后一步。
+    // 前置条件:必须早于任何线程的创建。信号掩码按线程生效,新线程继承创建者的掩码;
+    // 若晚于线程创建,HTTP 线程、线程池 worker 与 mosquitto 网络线程都不屏蔽 SIGHUP,
+    // 内核会在未屏蔽的线程中任选一个递送,并执行默认动作终止进程。
     //
     // 返回 false 表示屏蔽失败,调用方可据此判定热加载不可用(非致命)。
     static bool blockReloadSignal();
 
 
-    // 构造:读 ConfigManager::current() 的启动快照,打开 db / MQTT / 只读连接 +
-    // HTTP 线程 / 线程池 / 串口。任一失败抛异常 —— 由 main 致命退出交 systemd 重启。
-    // (ConfigManager::init 仍由 main 负责:配置读不出是更早的致命错。)
+    // 读取 ConfigManager::current() 的启动快照,打开 db / MQTT / 只读连接、
+    // HTTP 线程、线程池与串口。任一失败抛异常,由 main 致命退出交 systemd 重启。
+    // ConfigManager::init 由 main 负责:配置读不出是更早的致命错误。
     GatewayApp();
 
     GatewayApp(const GatewayApp&)            = delete;
     GatewayApp& operator=(const GatewayApp&) = delete;
 
-    // 装配四类事件源 + 跑主循环(永久阻塞)。返回进程退出码。
+    // 装配四类事件源并运行主循环(永久阻塞)。返回进程退出码。
     int run();
 
 private:
-    // ---- 事件源装配(原 main() 的一长串,拆成有名字的步骤)----
+    // ---- 事件源装配 ----
     void setupSerial();      // 串口 Channel(ET)
     bool setupDownlink();    // eventfd + 下行 Channel(失败致命)
     void startMqtt();        // 挂下行 handler + 订阅 + loopStart
@@ -80,9 +65,7 @@ private:
 
     std::shared_ptr<channel> makeSerialChannel();
 
-    // ====================================================
-    // 成员顺序 == 析构逆序,见文件头铁律。不可重排!
-    // ====================================================
+    // 成员顺序即析构逆序,不可重排(见文件头)
     std::shared_ptr<Database>   db_;            // 上行写连接(线程池 task 持快照)
     std::shared_ptr<MqttClient> client_;        // 上行 / 应答 MQTT
     std::shared_ptr<Database>   roDb_;          // HTTP 只读连接(WAL 读写并发)

@@ -1,12 +1,8 @@
-// 配置解析与热加载测试
+// 配置解析与热加载测试。
 //
-// 由原 src/config/test/config_test.cpp 移植而来(那份从未接进任何构建)。
-//
-// 【为什么每个用例都自己 init】ConfigManager 是进程级单例,但 gtest_discover_tests
-// 会把每个 TEST 注册成独立的 ctest 条目、各起一个进程 —— 用例之间不共享状态。
-// 所以每个用例必须自带完整的 init,不能依赖前一个用例留下的残留。
-// 原来那份手写测试是「一个 main 顺序跑五段」,搬过来时若照抄顺序依赖,
-// 在 ctest 下会直接段错误(current() 返回空)。
+// ConfigManager 是进程级单例,而 gtest_discover_tests 把每个 TEST 注册成独立的
+// ctest 条目并各起一个进程,用例之间不共享状态。因此每个用例必须自带完整的 init,
+// 不得依赖其他用例的执行顺序或残留状态。
 
 #include "gateway/core/config/Config.h"
 
@@ -20,7 +16,7 @@ using namespace gateway;
 
 namespace {
 
-// 每个用例用独立文件名,避免并行跑 ctest 时互相踩
+// 每个用例使用独立文件名,避免并行执行 ctest 时相互干扰
 std::string confPath(const std::string& tag) {
     return "/tmp/gateway_config_test_" + tag + ".conf";
 }
@@ -30,7 +26,7 @@ void writeConf(const std::string& path, const std::string& content) {
     o << content;
 }
 
-// 一份合法的基线配置,各用例在其上改一两个键
+// 合法的基线配置,各用例在其上修改一两个键
 std::string baseline(const std::string& overrides = "") {
     return "# 注释行应被跳过\n"
            "log_level = 2\n"
@@ -42,7 +38,7 @@ std::string baseline(const std::string& overrides = "") {
            overrides;
 }
 
-// RAII:用例结束删掉临时配置文件
+// 用例结束时删除临时配置文件
 struct ConfFile {
     std::string path;
     explicit ConfFile(const std::string& tag) : path(confPath(tag)) {}
@@ -68,7 +64,7 @@ TEST(Config, InitParsesAllFields) {
     EXPECT_EQ(c->worker_count, 8);
 }
 
-// 未写的键应保留 Config 结构体里的默认值,而不是变成 0 / 空串
+// 未出现的键应保留 Config 结构体的默认值,而非置为 0 或空串
 TEST(Config, MissingKeysKeepDefaults) {
     ConfFile f("defaults");
     f.write("log_level = 3\n");
@@ -82,7 +78,7 @@ TEST(Config, MissingKeysKeepDefaults) {
     EXPECT_EQ(c->mqtt_keepalive, 60);
 }
 
-// 热加载的 diff 必须精确:报多了会把没必要的串口/连接白白重开,报少了则改了不生效
+// 热加载的 diff 必须精确:多报会导致串口与连接被无谓重建,少报则修改不生效
 TEST(Config, ReloadReportsOnlyWhatActuallyChanged) {
     ConfFile f("diff");
     f.write(baseline());
@@ -120,7 +116,7 @@ TEST(Config, ReloadDetectsMqttAndDbChanges) {
     EXPECT_FALSE(r.serial_changed) << "串口没动就不该重开";
 }
 
-// C 档(端口 / worker_count)运行期不可变:热加载必须忽略,而不是半生效
+// C 档(端口 / worker_count)运行期不可变,热加载必须整体忽略而非部分生效
 TEST(Config, TierCChangesAreIgnored) {
     ConfFile f("tierc");
     f.write(baseline());
@@ -134,15 +130,14 @@ TEST(Config, TierCChangesAreIgnored) {
     EXPECT_EQ(ConfigManager::current()->worker_count, 8) << "线程池大小不可热改";
 }
 
-// load-then-swap 的核心保证:解析失败时旧配置原封不动,进程照常跑。
-// 这是「配置写错了不该把在跑的网关搞挂」的底线。
+// load-then-swap 的核心保证:解析失败时旧配置原封不动,进程继续运行。
 TEST(Config, ParseFailureKeepsOldConfigIntact) {
     ConfFile f("badvalue");
     f.write(baseline());
     ASSERT_NO_THROW(ConfigManager::init(f.path));
     const int old_baud = ConfigManager::current()->serial_baud;
 
-    f.write("serial_baud = abc\n");   // 转换失败 → 抛异常 → 整体不生效
+    f.write("serial_baud = abc\n");   // 转换失败抛异常,整体不生效
 
     auto r = ConfigManager::reload();
     EXPECT_FALSE(r.ok);
@@ -177,8 +172,8 @@ TEST(Config, ValidationRejectsEmptyRequiredPaths) {
     EXPECT_FALSE(r.ok) << "空串口路径应被 validate 拦下";
 }
 
-// 配置文件根本不存在时,init 必须抛 —— 让 main 能致命退出,
-// 而不是揣着一份默认配置连到错误的 broker 上。
+// 配置文件不存在时 init 必须抛异常,使 main 致命退出,
+// 而非带着默认配置连接到错误的 broker。
 TEST(Config, InitThrowsOnMissingFile) {
     EXPECT_THROW(ConfigManager::init("/tmp/definitely_not_here_9f3a.conf"), std::exception);
 }

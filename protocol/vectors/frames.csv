@@ -1,12 +1,12 @@
-# 帧编解码金标准向量 —— 网关与 STM32 节点【两端共读同一份】
+# 帧编解码金标准向量 —— 网关与 STM32 节点共读同一份
 #
-# 每一端的一致性测试都逐行跑这个文件:
+# 两端的一致性测试均逐行跑本文件:
 #   - 解码:把 frame_hex 逐字节喂进收帧 FSM 比对交付结果与统计
 #   - 编码:对 expect_frames=1 且无前后噪声的行 用 type+payload 反向组帧
 #           要求与 frame_hex 逐字节相同(编解码互为逆运算)
-# 任何一端改坏编解码 这里立刻变红 —— 这就是「两端协议一致」的机器化保证。
+# 任一端改坏编解码 两端 CI 均会失败。
 #
-# 前 10 条与 docs/protocol.md §7 的完整帧示例逐字节一致(已用实现交叉验证)。
+# 前 10 条与 docs/protocol.md §7 的完整帧示例逐字节一致。
 #
 # 格式:name,frame_hex,expect_frames,expect_type,expect_payload,expect_len_err,expect_crc_err,note
 #   expect_frames   —— 喂完这串字节后应交付的帧数

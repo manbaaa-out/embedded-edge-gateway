@@ -1,8 +1,8 @@
 #include "gateway/io/http/HttpServer.h"
 #include "gateway/core/log/Logger.h"
 #include "gateway/io/event/EventLoop.h"
-#include "gateway/io/http/HttpRequest.h"   // gateway::HttpRequest, gateway::Buffer
-#include "gateway/io/http/WebAsset.h"      // [S6] kIndexHtml(CMake 编译期从 assets/index.html 嵌入)
+#include "gateway/io/http/HttpRequest.h"
+#include "gateway/io/http/WebAsset.h"   // kIndexHtml 等,由 CMake 在编译期从 assets/ 嵌入
 
 #include <map>
 #include <vector>
@@ -19,9 +19,7 @@
 
 namespace gateway {
 
-// ============================================================
-// 一、HTTP 业务处理辅助函数(static = 文件内私有)
-// ============================================================
+// ---- 请求处理 ----
 
 static void splitPathQuery(const std::string& full,
                            std::string& path, std::string& query) {
@@ -78,7 +76,7 @@ static std::string makeResponse(int code, const std::string& reason,
     return resp;
 }
 
-// [S6] 监控页:返回编译期从 assets/index.html 嵌入的 HTML(asset embedding)。
+// 监控页。HTML 在编译期从 assets/index.html 嵌入,部署时无需附带静态文件。
 static std::string monitorPage() {
     return kIndexHtml;
 }
@@ -90,7 +88,7 @@ static std::string handleHttpRequest(const std::string& rawPath, Database& roDb)
     if (path == "/") {
         return makeResponse(200, "OK", "text/html; charset=utf-8", monitorPage());
     }
-    // [S6] uPlot 静态资源(编译期嵌入,离线自包含)
+    // uPlot 静态资源,同样编译期嵌入以保证离线自包含
     if (path == "/uplot.js") {
         return makeResponse(200, "OK", "application/javascript", kUplotJs);
     }
@@ -121,11 +119,9 @@ static std::string handleHttpRequest(const std::string& rawPath, Database& roDb)
                         "{\"error\":\"not found\"}");
 }
 
-// ============================================================
-// 二、发送辅助
-// ============================================================
-// len 用 size_t:它是「长度」不是「可能为负的返回值」。
-// 原先取 ssize_t,导致每处 len - total 都要与 string/size_t 来回强转。
+// ---- 发送辅助 ----
+// len 取 size_t 而非 ssize_t:它表示长度,不表示可能为负的返回值;
+// 用 ssize_t 会导致每处 len - total 都要与 size_t 来回强转。
 static void sendData(EventLoop& loop, channel* ch, const char* data, size_t len) {
     size_t total = 0;
     if (ch->out_buf.empty()) {
@@ -146,18 +142,14 @@ static void sendData(EventLoop& loop, channel* ch, const char* data, size_t len)
     }
 }
 
-// ============================================================
-// 三、连接上下文 + fd→上下文 外挂表(仅 HTTP 线程访问,无锁)
-// ============================================================
+// ---- 连接上下文与 fd → 上下文映射表。仅 HTTP 线程访问,故无锁 ----
 struct HttpConn {
     Buffer      buf;
     HttpRequest req;
 };
 static std::map<int, HttpConn> g_conns;
 
-// ============================================================
-// 四、runHttpServer
-// ============================================================
+// ---- 服务主循环 ----
 void runHttpServer(Database& roDb) {
     int listen_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     int opt = 1;
@@ -186,8 +178,8 @@ void runHttpServer(Database& roDb) {
     timer_channel->events = EPOLLIN;
     timer_channel->on_read = [timerfd, &loop, TIMEOUT]() {
         uint64_t exp = 0;
-        // 必须读掉计数器,否则 LT 模式下会反复触发。读失败不影响下面的超时扫描
-        // (扫描依据是各连接的 last_active,不依赖这个计数),故只记不处理。
+        // 必须读掉计数,否则 LT 模式下会反复触发。读失败不影响后续超时扫描:
+        // 扫描依据是各连接的 last_active,不依赖该计数。
         if (read(timerfd, &exp, sizeof(exp)) != static_cast<ssize_t>(sizeof(exp))) {
             LOG_DEBUG("%s", "http timerfd read short");
         }
@@ -240,7 +232,7 @@ void runHttpServer(Database& roDb) {
                         loop.removeChannel(client_fd); g_conns.erase(client_fd); return;
                     } else {
                         ch_raw->last_active = time(nullptr);
-                        conn.buf.append(tmp, static_cast<size_t>(n_read));   // 此处 n_read > 0
+                        conn.buf.append(tmp, static_cast<size_t>(n_read));   // n_read > 0
                         while (true) {
                             ParseResult r = conn.req.parse(&conn.buf);
                             if (r == ParseResult::kComplete) {

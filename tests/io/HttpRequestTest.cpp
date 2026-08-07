@@ -1,7 +1,4 @@
-// HTTP 请求解析测试
-//
-// 由原 src/net/tests/http_test.cpp 移植而来 —— 那份用 assert + cout 写得不错,
-// 但从未被任何 CMakeLists 引用过,等于没有。搬进 CTest 后它才真的在守着代码。
+// HTTP 请求解析测试。
 
 #include "gateway/io/http/Buffer.h"
 #include "gateway/io/http/HttpRequest.h"
@@ -13,7 +10,7 @@
 using namespace gateway;
 
 namespace {
-// 把字符串灌进 Buffer,省掉每个用例都写一遍 strlen
+// 把字符串写入 Buffer,避免每个用例重复计算长度
 void feed(Buffer& buf, const char* s) {
     buf.append(s, std::strlen(s));
 }
@@ -37,12 +34,12 @@ TEST(HttpRequest, ParsesCompleteRequestWithBody) {
     EXPECT_EQ(req.body(), "hello");
 }
 
-// 半包:TCP 不保证一次 read 拿到整条请求,这是 HTTP 解析器的基本功
+// 半包:TCP 不保证一次 read 取得完整请求,解析器必须能跨多次输入累积状态
 TEST(HttpRequest, HandlesPartialThenComplete) {
     HttpRequest req;
     Buffer      buf;
 
-    feed(buf, "GET /index.html HTTP/1.1\r\nHo");          // 断在 header 名字中间
+    feed(buf, "GET /index.html HTTP/1.1\r\nHo");          // 在 header 名中间截断
     EXPECT_EQ(req.parse(&buf), ParseResult::kIncomplete);
 
     feed(buf, "st: a.com\r\n\r\n");
@@ -99,7 +96,7 @@ TEST(HttpRequest, ParsesPipelinedRequestsWithSeparateObjects) {
     EXPECT_EQ(req2.path(), "/second");
 }
 
-// 长连接:同一个 HttpRequest 对象 reset 后复用
+// 长连接:同一个 HttpRequest 对象在 reset 后可复用
 TEST(HttpRequest, ResetAllowsReuseOnKeepAlive) {
     Buffer buf;
     feed(buf, "GET /first HTTP/1.1\r\n\r\nGET /second HTTP/1.1\r\n\r\n");

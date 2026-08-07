@@ -1,11 +1,8 @@
 cmake_minimum_required(VERSION 3.21)   # 3.21+:CMakePresets v3
 project(gateway VERSION 1.0.0 LANGUAGES C CXX)   # C 用于共享协议核心 edge_proto
 
-# ============================================================
-# 顶层只讲「项目由哪些部分组成、它们怎么装在一起」。
-# 「每部分怎么编」在 cmake/CompilerWarnings.cmake,
-# 「怎么配置构建形态」在 CMakePresets.json。
-# ============================================================
+# 顶层只描述项目由哪些部分组成以及它们如何装配。
+# 编译选项见 cmake/CompilerWarnings.cmake,构建形态见 CMakePresets.json。
 
 # ---- 1. Build type 防御 ----
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -32,13 +29,9 @@ message(STATUS "Compiler    : ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERS
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Tests/Tools : ${GATEWAY_BUILD_TESTS} / ${GATEWAY_BUILD_TOOLS}")
 
-# ============================================================
-# 5. 共享协议核心 —— 与 STM32 节点【同源】的那份代码。
-#
-# 它排在所有网关模块之前,且刻意不依赖 gateway_options:
-# 这份目录要能被固件工程原样拿去用,任何对网关构建环境的依赖
-# 都会让「共享」名存实亡。详见 protocol/README.md。
-# ============================================================
+# ---- 5. 共享协议核心,与 STM32 节点同源 ----
+# 排在所有网关模块之前,且不依赖 gateway_options:该目录要能被固件工程原样使用,
+# 任何对网关构建环境的依赖都会破坏共享前提。详见 protocol/README.md。
 add_subdirectory(protocol)
 
 # ---- 6. 网关自身模块(按职责分层,层间依赖见 src/CMakeLists.txt)----

@@ -7,12 +7,12 @@
 
 namespace gateway {
 
-// ---- 静态成员定义(头文件只声明,这里定义,否则链接错误)----
+// ---- 静态成员定义 ----
 std::string                   ConfigManager::path_;
 std::shared_ptr<const Config> ConfigManager::current_;
 std::shared_ptr<const Config> ConfigManager::startup_;
 
-// ---- 辅助:trim / toInt(文件内私有)----
+// ---- 解析辅助 ----
 static std::string trim(const std::string& s) {
     size_t b = s.find_first_not_of(" \t\r\n");
     if (b == std::string::npos) return "";
@@ -51,10 +51,10 @@ Config ConfigManager::parseFile(const std::string& path) {
         std::string key = trim(t.substr(0, eq));
         std::string val = trim(t.substr(eq + 1));
 
-        // 砍掉 value 里的行尾注释:找第一个 '#',它及之后全部丢弃
+        // 去除 value 中的行尾注释:第一个 '#' 及其之后全部丢弃
         size_t hash = val.find('#');
         if (hash != std::string::npos) {
-            val = trim(val.substr(0, hash));   // 取 # 之前的部分,再 trim 掉中间空格
+            val = trim(val.substr(0, hash));
         }
 
         if      (key == "log_level")      c.log_level      = toInt(val, key);
@@ -99,7 +99,7 @@ bool ConfigManager::validate(const Config& c) {
 }
 
 void ConfigManager::init(const std::string& path) {
-    auto cfg = std::make_shared<Config>(parseFile(path));   // 解析失败抛异常,传给调用方
+    auto cfg = std::make_shared<Config>(parseFile(path));   // 解析失败的异常传给调用方
     path_    = path;
     startup_ = std::make_shared<Config>(*cfg);
     std::atomic_store(&current_, std::shared_ptr<const Config>(cfg));
@@ -113,7 +113,7 @@ ConfigManager::ReloadResult ConfigManager::reload() {
     ReloadResult result;
     try {
         auto fresh = std::make_shared<Config>(parseFile(path_));
-        if (!validate(*fresh)) return result;             // ok=false,旧配置不动
+        if (!validate(*fresh)) return result;             // 校验失败,旧配置保持不变
 
         auto restoreC = [](const char* name, int& fv, int sv) {
             if (fv != sv)

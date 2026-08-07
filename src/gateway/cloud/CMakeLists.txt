@@ -1,9 +1,6 @@
-# ============================================================
-# cloud 层:MQTT 客户端 + 下行命令翻译
+# cloud 层:MQTT 客户端与下行命令翻译。
 #
-# translateCommand 是纯函数(topic + payload → 命令),不碰 mosquitto,
-# 所以它能被单测 —— 而重构前它长在 mosquitto 回调 lambda 里,测不了。
-# ============================================================
+# translateCommand 是纯函数,不依赖 mosquitto,可独立单测。
 find_library(MOSQUITTO_LIB mosquitto REQUIRED)
 find_path(MOSQUITTO_INC mosquitto.h REQUIRED)
 

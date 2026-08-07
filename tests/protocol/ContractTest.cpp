@@ -1,8 +1,8 @@
-// ============================================================
-// 协议契约的性质测试 —— 向量文件测「具体的帧对不对」,
-// 这里测「契约本身的性质对不对」:分段是否真不相交、边界是否真挡得住、
-// 错误路径是否真能 resync。这些性质一旦破,两端就会以不同方式误解对方。
-// ============================================================
+// 协议契约的性质测试。
+//
+// 金标准向量验证具体的帧是否正确,本文件验证契约本身的性质:TYPE 分段是否不相交、
+// 边界是否挡得住、错误路径是否能 resync。任一性质被破坏,两端就会以不同方式
+// 解释同一串字节。
 
 #include "edge_proto/edge_frame.h"
 #include "edge_proto/edge_proto.h"
@@ -40,10 +40,7 @@ Capture feedFrame(uint8_t type, const std::vector<uint8_t>& payload) {
 
 }  // namespace
 
-// ------------------------------------------------------------
-// §1.5 铁律:上下行 TYPE 段不相交
-// 这条一旦破,错帧就能伪装成合法的对向帧被静默执行。
-// ------------------------------------------------------------
+// ---- §1.5:上下行 TYPE 段不相交。一旦相交,错帧即可伪装成合法的对向帧被执行 ----
 TEST(Contract, UplinkAndDownlinkSegmentsAreDisjoint) {
     for (int t = 0; t <= 0xFF; ++t) {
         const uint8_t type = static_cast<uint8_t>(t);
@@ -77,9 +74,7 @@ TEST(Contract, ReservedTypesAreNotInAnySegment) {
     EXPECT_LT(edge_min_payload_len(EDGE_TYPE_INVALID_HI), 0);
 }
 
-// ------------------------------------------------------------
-// payload 长度校验:统一两端过去各自散落的魔数
-// ------------------------------------------------------------
+// ---- payload 长度校验 ----
 TEST(Contract, MinPayloadLenMatchesTypeDictionary) {
     EXPECT_EQ(edge_min_payload_len(EDGE_TYPE_DHT11), 5);
     EXPECT_EQ(edge_min_payload_len(EDGE_TYPE_BH1750), 2);
@@ -101,9 +96,7 @@ TEST(Contract, PayloadLenOkRejectsShortAndUnknown) {
     EXPECT_FALSE(edge_payload_len_ok(0x99, 8)) << "未知 TYPE 一律拒";
 }
 
-// ------------------------------------------------------------
-// 大端读写与量纲:两端过去各自手写移位,写错一次就是静默错值
-// ------------------------------------------------------------
+// ---- 大端读写与量纲。移位写错不会崩溃,只会产生静默错值,故须逐位验证 ----
 TEST(Contract, BigEndianReadWriteRoundTrip) {
     for (uint32_t v = 0; v <= 0xFFFF; v += 0x101) {  // 覆盖高低字节的各种组合
         uint8_t buf[2];
@@ -125,8 +118,7 @@ TEST(Contract, BigEndianMatchesProtocolExamples) {
     EXPECT_DOUBLE_EQ(edge_u16_be_read(temp_25_3) / double(EDGE_TEMP_SCALE), 25.3);
 }
 
-// v1.2 澄清:周期单位是【秒】。这条测试把单位钉死在可执行的断言里,
-// 免得再出现「文档 ms、代码秒」那种四处三说的局面。
+// 周期单位为秒。以可执行断言固定该单位,防止文档与实现再次分歧。
 TEST(Contract, PeriodIsSecondsAndRejectsZero) {
     EXPECT_FALSE(edge_period_s_valid(0)) << "周期 0 应判 BAD_PARAM(§6.3)";
     EXPECT_TRUE(edge_period_s_valid(EDGE_PERIOD_MIN_S));
@@ -136,7 +128,7 @@ TEST(Contract, PeriodIsSecondsAndRejectsZero) {
 }
 
 TEST(Contract, StatusBitmaskIsBitwiseNotEnum) {
-    // §3.4 重点:0x04 的 payload 是按位标志,不能当单一数值解释
+    // §3.4:0x04 的 payload 是按位标志,不可当作单一数值解释
     const uint8_t both_ok = EDGE_STATUS_BIT_DHT11 | EDGE_STATUS_BIT_BH1750;
     EXPECT_EQ(both_ok, 0x03);
     EXPECT_TRUE(both_ok & EDGE_STATUS_BIT_DHT11);

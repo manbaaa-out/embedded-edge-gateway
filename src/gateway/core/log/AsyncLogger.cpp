@@ -10,7 +10,7 @@
 namespace gateway {
 
     static ssize_t safe_write(int fd, const void* buf, size_t n) {
-        size_t total = 0;                       // 用无符号计数,与 n 同类型,免去来回强转
+        size_t total = 0;                       // 与写入长度同为无符号,免去来回强转
         const char* p = static_cast<const char*>(buf);
         while(total < n) {
             ssize_t n_write = write(fd, p + total, n - total);
@@ -18,7 +18,7 @@ namespace gateway {
                 if( errno == EINTR) continue;
                 return -1;
             }
-            total += static_cast<size_t>(n_write);   // 此处 n_write >= 0,转换安全
+            total += static_cast<size_t>(n_write);   // n_write >= 0
         }
 
         return static_cast<ssize_t>(total);
@@ -83,7 +83,7 @@ namespace gateway {
             return;
         }
 
-        // 备用 buffer(用于"挪走前先填上"的占位),从堆上预造
+        // 预分配备用 buffer,用于在交换出当前 buffer 后立即补位
         BufferPtr newCurrent = std::make_unique<Buffer>();
         BufferPtr newNext    = std::make_unique<Buffer>();
         newCurrent->reserve(kBufferSize);

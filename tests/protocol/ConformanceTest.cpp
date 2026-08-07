@@ -1,12 +1,7 @@
-// ============================================================
-// 协议一致性测试 —— 逐行跑 protocol/vectors/ 下的金标准向量。
+// 协议一致性测试:逐行跑 protocol/vectors/ 下的金标准向量。
 //
-// 这是「网关与 STM32 节点协议一致」这句话的机器化保证:
-// 两个仓库跑【同一份数据文件】,任一端改坏编解码,双方 CI 都会红。
-// 节点侧的对等实现在 STM32Project/Protocol/test/。
-//
-// docs/protocol.md §4.3 原话:「只要任一向量不匹配 实现错误 绝不能上线」。
-// ============================================================
+// 这是「网关与 STM32 节点协议一致」的机器化保证:两个仓库跑同一份数据文件,
+// 任一端改坏编解码,双方 CI 均会失败。节点侧的对等实现在 STM32Project/Protocol/test/。
 
 #include "VectorLoader.h"
 
@@ -19,7 +14,7 @@ using namespace gwtest;
 
 namespace {
 
-// 收帧回调把结果攒进这里(C 回调经 void* user 弹回来,协议层不留全局变量)
+// 收帧回调经 void* user 把结果收集到此,协议层不引入全局变量
 struct Capture {
     int                  frames = 0;
     uint8_t              last_type = 0;
@@ -35,9 +30,7 @@ void onFrame(uint8_t type, const uint8_t* payload, uint8_t len, void* user) {
 
 }  // namespace
 
-// ------------------------------------------------------------
-// CRC16-MODBUS 向量(docs/protocol.md §4.3)
-// ------------------------------------------------------------
+// ---- CRC16-MODBUS 向量(docs/protocol.md §4.3)----
 TEST(Conformance, Crc16Vectors) {
     const auto rows = loadVectors("protocol/vectors/crc16.csv", 3);
     ASSERT_GE(rows.size(), 4u) << "§4.3 的四条向量一条都不能少";
@@ -52,8 +45,8 @@ TEST(Conformance, Crc16Vectors) {
     }
 }
 
-// 逐字节累加与一次性计算必须等价 —— 接收端 FSM 走前者 发送端组帧走后者,
-// 两者若不等价 会出现「自己发的帧自己校验不过」这种最难查的故障。
+// 逐字节累加与一次性计算必须等价:接收端 FSM 走前者,发送端组帧走后者。
+// 两者不等价会导致自己发出的帧无法通过自身校验。
 TEST(Conformance, Crc16IncrementalEqualsOneShot) {
     const auto rows = loadVectors("protocol/vectors/crc16.csv", 3);
     for (const auto& r : rows) {
@@ -67,9 +60,7 @@ TEST(Conformance, Crc16IncrementalEqualsOneShot) {
     }
 }
 
-// ------------------------------------------------------------
-// 解码:把金标准帧逐字节喂进 FSM,比对交付结果与错误统计
-// ------------------------------------------------------------
+// ---- 解码:把金标准帧逐字节喂进 FSM,比对交付结果与错误统计 ----
 TEST(Conformance, FrameDecode) {
     const auto rows = loadVectors("protocol/vectors/frames.csv", 8);
 
@@ -101,10 +92,8 @@ TEST(Conformance, FrameDecode) {
     }
 }
 
-// ------------------------------------------------------------
-// 编码:对干净的单帧行反向组帧,要求与金标准逐字节相同。
-// x_ 前缀的行含噪声/错误,不参与编码回环(见 frames.csv 表头说明)。
-// ------------------------------------------------------------
+// ---- 编码:对干净的单帧行反向组帧,要求与金标准逐字节相同。
+// x_ 前缀的行含噪声或错误,不参与编码回环(见 frames.csv 表头) ----
 TEST(Conformance, FrameEncodeRoundTrip) {
     const auto rows = loadVectors("protocol/vectors/frames.csv", 8);
     int        checked = 0;

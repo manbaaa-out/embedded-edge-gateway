@@ -1,15 +1,10 @@
 #pragma once
 
-// ============================================================
-// 金标准向量文件加载器(测试专用)
+// 金标准向量文件加载器(测试专用)。
 //
-// protocol/vectors/*.csv 是网关与 STM32 节点【共读】的同一份数据文件。
-// 节点侧有一份等价的纯 C 加载器(Protocol/test/),两边跑同样的行,
-// 任何一端改坏编解码都会在这里变红。
-//
-// 刻意不引第三方 CSV 库:格式是自己定的、行数是可数的,
-// 引一个依赖进来只为切几个逗号并不划算,也会给 MCU 侧的对等实现添麻烦。
-// ============================================================
+// protocol/vectors/*.csv 由网关与 STM32 节点共读,节点侧有一份等价的纯 C 加载器
+// (Protocol/test/)。不引第三方 CSV 库:格式自定义且规模可控,引入依赖会给
+// MCU 侧的对等实现增加负担。
 
 #include <cstdint>
 #include <fstream>
@@ -30,8 +25,8 @@ inline std::string trim(const std::string& s) {
     return s.substr(b, e - b + 1);
 }
 
-// 读向量文件:跳过 # 注释行与空行,其余按逗号切分。
-// 找不到文件直接抛 —— 测试静默跳过比失败更危险(会伪装成通过)。
+// 读取向量文件:跳过 # 注释行与空行,其余按逗号切分。
+// 文件缺失直接抛异常:静默跳过会伪装成测试通过。
 inline std::vector<VectorRow> loadVectors(const std::string& relative_path,
                                           std::size_t expected_columns) {
     const std::string path = std::string(GATEWAY_TEST_DATA_DIR) + "/" + relative_path;
@@ -88,7 +83,7 @@ inline uint16_t parseU16(const std::string& s) {
     return static_cast<uint16_t>(std::stoul(s, nullptr, 0) & 0xFFFFu);
 }
 
-// 断言失败时打印可读的十六进制,免得只看到一串数字
+// 断言失败时以十六进制打印,便于比对字节序列
 inline std::string toHex(const std::vector<uint8_t>& v) {
     static const char* kDigits = "0123456789ABCDEF";
     std::string        s;

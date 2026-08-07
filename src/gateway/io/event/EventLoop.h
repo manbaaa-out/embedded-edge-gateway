@@ -10,7 +10,7 @@
 namespace gateway{
 
 struct channel {
-    int fd = -1;          // 默认 -1，析构时据此判断要不要关
+    int fd = -1;          // -1 表示未持有 fd，析构时据此决定是否 close
     uint32_t events = 0;
     std::function<void()> on_read;
     std::function<void()> on_write;
@@ -20,11 +20,11 @@ struct channel {
 
     channel() = default;
 
-    // 持有 fd 这种独占资源，禁掉拷贝，避免两个 channel 关同一个 fd（double close）
+    // fd 是独占资源，禁用拷贝以避免两个 channel 关闭同一个 fd
     channel(const channel&) = delete;
     channel& operator=(const channel&) = delete;
 
-    // RAII：fd 跟对象同生共死
+    // fd 的生命周期与本对象绑定
     ~channel() { if (fd != -1) ::close(fd); }
 
     void handleRead() { if (on_read) on_read(); }

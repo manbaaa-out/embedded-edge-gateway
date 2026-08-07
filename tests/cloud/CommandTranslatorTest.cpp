@@ -1,7 +1,4 @@
-// MQTT 下行命令翻译测试
-//
-// 重构前这段逻辑长在 mosquitto 回调 lambda 里,要验证「period 超范围会不会被挡」
-// 得先连上 broker 发条真消息。现在它是纯函数。
+// MQTT 下行命令翻译测试。translateCommand 是纯函数,无需连接 broker 即可验证。
 
 #include "gateway/cloud/CommandTranslator.h"
 
@@ -21,14 +18,14 @@ TEST(CommandTranslator, QueryCommandsTakeNoArguments) {
     EXPECT_TRUE(th.cmd.arg.empty());
 }
 
-// 查询类命令带了 payload 也无妨:参数被忽略,不该因此失败
+// 查询类命令携带 payload 时参数被忽略,不应因此失败
 TEST(CommandTranslator, QueryCommandsIgnoreStrayPayload) {
     const auto r = translateCommand("gateway/cmd/query_light", "whatever");
     EXPECT_TRUE(r.ok);
     EXPECT_TRUE(r.cmd.arg.empty());
 }
 
-// 周期单位是【秒】(协议 v1.2 澄清),编码为 2 字节大端 —— 与节点侧读法一致
+// 周期单位为秒,编码为 2 字节大端,与节点侧的读法一致
 TEST(CommandTranslator, SetPeriodEncodesSecondsAsBigEndian) {
     const auto r = translateCommand("gateway/cmd/set_period", "2000");
 
@@ -50,7 +47,7 @@ TEST(CommandTranslator, SetPeriodAcceptsBoundaryValues) {
     EXPECT_EQ(edge_u16_be_read(hi.cmd.arg.data()), EDGE_PERIOD_MAX_S);
 }
 
-// §6.3:周期 0 是非法参数。挡在网关侧比发下去让节点回 BAD_PARAM 更省一个来回。
+// §6.3:周期 0 为非法参数。在网关侧拦截可省去一次到节点的往返。
 TEST(CommandTranslator, SetPeriodRejectsOutOfRange) {
     for (const char* bad : {"0", "65536", "-1", "999999"}) {
         const auto r = translateCommand("gateway/cmd/set_period", bad);
@@ -59,7 +56,7 @@ TEST(CommandTranslator, SetPeriodRejectsOutOfRange) {
     }
 }
 
-// 严格解析:std::stoi 会把 "12abc" 解析成 12。对要写进设备的参数,宽容不是优点。
+// 严格解析:std::stoi 会把 "12abc" 解析成 12,而该参数将写入设备,不应容忍。
 TEST(CommandTranslator, SetPeriodRejectsNonNumericPayload) {
     for (const char* bad : {"", "   ", "abc", "12abc", "1.5", "0x10", "1 2"}) {
         const auto r = translateCommand("gateway/cmd/set_period", bad);
@@ -67,8 +64,7 @@ TEST(CommandTranslator, SetPeriodRejectsNonNumericPayload) {
     }
 }
 
-// 但两端的空白要容忍:MQTT payload 常来自 shell,带尾随换行是常态。
-// 为一个换行拒收合法命令,只会让人在半夜怀疑人生。
+// 但两端空白必须容忍:MQTT payload 常来自 shell,尾随换行是常态。
 TEST(CommandTranslator, SetPeriodToleratesSurroundingWhitespace) {
     for (const char* good : {"12", " 12", "12\n", "  12  \r\n"}) {
         const auto r = translateCommand("gateway/cmd/set_period", good);
@@ -83,15 +79,15 @@ TEST(CommandTranslator, UnknownCommandIsRejectedWithReason) {
     EXPECT_NE(r.error.find("reboot"), std::string::npos) << "错误信息应带上命令名";
 }
 
-// topic 只取最后一段:前缀可以是任意层级
+// 只取 topic 最后一段,前缀可为任意层级
 TEST(CommandTranslator, TakesLastTopicSegmentAsCommandName) {
     EXPECT_TRUE(translateCommand("a/b/c/d/query_th", "").ok);
     EXPECT_TRUE(translateCommand("query_th", "").ok) << "没有斜杠时整个 topic 就是命令名";
     EXPECT_FALSE(translateCommand("gateway/cmd/", "").ok) << "空命令名应被拒";
 }
 
-// 翻译出的命令不含 seq —— seq 由 CommandTracker 在发送时分配,
-// 这样重发才能复用同一个 seq(§6.2)。
+// 翻译结果不含 seq:seq 由 CommandTracker 在发送时分配,
+// 以便重发复用同一个值(§6.2)。
 TEST(CommandTranslator, ResultCarriesNoSeq) {
     const auto r = translateCommand("gateway/cmd/set_period", "10");
     ASSERT_TRUE(r.ok);

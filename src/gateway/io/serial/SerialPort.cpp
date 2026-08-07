@@ -11,9 +11,9 @@
 namespace gateway {
 
 namespace {
-// termios 的 c_?flag 是无符号 tcflag_t,而 ICANON / CSIZE 这类宏是 int:
-// ~ICANON 先得到一个【负 int】,直接 &= 到无符号字段上是符号转换。
-// 把「取反再转无符号」这件事在这里写一次,好过在下面十来行里散落 static_cast。
+// termios 的 c_?flag 为无符号 tcflag_t,而 ICANON / CSIZE 等宏是 int:
+// ~ICANON 得到负 int,直接 &= 到无符号字段构成符号转换。
+// 在此集中处理取反与转换,避免下方散落 static_cast。
 constexpr tcflag_t clearMask(unsigned int bits) noexcept {
     return static_cast<tcflag_t>(~bits);
 }
@@ -69,21 +69,21 @@ ssize_t SerialPort::write(const uint8_t* data, size_t len) noexcept {
     size_t total = 0;
     const uint8_t* p = data;
     while (total < len) {
-        ssize_t n = ::write(fd_, p + total, len - total);  // 注意 ::write 全局命名空间,别递归调自己
+        ssize_t n = ::write(fd_, p + total, len - total);   // ::write 限定全局作用域,避免递归
         if (n > 0) {
-            total += static_cast<size_t>(n);   // 短写:累加,继续循环写剩下的(n > 0,转换安全)
+            total += static_cast<size_t>(n);   // 短写:累加后继续写剩余部分(n > 0)
         }
         else if (n < 0 && errno == EINTR) {
-            continue;                       // 信号打断:重试(底层消化)
+            continue;                       // 被信号打断,重试
         }
         else if (n < 0 && errno == EAGAIN) {
-            break;                          // 缓冲满:上抛,跳出循环返回 total(部分写)
+            break;                          // 缓冲满,返回已写字节数(部分写)
         }
         else {
-            return -1;                      // 真错误
+            return -1;
         }
     }
-    return (ssize_t)total;                  // total==len 全写完;total<len 部分写(EAGAIN)
+    return (ssize_t)total;                  // total == len 为全写完,否则为 EAGAIN 下的部分写
 }
 
 void SerialPort::configure(speed_t baud) {

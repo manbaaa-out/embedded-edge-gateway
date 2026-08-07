@@ -19,13 +19,11 @@ TranslateResult ok(uint8_t type, std::vector<uint8_t> arg = {}) {
     return r;
 }
 
-// 整数解析策略:先 trim 两端空白,再要求剩下的部分【全部】是数字。
+// 先 trim 两端空白,再要求剩余部分全部为数字。
 //
-// 两头都不能松:
-//   - 必须 trim —— MQTT payload 常来自 shell(mosquitto_pub -m "$(cat f)"),
-//     带个尾随换行是常态,为此拒收一条合法命令没道理。
-//   - trim 之后必须严格 —— std::stoi 会把 "12abc" 解析成 12。
-//     这个参数要写进真实设备的采样周期,宽容在这里不是优点。
+// 两侧的严格程度都有理由:MQTT payload 常来自 shell,尾随换行是常态,故必须 trim;
+// 而 trim 之后必须严格 —— std::stoi 会把 "12abc" 解析成 12,该参数将写入设备的
+// 采样周期,不应容忍。
 bool parseStrictInt(const std::string& raw, long& out) {
     const auto begin = raw.find_first_not_of(" \t\r\n");
     if (begin == std::string::npos) return false;   // 全是空白 / 空串
@@ -34,7 +32,7 @@ bool parseStrictInt(const std::string& raw, long& out) {
 
     char*      end = nullptr;
     const long v   = std::strtol(s.c_str(), &end, 10);
-    if (end != s.c_str() + s.size()) return false;   // 有非数字尾巴 → 拒
+    if (end != s.c_str() + s.size()) return false;   // 存在非数字尾部
     out = v;
     return true;
 }
@@ -42,7 +40,7 @@ bool parseStrictInt(const std::string& raw, long& out) {
 }  // namespace
 
 TranslateResult translateCommand(const std::string& topic, const std::string& payload) {
-    // 取 topic 最后一段作为命令名:gateway/cmd/set_period → set_period
+    // gateway/cmd/set_period → set_period
     std::string      name = topic;
     const std::size_t pos = topic.find_last_of('/');
     if (pos != std::string::npos) name = topic.substr(pos + 1);
@@ -54,7 +52,7 @@ TranslateResult translateCommand(const std::string& topic, const std::string& pa
         return ok(EDGE_TYPE_QUERY_TH);               // 无参数
     }
     if (name == "set_period") {
-        // payload 是周期【秒】数(协议 v1.2 澄清:单位为秒,不是 ms)
+        // payload 为周期秒数(§6.3)
         long period = 0;
         if (!parseStrictInt(payload, period)) {
             return fail("set_period 参数不是合法整数: '" + payload + "'");

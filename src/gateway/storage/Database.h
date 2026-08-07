@@ -19,7 +19,7 @@ class Database {
 public:
     explicit Database(const std::string& path, bool readonly = false) {
         if (readonly) {
-            // 只读打开:库必须已存在(主链连接已建好)。最小权限:连接层禁写。
+            // 只读打开。前置条件:库已由主链写连接创建。以最小权限在连接层禁写。
             int rc = sqlite3_open_v2(path.c_str(), &db_,
                                      SQLITE_OPEN_READONLY, nullptr);
             if (rc != SQLITE_OK) {
@@ -28,10 +28,10 @@ public:
                 db_ = nullptr;
                 throw std::runtime_error("sqlite3_open(readonly) failed: " + msg);
             }
-            return;   // 只读连接到此为止:不建表、不开WAL、不缓存 insert 语句
+            return;   // 只读连接不建表、不开 WAL、不缓存 insert 语句
         }
  
-        // ----- 读写连接(主链):原逻辑不变 -----
+        // ---- 读写连接 ----
         int rc = sqlite3_open(path.c_str(), &db_);
         if (rc != SQLITE_OK) {
             std::string msg = db_ ? sqlite3_errmsg(db_) : "out of memory";
@@ -57,7 +57,7 @@ public:
             throw std::runtime_error("create table failed: " + msg);
         }
  
-        // [S5改] 建复合索引,加速 query 的 WHERE device_id=? ORDER BY ts DESC
+        // 复合索引,对应查询的 WHERE device_id = ? ORDER BY ts DESC
         execNoThrow("CREATE INDEX IF NOT EXISTS idx_dev_ts "
                     "ON device_data(device_id, ts);");
  
@@ -66,7 +66,7 @@ public:
     }
 
     ~Database() noexcept {
-        delete insertStmt_;          // 先 finalize 语句,再 close 连接(顺序要紧)
+        delete insertStmt_;          // 必须先 finalize 语句再 close 连接,顺序不可颠倒
         if (db_) sqlite3_close(db_);
     }
 
@@ -117,9 +117,9 @@ private:
         }
     }
 
-    sqlite3*   db_         = nullptr;   // 拥有,负责 close
-    Statement* insertStmt_ = nullptr;   // 拥有,缓存的 insert 语句
-    std::mutex mtx_;                    // 保护 db_ 和 insertStmt_
+    sqlite3*   db_         = nullptr;   // 独占所有权,析构时 close
+    Statement* insertStmt_ = nullptr;   // 独占所有权,缓存的 insert 语句
+    std::mutex mtx_;                    // 保护 db_ 与 insertStmt_
 };
 
 } // namespace gateway

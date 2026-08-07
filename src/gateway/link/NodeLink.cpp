@@ -12,8 +12,8 @@ namespace gateway {
 
 namespace {
 
-// 配置里存人类可读的 115200,termios 要 Bxxxx 宏。转换隔离在链路层,
-// 不让配置层掺串口实现细节。配置校验已挡掉 <= 0,default 给安全兜底。
+// 配置中存人类可读的 115200,termios 需要 Bxxxx 宏。转换隔离在链路层,
+// 使配置层不掺入串口实现细节。配置校验已排除 <= 0,default 分支为兜底。
 speed_t toBaud(int baud) {
     switch (baud) {
     case 9600:   return B9600;
@@ -35,8 +35,8 @@ NodeLink::NodeLink(const std::string& path, int baud) {
 }
 
 void NodeLink::reopen(const std::string& path, int baud) {
-    // 先析构旧 port(关掉旧 fd)再开新的。解析器状态一并重置:
-    // 换设备后残留的半截帧毫无意义,留着只会让第一帧被当成噪声丢掉。
+    // 先析构旧 port 关闭旧 fd,再打开新的。解析器状态一并重置:
+    // 换设备后残留的半截帧无意义,保留它只会导致新链路的第一帧被当作噪声丢弃。
     port_.reset();
     port_ = std::make_unique<SerialPort>(path.c_str(), toBaud(baud), /*nonblock=*/true);
     LOG_INFO("node link reopened: %s @ %d", path.c_str(), baud);
@@ -48,15 +48,15 @@ void NodeLink::drainAndParse() {
         const ssize_t n = ::read(port_->get(), buf, sizeof(buf));
         if (n < 0) {
             if (errno == EINTR)  continue;   // 被信号打断,重试
-            if (errno == EAGAIN) break;      // 读空,ET 下的正常退出条件
+            if (errno == EAGAIN) break;      // 已读空,ET 下的正常退出条件
             LOG_ERROR("serial read error: %s", strerror(errno));
             break;
         }
         if (n == 0) {
-            LOG_WARN("%s", "serial EOF (peer closed?)");   // 对端关闭(socat 那头)
+            LOG_WARN("%s", "serial EOF (peer closed?)");
             break;
         }
-        // 批量读、逐字节喂 FSM
+        // 批量读入,逐字节驱动 FSM
         parser_.feed(buf, static_cast<std::size_t>(n));
     }
 }

@@ -26,9 +26,9 @@ class Buffer {
 
     void retrieve(size_t n) {
         if (n < readableBytes()) {
-            readerIndex_ += n;        // 还有剩余数据,只推进读游标
+            readerIndex_ += n;        // 尚有剩余数据,只推进读游标
         } else {
-            retrieveAll();            // n == readableBytes(),全消费完,游标归零复用
+            retrieveAll();            // 全部消费,游标归零以复用空间
         }
     }
 
@@ -39,7 +39,7 @@ class Buffer {
     }
 
     void append(const char* data, size_t len) {
-        ensureWritableBytes(len);    // ← 先保证有 len 的可写空间
+        ensureWritableBytes(len);
         std::copy(data, data + len, buffer_.data() + writerIndex_);
         writerIndex_ += len;
     }
@@ -58,23 +58,23 @@ class Buffer {
 
     void ensureWritableBytes(size_t len) {
         if (writableBytes() >= len) {
-            return;                   // 空间够,直接返回
+            return;
         }
-        // 空间不够,腾挪 or 扩容
+        // 空间不足:优先腾挪,不足再扩容
         makeSpace(len);
     }
 
     void makeSpace(size_t len) {
         if (readerIndex_ + writableBytes() >= len) {
-            // 情况 A:已读区 + 尾部空闲 够用,不扩容,把数据往前挪
+            // 已读区 + 尾部空闲足够,把待读数据前移以复用已读区,免去扩容
             size_t readable = readableBytes();
-            std::copy(buffer_.data() + readerIndex_,      // 待读数据起点
-                    buffer_.data() + writerIndex_,      // 待读数据终点
-                    buffer_.data());                    // 挪到最前面
+            std::copy(buffer_.data() + readerIndex_,
+                    buffer_.data() + writerIndex_,
+                    buffer_.data());
             readerIndex_ = 0;
             writerIndex_ = readerIndex_ + readable;
         } else {
-            // 情况 B:真不够,扩容
+            // 腾挪后仍不足,扩容
             buffer_.resize(writerIndex_ + len);
         }
     }

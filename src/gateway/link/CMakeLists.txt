@@ -1,12 +1,10 @@
-# ============================================================
-# link 层:与 STM32 节点的链路
+# link 层:与 STM32 节点的链路。
 #
-#   NodeLink        串口收发 + 组帧解帧(碰 fd)
-#   CommandTracker  在途命令表(纯逻辑,零 fd,可完全单测)
+#   NodeLink        串口收发与组帧解帧,持有 fd
+#   CommandTracker  在途命令表,纯逻辑、不持有 fd,可完全单测
 #
-# 两者刻意分开:碰 fd 的部分测起来要 socat,不碰 fd 的部分注入假时钟就能测遍。
-# 把它们揉在一起,后者就会被前者拖下水 —— 这正是重构前的状况。
-# ============================================================
+# 两者分开是为了让 CommandTracker 不被 fd 依赖拖累:验证它只需注入假时钟,
+# 而验证 NodeLink 需要 socat 提供虚拟串口。
 add_library(gw_link STATIC
     NodeLink.cpp
     CommandTracker.cpp
