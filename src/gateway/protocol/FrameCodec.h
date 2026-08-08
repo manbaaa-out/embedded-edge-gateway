@@ -22,6 +22,7 @@ struct Frame {
 };
 
 // 组装一帧并返回完整字节,可直接交给 SerialPort::write;参数非法时返回空 vector。
+// payload 长度须 <= EDGE_PAYLOAD_MAX,超出即属参数非法,绝不会被截断后组成帧。
 // payload 须已包含 seq —— seq 由上层命令管理分配,重发时复用同一个值。
 std::vector<uint8_t> buildFrame(uint8_t type, const std::vector<uint8_t>& payload);
 

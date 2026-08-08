@@ -13,3 +13,11 @@ gateway_add_test(protocol_conformance_test
     LIBS    edge_proto
     LABELS  "unit;protocol;conformance"
 )
+
+# 上面两个测的是与固件共享的 C 核心,本 target 测的是网关独有的 C++ 封装层,
+# 故链接 gw_protocol 而非 edge_proto。
+gateway_add_test(frame_codec_test
+    SOURCES FrameCodecTest.cpp
+    LIBS    gw_protocol
+    LABELS  "unit;protocol"
+)

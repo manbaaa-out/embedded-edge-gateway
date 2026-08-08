@@ -38,7 +38,7 @@ extern "C" {
 #define EDGE_HDR1 0x55u
 
 #define EDGE_LEN_MIN 1u  /* 只有 TYPE、无 payload(心跳帧) */
-#define EDGE_LEN_MAX 64u /* 业务最大 33B 取 2 倍余量向上取 2 的幂(§3.2) */
+#define EDGE_LEN_MAX 64u /* 规划上限 LEN=17 的约 4 倍余量,取 2 的幂(§3.2) */
 
 #define EDGE_PAYLOAD_MAX (EDGE_LEN_MAX - 1u)         /* 63:LEN 含 TYPE 一字节 */
 #define EDGE_FRAME_MIN (2u + 1u + 1u + 2u)           /* 6:心跳帧整帧长度 */
