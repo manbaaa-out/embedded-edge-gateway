@@ -4,6 +4,7 @@
 #include "gateway/io/http/HttpRequest.h"
 #include "gateway/io/http/WebAsset.h"   // kIndexHtml 等,由 CMake 在编译期从 assets/ 嵌入
 
+#include <algorithm>
 #include <map>
 #include <vector>
 #include <string>
@@ -81,7 +82,25 @@ static std::string monitorPage() {
     return kIndexHtml;
 }
 
-static std::string handleHttpRequest(const std::string& rawPath, Database& roDb) {
+int clampReportN(const std::string& raw, int default_n) {
+    // 默认值先夹紧:report_n 只被校验 > 0,配成 5000 也能过校验,
+    // 不夹就等于让配置文件绕过这里的上限。
+    const int fallback = std::clamp(default_n, 1, kMaxReportN);
+    if (raw.empty()) return fallback;
+
+    int n = 0;
+    // stoi 的宽松("12abc" → 12)是此前就有的行为,读接口上无害,故原样保留 ——
+    // 与 translateCommand 的严格解析不同:那边的数字要写进设备。
+    try {
+        n = std::stoi(raw);
+    } catch (...) {
+        return fallback;
+    }
+    return (n < 1 || n > kMaxReportN) ? fallback : n;
+}
+
+static std::string handleHttpRequest(const std::string& rawPath, Database& roDb,
+                                     const HttpRuntimeConfig& rt) {
     std::string path, query;
     splitPathQuery(rawPath, path, query);
 
@@ -105,11 +124,9 @@ static std::string handleHttpRequest(const std::string& rawPath, Database& roDb)
                                 "{\"error\":\"missing dev param\"}");
         }
 
-        int n = 10;
-        if (params.count("n")) {
-            try { n = std::stoi(params["n"]); } catch (...) { n = 10; }
-        }
-        if (n <= 0 || n > 1000) n = 10;
+        const auto it = params.find("n");
+        const int  n  = clampReportN(it != params.end() ? it->second : std::string(),
+                                     rt.report_n);
 
         auto rows = roDb.query(dev, n);
         return makeResponse(200, "OK", "application/json", rowsToJson(rows));
@@ -150,18 +167,31 @@ struct HttpConn {
 static std::map<int, HttpConn> g_conns;
 
 // ---- 服务主循环 ----
-void runHttpServer(Database& roDb) {
+void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config) {
     int listen_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+    if (listen_fd < 0) { LOG_ERROR("http socket() failed: %s", strerror(errno)); return; }
     int opt = 1;
     setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(8888);
+    addr.sin_port = htons(static_cast<uint16_t>(port));   // 端口范围由配置校验保证
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    bind(listen_fd, (const sockaddr*)&addr, sizeof(addr));
-    listen(listen_fd, 10);
+
+    // 端口一旦可配,bind 失败就成了用户能触发的情形(特权端口、端口被占)。
+    // 此前端口写死 8888,失败几乎不可能,故返回值被忽略;现在必须报出来,
+    // 否则日志会说"已启动"而实际一个连接都收不到。
+    if (bind(listen_fd, (const sockaddr*)&addr, sizeof(addr)) < 0) {
+        LOG_ERROR("http bind :%d failed: %s", port, strerror(errno));
+        close(listen_fd);
+        return;
+    }
+    if (listen(listen_fd, 10) < 0) {
+        LOG_ERROR("http listen :%d failed: %s", port, strerror(errno));
+        close(listen_fd);
+        return;
+    }
 
     int timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
     if (timerfd == -1) { perror("timerfd_create"); return; }
@@ -171,24 +201,25 @@ void runHttpServer(Database& roDb) {
     if (timerfd_settime(timerfd, 0, &value, NULL) == -1) { perror("settime"); return; }
 
     EventLoop loop;
-    const int TIMEOUT = 5;
 
     std::shared_ptr<channel> timer_channel = std::make_shared<channel>();
     timer_channel->fd = timerfd;
     timer_channel->events = EPOLLIN;
-    timer_channel->on_read = [timerfd, &loop, TIMEOUT]() {
+    timer_channel->on_read = [timerfd, &loop, &config]() {
         uint64_t exp = 0;
         // 必须读掉计数,否则 LT 模式下会反复触发。读失败不影响后续超时扫描:
         // 扫描依据是各连接的 last_active,不依赖该计数。
         if (read(timerfd, &exp, sizeof(exp)) != static_cast<ssize_t>(sizeof(exp))) {
             LOG_DEBUG("%s", "http timerfd read short");
         }
+        // A 档:每次扫描现取,改完配置发 SIGHUP 后下一秒即生效,无需重启
+        const int timeout_s = config().idle_timeout_s;
         time_t now = time(nullptr);
         std::vector<int> timeout_fds;
         loop.forEachChannel([&](channel* ch) {
             if (ch->fd == timerfd) return;
             if (ch->timeout_exempt) return;
-            if (now - ch->last_active > TIMEOUT) timeout_fds.push_back(ch->fd);
+            if (now - ch->last_active > timeout_s) timeout_fds.push_back(ch->fd);
         });
         for (int fd : timeout_fds) {
             printf("[http][timer] fd=%d idle timeout, closing\n", fd);
@@ -202,7 +233,7 @@ void runHttpServer(Database& roDb) {
     listen_channel->fd = listen_fd;
     listen_channel->events = EPOLLIN | EPOLLET;
     listen_channel->timeout_exempt = true;
-    listen_channel->on_read = [listen_fd, &loop, &roDb]() {
+    listen_channel->on_read = [listen_fd, &loop, &roDb, &config]() {
         while (1) {
             int client_fd = accept4(listen_fd, NULL, NULL, SOCK_NONBLOCK);
             if (client_fd < 0) {
@@ -218,7 +249,7 @@ void runHttpServer(Database& roDb) {
             cc->last_active = time(nullptr);
             channel* ch_raw = cc.get();
 
-            cc->on_read = [client_fd, &loop, ch_raw, &roDb]() {
+            cc->on_read = [client_fd, &loop, ch_raw, &roDb, &config]() {
                 HttpConn& conn = g_conns[client_fd];
                 while (1) {
                     char tmp[4096];
@@ -236,7 +267,9 @@ void runHttpServer(Database& roDb) {
                         while (true) {
                             ParseResult r = conn.req.parse(&conn.buf);
                             if (r == ParseResult::kComplete) {
-                                std::string resp = handleHttpRequest(conn.req.path(), roDb);
+                                // 每个请求现取一次 A 档配置,而非启动时定死
+                                std::string resp =
+                                    handleHttpRequest(conn.req.path(), roDb, config());
                                 sendData(loop, ch_raw, resp.data(), resp.size());
                                 conn.req.reset();
                             } else if (r == ParseResult::kIncomplete) {
@@ -267,7 +300,7 @@ void runHttpServer(Database& roDb) {
     };
     loop.addChannel(listen_channel);
 
-    printf("[http] monitor server on :8888  (open http://<ip>:8888/ in browser)\n");
+    printf("[http] monitor server on :%d  (open http://<ip>:%d/ in browser)\n", port, port);
     loop.loop();
 }
 

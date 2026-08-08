@@ -47,11 +47,20 @@ GatewayApp::GatewayApp() {
     client_ = std::make_shared<MqttClient>("gateway-main", cfg->mqtt_host, cfg->mqtt_port,
                                            cfg->mqtt_keepalive);
 
-    // HTTP 只读连接与监控线程。http_port 属 C 档不可热改,故取启动配置。
+    // HTTP 只读连接与监控线程。http_port 属 C 档不可热改,故取启动配置按值传入。
     // 线程 detach 且按值捕获 roDb 副本,即便成员 roDb_ 被换掉该副本仍持有连接;
     // 进程退出由 systemd 接管。
+    //
+    // idle_timeout / report_n 属 A 档,若一并在此取值就等于把它们降级成 C 档。
+    // 故传下去的是取值器而非取好的值,由 HTTP 线程在每次用时现取 —— io 层因此
+    // 不必知道 ConfigManager 的存在,配置从哪来是 app 层的事。
     roDb_        = std::make_shared<Database>(cfg->db_path, true);
-    http_thread_ = std::thread([roDb = roDb_] { runHttpServer(*roDb); });
+    http_thread_ = std::thread([roDb = roDb_, port = cfg->http_port] {
+        runHttpServer(*roDb, port, [] {
+            auto c = ConfigManager::current();
+            return HttpRuntimeConfig{c->idle_timeout, c->report_n};
+        });
+    });
     http_thread_.detach();
     LOG_INFO("http monitor thread started on :%d", cfg->http_port);
 

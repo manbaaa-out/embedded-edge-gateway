@@ -4,3 +4,10 @@ gateway_add_test(http_request_test
     LIBS    gw_http
     LABELS  "unit;io"
 )
+
+# 查询参数归一:请求带的 n 与配置给的默认值之间的边界
+gateway_add_test(http_server_test
+    SOURCES HttpServerTest.cpp
+    LIBS    gw_http
+    LABELS  "unit;io"
+)
