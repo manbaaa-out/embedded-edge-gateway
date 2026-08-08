@@ -191,10 +191,9 @@ private:
         const uint16_t lux      = static_cast<uint16_t>(100 + (tick_ * 7) % 900);
 
         if (!roll(opt_.drop_uplink)) {
-            uint8_t dht[5];
+            uint8_t dht[4];
             edge_u16_be_write(&dht[0], temp_x10);
             edge_u16_be_write(&dht[2], humi_x10);
-            dht[4] = static_cast<uint8_t>((dht[0] + dht[1] + dht[2] + dht[3]) & 0xFF);
             sendFrame(EDGE_TYPE_DHT11, dht, sizeof dht);
         }
         if (!roll(opt_.drop_uplink)) {

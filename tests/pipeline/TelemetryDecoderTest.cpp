@@ -14,7 +14,7 @@ Frame frame(uint8_t type, std::vector<uint8_t> payload) {
 
 // 温湿度帧拆成两条记录,数值是定点值 ÷10(§3.4:25.3℃ → 253)
 TEST(TelemetryDecoder, Dht11SplitsIntoTemperatureAndHumidity) {
-    const auto r = decodeTelemetry(frame(EDGE_TYPE_DHT11, {0x00, 0xFD, 0x02, 0x5D, 0x00}));
+    const auto r = decodeTelemetry(frame(EDGE_TYPE_DHT11, {0x00, 0xFD, 0x02, 0x5D}));
 
     ASSERT_EQ(r.size(), 2u);
     EXPECT_EQ(r[0].device, "temperature");
@@ -68,7 +68,7 @@ TEST(TelemetryDecoder, HeartbeatProducesNothing) {
 // 长度口径统一取自 edge_min_payload_len。
 TEST(TelemetryDecoder, ShortPayloadIsDroppedNotMisread) {
     EXPECT_TRUE(decodeTelemetry(frame(EDGE_TYPE_DHT11, {0x00, 0xFD})).empty())
-        << "DHT11 要 5 字节,给 2 字节必须丢";
+        << "DHT11 要 4 字节,给 2 字节必须丢";
     EXPECT_TRUE(decodeTelemetry(frame(EDGE_TYPE_BH1750, {0x01})).empty());
     EXPECT_TRUE(decodeTelemetry(frame(EDGE_TYPE_STATUS, {})).empty());
 }
@@ -90,6 +90,16 @@ TEST(TelemetryDecoder, ExtraPayloadBytesAreIgnored) {
 
     ASSERT_EQ(r.size(), 1u);
     EXPECT_DOUBLE_EQ(r[0].value, 400.0);
+}
+
+// v1.3 删去了 0x01 尾随的和校验字节。长度校验只卡下限,故未升级的节点发来的
+// 5 字节旧帧仍能正确解出 —— 升级顺序得以是「先网关后固件」,中间窗口期不丢数据。
+TEST(TelemetryDecoder, LegacyDht11FrameWithTrailingChecksumStillDecodes) {
+    const auto r = decodeTelemetry(frame(EDGE_TYPE_DHT11, {0x00, 0xFD, 0x02, 0x5D, 0x5C}));
+
+    ASSERT_EQ(r.size(), 2u);
+    EXPECT_DOUBLE_EQ(r[0].value, 25.3);
+    EXPECT_DOUBLE_EQ(r[1].value, 60.5);
 }
 
 // 边界值:0 与 uint16 上限均应如实解出

@@ -5,7 +5,7 @@
  * 网关与 STM32 传感节点之间串口协议的权威定义。
  *
  * 本文件是协议的单一真相,两端编译同一份副本。docs/protocol.md 是其散文版说明,
- * 两者不一致时以本文件为准。协议版本 v1.2,变更记录见 docs/protocol.md §9。
+ * 两者不一致时以本文件为准。协议版本 v1.3,变更记录见 docs/protocol.md §9。
  *
  * 可移植性契约(由 CI 的 arm-none-eabi 编译 job 保证):
  *   - 纯 C99,不含 malloc / stdio / 平台头,可直接编入 STM32 固件
@@ -22,7 +22,7 @@ extern "C" {
 
 /* ---- 协议版本 ---- */
 #define EDGE_PROTO_VERSION_MAJOR 1
-#define EDGE_PROTO_VERSION_MINOR 2
+#define EDGE_PROTO_VERSION_MINOR 3
 
 /*
  * 帧布局(docs/protocol.md §2、§3.2)
@@ -53,7 +53,7 @@ extern "C" {
  */
 typedef enum {
     /* ---- 上行:STM32 → 网关 ---- */
-    EDGE_TYPE_DHT11 = 0x01,      /* 温湿度:温 2B + 湿 2B + 校验 1B(均 ×10 大端) */
+    EDGE_TYPE_DHT11 = 0x01,      /* 温湿度:温 2B + 湿 2B(均 ×10 大端) */
     EDGE_TYPE_BH1750 = 0x02,     /* 光照:  2B 大端 uint16,单位 lux */
     EDGE_TYPE_HEARTBEAT = 0x03,  /* 心跳:  无 payload */
     EDGE_TYPE_STATUS = 0x04,     /* 设备状态:1B bitmask,见 EDGE_STATUS_BIT_* */
@@ -129,7 +129,8 @@ static inline void edge_u16_be_write(uint8_t* p, uint16_t v) {
 static inline int edge_min_payload_len(uint8_t type) {
     switch (type) {
     case EDGE_TYPE_DHT11:
-        return 5; /* 温 2B + 湿 2B + 校验 1B */
+        return 4; /* 温 2B + 湿 2B。v1.3 前尾随一字节和校验,已删:它被帧尾
+                   * CRC16 完整覆盖,是套在强校验里的弱校验,且两端从不验它 */
     case EDGE_TYPE_BH1750:
         return 2;
     case EDGE_TYPE_HEARTBEAT:

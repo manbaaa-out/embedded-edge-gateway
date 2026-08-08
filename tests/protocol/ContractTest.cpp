@@ -76,7 +76,7 @@ TEST(Contract, ReservedTypesAreNotInAnySegment) {
 
 // ---- payload 长度校验 ----
 TEST(Contract, MinPayloadLenMatchesTypeDictionary) {
-    EXPECT_EQ(edge_min_payload_len(EDGE_TYPE_DHT11), 5);
+    EXPECT_EQ(edge_min_payload_len(EDGE_TYPE_DHT11), 4);
     EXPECT_EQ(edge_min_payload_len(EDGE_TYPE_BH1750), 2);
     EXPECT_EQ(edge_min_payload_len(EDGE_TYPE_HEARTBEAT), 0);
     EXPECT_EQ(edge_min_payload_len(EDGE_TYPE_STATUS), 1);
