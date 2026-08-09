@@ -23,10 +23,10 @@ SIM_BIN="$BUILD_DIR/tools/node-sim/node-sim"
 
 DB_PATH=/tmp/e2e_vserial.db
 CONF=/tmp/e2e_vserial.conf
-# 注意:网关的结构化日志由 AsyncLogger 写到固定路径 /tmp/gateway.log,
-# 不走 stdout —— 这里两个都留着:GW_OUT 抓启动期的致命错,GW_LOG 抓运行日志。
+# 网关全部日志(含 AsyncLogger)都走 stderr,起进程时已 2>&1 重定向到这个文件,
+# 所以启动期的致命错与运行期日志同在一处 —— GW_LOG 保留只是为了少改下面的断言。
 GW_OUT=/tmp/e2e_vserial_gateway.out
-GW_LOG=/tmp/gateway.log
+GW_LOG="$GW_OUT"
 SIM_LOG=/tmp/e2e_vserial_sim.log
 ACK_LOG=/tmp/e2e_vserial_ack.log
 TTY_GW=/tmp/ttyV0
@@ -68,7 +68,6 @@ for _ in $(seq 20); do [[ -e "$TTY_GW" && -e "$TTY_NODE" ]] && break; sleep 0.1;
 
 # ---------- 配置 + 起网关 ----------
 rm -f "$DB_PATH" "$GW_OUT" "$ACK_LOG"
-: > "$GW_LOG"      # 清空而非删除:AsyncLogger 已按路径持有 fd
 sed -e "s#^serial_path.*=.*#serial_path = $TTY_GW#" \
     -e "s#^db_path.*=.*#db_path = $DB_PATH#" \
     "$REPO_ROOT/deploy/gateway.conf" > "$CONF"

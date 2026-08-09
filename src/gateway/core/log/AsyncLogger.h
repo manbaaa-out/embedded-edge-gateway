@@ -12,6 +12,9 @@ namespace gateway {
 class AsyncLogger {
 
 public:
+    // filepath 为空表示写 stderr(fd 2),这也是进程单例走的路径:
+    // 交由 systemd/journald 负责轮转与持久化,进程自己不管文件生命周期。
+    // 传入非空路径则打开该文件追加写,供单测与非 systemd 部署使用。
     explicit AsyncLogger(const std::string& filepath, int flush_intercal_sec = 3);
 
     ~AsyncLogger();

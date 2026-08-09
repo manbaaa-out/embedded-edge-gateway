@@ -6,7 +6,7 @@
 add_library(gw_serial STATIC
     serial/SerialPort.cpp
 )
-target_link_libraries(gw_serial PUBLIC gateway_includes PRIVATE gateway_options)
+target_link_libraries(gw_serial PUBLIC gateway_includes PRIVATE gateway_options gw_log)
 
 # ---- event:epoll Reactor 与 channel 抽象 ----
 # channel 把 socket / timerfd / signalfd / eventfd 统一为同一种事件源,
@@ -14,7 +14,7 @@ target_link_libraries(gw_serial PUBLIC gateway_includes PRIVATE gateway_options)
 add_library(gw_event STATIC
     event/EventLoop.cpp
 )
-target_link_libraries(gw_event PUBLIC gateway_includes PRIVATE gateway_options)
+target_link_libraries(gw_event PUBLIC gateway_includes PRIVATE gateway_options gw_log)
 
 # ---- http:内嵌监控页与只读查询接口 ----
 # 编译期把 http/assets/ 下的静态资源嵌入二进制,实现单文件部署与离线自包含。

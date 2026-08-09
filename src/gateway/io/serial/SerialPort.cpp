@@ -1,6 +1,6 @@
 #include "gateway/io/serial/SerialPort.h"
+#include "gateway/core/log/Logger.h"
 
-#include <cstdio>
 #include <cstring>
 #include <cerrno>
 #include <stdexcept>
@@ -39,8 +39,7 @@ SerialPort::SerialPort(const char* path, speed_t baud, bool nonblock) {
 SerialPort::~SerialPort() noexcept {
     if (fd_ != -1) {
         if (close(fd_) == -1) {
-            fprintf(stderr, "warning: close(%d) failed: %s\n",
-                    fd_, strerror(errno));
+            LOG_WARN("close(serial fd=%d) failed: %s", fd_, strerror(errno));
         }
     }
 }

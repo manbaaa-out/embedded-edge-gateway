@@ -11,4 +11,5 @@ target_include_directories(gw_cloud PUBLIC ${MOSQUITTO_INC})
 target_link_libraries(gw_cloud
     PUBLIC  gateway_includes edge_proto ${MOSQUITTO_LIB}
     PRIVATE gateway_options
+    PUBLIC  gw_log                # MqttClient.h 是 header-only,LOG_* 随头文件外传
 )

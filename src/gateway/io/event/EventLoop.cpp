@@ -1,4 +1,5 @@
 #include "gateway/io/event/EventLoop.h"
+#include "gateway/core/log/Logger.h"
 #include <sys/socket.h>
 #include <cerrno>
 #include <unistd.h>
@@ -21,8 +22,7 @@ namespace gateway{
     EventLoop::~EventLoop() noexcept{
         if (epoll_fd_ != -1){
             if (close(epoll_fd_) == -1) {
-                fprintf(stderr, "warning: close(%d) failed: %s\n",
-                        epoll_fd_, strerror(errno));
+                LOG_WARN("close(epoll_fd=%d) failed: %s", epoll_fd_, strerror(errno));
             }
         }
     }
@@ -89,8 +89,7 @@ namespace gateway{
 
     void EventLoop::removeChannel(int fd) {
         if (epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, fd, NULL) == -1) {
-            fprintf(stderr, "warning: epoll_ctl DEL(fd=%d) failed: %s\n",
-                    fd, strerror(errno));
+            LOG_WARN("epoll_ctl DEL(fd=%d) failed: %s", fd, strerror(errno));
         }
 
         auto it = channels_.find(fd);

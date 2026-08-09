@@ -225,7 +225,7 @@ void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config) {
             if (now - ch->last_active > timeout_s) timeout_fds.push_back(ch->fd);
         });
         for (int fd : timeout_fds) {
-            printf("[http][timer] fd=%d idle timeout, closing\n", fd);
+            LOG_INFO("http fd=%d idle timeout, closing", fd);
             loop.removeChannel(fd);
             g_conns.erase(fd);
         }
@@ -303,7 +303,7 @@ void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config) {
     };
     loop.addChannel(listen_channel);
 
-    printf("[http] monitor server on :%d  (open http://<ip>:%d/ in browser)\n", port, port);
+    LOG_INFO("http monitor server on :%d (open http://<ip>:%d/ in browser)", port, port);
     loop.loop();
 }
 

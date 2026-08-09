@@ -24,8 +24,15 @@ namespace gateway {
         return static_cast<ssize_t>(total);
     }
 
+    // 进程单例写 stderr,不写文件。两个理由:
+    // 一是全进程只剩一个日志出口 —— 直接 fprintf(stderr) 的那几处已改走 LOG_*,
+    //   同一次故障的线索不会再分散在文件与 journal 两个地方;
+    // 二是原先的 /tmp/gateway.log 在多数发行版上是 tmpfs,重启即失,
+    //   而"排查一次开机后的故障"恰恰是最需要日志的场景。
+    // 交给 journald 之后,轮转、持久化(Storage=persistent)、按时间/单元过滤
+    // 都是它的既有能力,进程侧不必自己实现。
     AsyncLogger& AsyncLogger::instance() {
-        static AsyncLogger inst("/tmp/gateway.log", 3);
+        static AsyncLogger inst("", 3);
         return inst;
     }
 
@@ -47,9 +54,12 @@ namespace gateway {
         if (thread_.joinable()) thread_.join();
     }
 
+    // 本文件内的报错一律直接 fprintf(stderr),不走 LOG_*:
+    // LOG_* 的终点就是本类,日志系统自身的故障若再交给它上报,轻则递归,
+    // 重则在持锁路径上自我阻塞。这是唯一容许绕开统一日志通道的地方。
     void AsyncLogger::append(const char* msg, size_t len) {
         if (len > kBufferSize) {
-            fprintf(stderr, "日志信息将被截断");
+            fprintf(stderr, "AsyncLogger: 日志信息将被截断\n");
             len = kBufferSize;
         }
 
@@ -75,7 +85,12 @@ namespace gateway {
     }
 
     void AsyncLogger::flushThread() {
-        int fd = open(filepath_.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+        // 空路径 = 写 stderr。此时 fd 是借来的,不能 close:关掉 fd 2 之后
+        // 后面所有诊断输出(含本函数自己的报错)都会静默消失。
+        const bool to_stderr = filepath_.empty();
+
+        int fd = to_stderr ? STDERR_FILENO
+                           : open(filepath_.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
         if (fd < 0) {
             fprintf(stderr, "AsyncLogger: open '%s' failed: %s\n",
                    filepath_.c_str(), strerror(errno));
@@ -155,7 +170,7 @@ namespace gateway {
 
         }
 
-        close(fd);
+        if (!to_stderr) close(fd);
 
     }
 }

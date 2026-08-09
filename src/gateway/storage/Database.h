@@ -3,7 +3,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
-#include <cstdio>
+#include "gateway/core/log/Logger.h"
 #include "gateway/storage/Statement.h"
 #include <vector>
 
@@ -79,7 +79,7 @@ public:
         insertStmt_->bind(2, value);
         insertStmt_->bind(3, ts);
         if (insertStmt_->step() != SQLITE_DONE) {
-            fprintf(stderr, "[db] insert step failed: %s\n", sqlite3_errmsg(db_));
+            LOG_ERROR("db insert step failed: %s", sqlite3_errmsg(db_));
         }
         insertStmt_->reset();
     }
@@ -112,7 +112,7 @@ private:
     void execNoThrow(const char* sql) {
         char* err = nullptr;
         if (sqlite3_exec(db_, sql, nullptr, nullptr, &err) != SQLITE_OK) {
-            fprintf(stderr, "[db] pragma warn: %s\n", err ? err : "?");
+            LOG_WARN("db pragma failed: %s", err ? err : "?");
             sqlite3_free(err);
         }
     }

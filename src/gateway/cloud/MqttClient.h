@@ -4,9 +4,10 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
-#include <cstdio>
 #include <utility>
 #include <vector>
+
+#include "gateway/core/log/Logger.h"
 
 namespace gateway {
 
@@ -113,16 +114,17 @@ public:
     //       库内部用了哪几把锁 —— 那是本项目看不见也控制不了的实现细节,
     //       不该让正确性依赖它。
     //
-    // 附带的好处:失败分支的 fprintf 不再落在临界区里。broker 断开时每条 publish
-    // 都会失败,若带锁,六条线程会一起排队做 stderr 写(无缓冲,真系统调用),
-    // 恰好在最需要吞吐的时刻自我放大。
+    // 附带的好处:失败分支的日志不再落在临界区里。broker 断开时每条 publish
+    // 都会失败,若带锁,六条线程会一起排队记这条日志,恰好在最需要吞吐的时刻
+    // 自我放大。改走 LOG_WARN 后单次代价已从"无缓冲 stderr 写"降到"取一次
+    // AsyncLogger 的锁 + 一次 memcpy",但把它留在锁外仍然更好。
     void publish(const std::string& topic, const std::string& payload,
                  int qos = 0, bool retain = false) {
         int rc = mosquitto_publish(mosq_, nullptr, topic.c_str(),
                                    static_cast<int>(payload.size()),
                                    payload.data(), qos, retain);
         if (rc != MOSQ_ERR_SUCCESS)
-            fprintf(stderr, "[mqtt] publish failed: %s\n", mosquitto_strerror(rc));
+            LOG_WARN("mqtt publish failed: %s", mosquitto_strerror(rc));
     }
 
     // 起网络线程,并把本对象推进运行期。此后配置期接口一律拒绝。
@@ -146,14 +148,14 @@ private:
     static void onConnectTrampoline(struct mosquitto* mosq, void* obj, int rc) {
         auto* self = static_cast<MqttClient*>(obj);
         if (rc != 0) {
-            fprintf(stderr, "[mqtt] connect refused: %s\n", mosquitto_connack_string(rc));
+            LOG_ERROR("mqtt connect refused: %s", mosquitto_connack_string(rc));
             return;
         }
         for (const auto& s : self->subs_) {
             int r = mosquitto_subscribe(mosq, nullptr, s.first.c_str(), s.second);
             if (r != MOSQ_ERR_SUCCESS)
-                fprintf(stderr, "[mqtt] re-subscribe '%s' failed: %s\n",
-                        s.first.c_str(), mosquitto_strerror(r));
+                LOG_ERROR("mqtt re-subscribe '%s' failed: %s",
+                          s.first.c_str(), mosquitto_strerror(r));
         }
     }
 
