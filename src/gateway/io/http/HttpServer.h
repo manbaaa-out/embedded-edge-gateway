@@ -31,11 +31,18 @@ int clampReportN(const std::string& raw, int default_n);
 
 // 在调用线程中阻塞运行 HTTP 监控服务:epoll Reactor + timerfd 空闲连接回收 + HTTP 解析。
 // roDb 须为只读连接,与主链路的写连接配合,依靠 SQLite 的 WAL 模式实现读写并发。
-// 本函数内部永久阻塞,通常放在独立 std::thread 中运行。
+// 通常放在独立 std::thread 中运行,直到 should_stop 返回 true 才返回。
 //
-// 两个配置入口的形态差异是有意的,它把配置分档编码进了签名:
-//   port   —— C 档,进程生命周期内不变,按值传一次即可;
-//   config —— A 档,可在运行期改,故传取值器而非取好的值。
-void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config);
+// 三个入口的形态差异是有意的,它把「这个值什么时候会变」编码进了签名:
+//   port        —— C 档,进程生命周期内不变,按值传一次即可;
+//   config      —— A 档,可在运行期改,故传取值器而非取好的值;
+//   should_stop —— 跨线程的停机意愿,同样是取值器。本函数在自己的 1 秒
+//                  timerfd 回调里轮询它,为 true 就退出循环 —— 于是调用方
+//                  可以 join 这条线程,而不必 detach 后听天由命。
+//                  代价是停机最多晚一个扫描周期(约 1 秒),换来的是进程能走完
+//                  析构:异步日志缓冲得以刷出,这正是停机日志此前会丢的原因。
+//                  传空表示永不停机(仅用于不关心退出的场合)。
+void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config,
+                   std::function<bool()> should_stop);
 
 }  // namespace gateway

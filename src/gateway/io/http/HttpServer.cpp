@@ -170,7 +170,8 @@ struct HttpConn {
 static std::map<int, HttpConn> g_conns;
 
 // ---- 服务主循环 ----
-void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config) {
+void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config,
+                   std::function<bool()> should_stop) {
     int listen_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (listen_fd < 0) { LOG_ERROR("http socket() failed: %s", strerror(errno)); return; }
     int opt = 1;
@@ -208,12 +209,20 @@ void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config) {
     std::shared_ptr<channel> timer_channel = std::make_shared<channel>();
     timer_channel->fd = timerfd;
     timer_channel->events = EPOLLIN;
-    timer_channel->on_read = [timerfd, &loop, &config]() {
+    timer_channel->on_read = [timerfd, &loop, &config, &should_stop]() {
         uint64_t exp = 0;
         // 必须读掉计数,否则 LT 模式下会反复触发。读失败不影响后续超时扫描:
         // 扫描依据是各连接的 last_active,不依赖该计数。
         if (read(timerfd, &exp, sizeof(exp)) != static_cast<ssize_t>(sizeof(exp))) {
             LOG_DEBUG("%s", "http timerfd read short");
+        }
+
+        // 停机意愿在本线程内检查、由本线程调 quit —— 见 EventLoop::quit 的约定。
+        // 放在超时扫描之前:既然要走了,就不必再花时间回收连接。
+        if (should_stop && should_stop()) {
+            LOG_INFO("%s", "http monitor stopping");
+            loop.quit();
+            return;
         }
         // A 档:每次扫描现取,改完配置发 SIGHUP 后下一秒即生效,无需重启
         const int timeout_s = config().idle_timeout_s;
@@ -305,6 +314,12 @@ void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config) {
 
     LOG_INFO("http monitor server on :%d (open http://<ip>:%d/ in browser)", port, port);
     loop.loop();
+
+    // 循环退出后 loop 析构,各 channel 随之 close 掉 listen_fd / timerfd / 连接 fd。
+    // g_conns 是文件作用域的,不随 loop 走,得手工清 —— 否则再起一次服务会看到
+    // 上一次遗留的连接上下文。
+    g_conns.clear();
+    LOG_INFO("%s", "http monitor stopped");
 }
 
 } // namespace gateway

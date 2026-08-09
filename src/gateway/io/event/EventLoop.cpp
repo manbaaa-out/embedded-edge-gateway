@@ -45,7 +45,9 @@ namespace gateway{
     }
 
     void EventLoop::loop() {
-        while (1) {
+        // 退出判定放在批末:本轮已派发的回调要跑完,dying_ 也要回收干净,
+        // 之后才返回 —— 半途 break 会让回调栈上的指针失去 dying_ 的保护。
+        while (running_.load(std::memory_order_relaxed)) {
             struct epoll_event events[1024];
             int n = epoll_wait(epoll_fd_, events, 1024, -1);
             if (n == -1) {

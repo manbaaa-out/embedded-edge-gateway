@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <cstdint>
 #include <map>
@@ -64,6 +65,15 @@ class EventLoop {
 
     void loop();
 
+    // 请求主循环退出:本轮事件派发与批末回收结束后 loop() 返回。
+    //
+    // 约定只在 loop 自己所在的线程里调用 —— 本项目两处都是如此(主 Reactor 在
+    // signalfd 回调里调,HTTP 在自己的 1 秒 timerfd 回调里调)。别的线程调它只是
+    // 置上标志,epoll_wait 仍阻塞在 -1 超时上,要等下一个事件才会醒来发现。
+    // 真要支持跨线程即时唤醒,得再挂一个 eventfd —— 那是另一件事,当前两处都
+    // 有自己的周期性事件兜底,不需要。
+    void quit() noexcept { running_.store(false, std::memory_order_relaxed); }
+
     void addChannel(std::shared_ptr<channel>);
     void removeChannel(int);
     void modifyChannel(channel*);
@@ -74,6 +84,7 @@ class EventLoop {
 
     private:
     int epoll_fd_ = -1;
+    std::atomic<bool> running_{true};
     std::map<int, std::shared_ptr<channel>> channels_;
     std::vector<std::shared_ptr<channel>> dying_;
 

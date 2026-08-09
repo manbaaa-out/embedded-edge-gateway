@@ -26,12 +26,20 @@ namespace {
 constexpr long kCmdScanIntervalNs = 200L * 1000 * 1000;
 }  // namespace
 
-bool GatewayApp::blockReloadSignal() {
-    sigset_t mask;
+// 本进程自己接管的三个信号。屏蔽与 signalfd 两处必须用同一份清单,
+// 少一个就意味着那个信号仍走默认动作 —— 而三者的默认动作都是终止进程。
+static void fillManagedSignals(sigset_t& mask) {
     sigemptyset(&mask);
-    sigaddset(&mask, SIGHUP);
+    sigaddset(&mask, SIGHUP);    // 热加载
+    sigaddset(&mask, SIGTERM);   // systemctl stop / systemd 停服务
+    sigaddset(&mask, SIGINT);    // 终端里 Ctrl-C
+}
+
+bool GatewayApp::blockManagedSignals() {
+    sigset_t mask;
+    fillManagedSignals(mask);
     if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
-        LOG_WARN("sigprocmask failed: %s — 热加载不可用", strerror(errno));
+        LOG_WARN("sigprocmask failed: %s — 热加载与优雅停机不可用", strerror(errno));
         return false;
     }
     return true;
@@ -48,29 +56,49 @@ GatewayApp::GatewayApp() {
     client_ = std::make_shared<MqttClient>("gateway-main", cfg->mqtt_host, cfg->mqtt_port,
                                            cfg->mqtt_keepalive);
 
-    // HTTP 只读连接与监控线程。http_port 属 C 档不可热改,故取启动配置按值传入。
-    // 线程 detach 且按值捕获 roDb 副本,即便成员 roDb_ 被换掉该副本仍持有连接;
-    // 进程退出由 systemd 接管。
-    //
-    // idle_timeout / report_n 属 A 档,若一并在此取值就等于把它们降级成 C 档。
-    // 故传下去的是取值器而非取好的值,由 HTTP 线程在每次用时现取 —— io 层因此
-    // 不必知道 ConfigManager 的存在,配置从哪来是 app 层的事。
-    roDb_        = std::make_shared<Database>(cfg->db_path, true);
-    http_thread_ = std::thread([roDb = roDb_, port = cfg->http_port] {
-        runHttpServer(*roDb, port, [] {
-            auto c = ConfigManager::current();
-            return HttpRuntimeConfig{c->idle_timeout, c->report_n};
-        });
-    });
-    http_thread_.detach();
-    LOG_INFO("http monitor thread started on :%d", cfg->http_port);
-
     pool_ = std::make_unique<ThreadPool>(cfg->worker_count);   // worker_count 属 C 档
     LOG_INFO("thread pool started (%d workers)", cfg->worker_count);
 
     pipeline_.emplace(*pool_);   // 依赖 pool_,须在其之后构造
 
     link_ = std::make_unique<NodeLink>(cfg->serial_path, cfg->serial_baud);
+
+    // HTTP 只读连接与监控线程,放在构造函数最后一步。
+    //
+    // 顺序是有讲究的:这条线程要被 join,而 join 只能在 ~GatewayApp 里做,
+    // 但构造中途抛异常时 ~GatewayApp【不会】被调用 —— 只有已构造完的成员会析构,
+    // 于是 ~thread 撞上一条 joinable 的线程,直接 std::terminate。
+    // 串口打不开(serial_path 写错、设备没插)恰恰是本构造函数最常见的失败,
+    // 所以把起线程放在所有可能抛的动作之后:线程存在时,构造已必然成功。
+    //
+    // roDb_ 仍在 db_ 之后创建 —— 只读连接要求库文件已存在,见 L10。
+    // 线程按值捕获 roDb 副本,即便成员 roDb_ 被换掉,该副本仍持有连接。
+    //
+    // idle_timeout / report_n 属 A 档,若一并在此取值就等于把它们降级成 C 档。
+    // 故传下去的是取值器而非取好的值,由 HTTP 线程在每次用时现取 —— io 层因此
+    // 不必知道 ConfigManager 的存在,配置从哪来是 app 层的事。
+    // should_stop 同理:io 层只知道"有人会告诉我该走了",不知道那是 SIGTERM。
+    roDb_        = std::make_shared<Database>(cfg->db_path, true);
+    http_thread_ = std::thread([this, roDb = roDb_, port = cfg->http_port] {
+        runHttpServer(
+            *roDb, port,
+            [] {
+                auto c = ConfigManager::current();
+                return HttpRuntimeConfig{c->idle_timeout, c->report_n};
+            },
+            [this] { return http_stop_.load(std::memory_order_relaxed); });
+    });
+    LOG_INFO("http monitor thread started on :%d", cfg->http_port);
+}
+
+// 先停 HTTP 线程,再让成员按声明逆序析构(见类头)。
+// 捕获 this 的那个 should_stop 闭包活在 HTTP 线程里,所以 join 必须早于
+// 本对象的任何成员被销毁 —— 析构函数体正是这个时机。
+GatewayApp::~GatewayApp() {
+    http_stop_.store(true, std::memory_order_relaxed);
+    if (http_thread_.joinable()) {
+        http_thread_.join();   // 最多等一个扫描周期(约 1 秒)
+    }
 }
 
 void GatewayApp::onFrame(const Frame& f) {
@@ -323,14 +351,13 @@ void GatewayApp::setupCmdTimer() {
 // 改为把信号转成可读 fd 接入 epoll,在主循环的安全上下文中处理。
 void GatewayApp::setupSignal() {
     sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGHUP);
-    // 屏蔽动作已由 blockReloadSignal 在创建任何线程之前完成;
-    // 此处仅把同一个 mask 交给 signalfd,声明它负责哪些信号。
+    fillManagedSignals(mask);
+    // 屏蔽动作已由 blockManagedSignals 在创建任何线程之前完成;
+    // 此处仅把同一份 mask 交给 signalfd,声明它负责哪些信号。
     sfd_ = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
     if (sfd_ == -1) {
-        LOG_WARN("signalfd failed: %s — 热加载不可用", strerror(errno));
-        return;   // 降级:采集不受影响,仅失去热加载
+        LOG_WARN("signalfd failed: %s — 热加载与优雅停机不可用", strerror(errno));
+        return;   // 降级:采集不受影响
     }
 
     auto ch     = std::make_shared<channel>();
@@ -340,13 +367,27 @@ void GatewayApp::setupSignal() {
         struct signalfd_siginfo si;
         // 必须读空,否则 LT 会反复触发
         while (::read(sfd_, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si))) {
-            if (si.ssi_signo == SIGHUP) reloadConfig();
+            switch (si.ssi_signo) {
+            case SIGHUP:
+                reloadConfig();
+                break;
+            case SIGTERM:
+            case SIGINT:
+                // quit() 只置标志,本轮回调跑完、批末回收之后 loop() 才返回。
+                // 之所以能在这里安全地调,是因为本回调就跑在 loop 自己的线程上。
+                LOG_INFO("signal %u received, shutting down", si.ssi_signo);
+                loop_.quit();
+                break;
+            default:
+                LOG_WARN("unexpected signal %u on signalfd", si.ssi_signo);
+                break;
+            }
         }
     };
     loop_.addChannel(ch);
 }
 
-// 四类事件源(串口数据、下行命令、超时重试、SIGHUP)统一挂在主线程的同一个 epoll 上。
+// 四类事件源(串口数据、下行命令、超时重试、信号)统一挂在主线程的同一个 epoll 上。
 int GatewayApp::run() {
     setupSerial();
     if (!setupDownlink()) return 1;   // 失败致命
@@ -354,7 +395,15 @@ int GatewayApp::run() {
     setupCmdTimer();                  // 失败降级
     setupSignal();                    // 失败降级
 
-    loop_.loop();   // 永久阻塞
+    loop_.loop();   // 阻塞至 SIGTERM / SIGINT
+
+    // 走到这里说明是被信号叫停的。返回之后依次发生:
+    //   ~GatewayApp   停 HTTP 线程并 join
+    //   成员逆序析构   pool_ drain 在飞 task → link_ 关串口 → client_ 停 mosquitto
+    //                 网络线程 → roDb_ / db_ 关连接
+    //   main 返回      静态对象析构 → ~AsyncLogger 把双缓冲里剩下的日志刷出去
+    // 最后这一步正是这次要的:停机原因不会再随缓冲一起消失。
+    LOG_INFO("%s", "main loop exited, shutting down");
     return 0;
 }
 
