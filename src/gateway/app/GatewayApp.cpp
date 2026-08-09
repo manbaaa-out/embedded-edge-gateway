@@ -203,7 +203,9 @@ void GatewayApp::reloadConfig() {
         LOG_INFO("%s", "db_path changed → reopening database");
         db_ = std::make_shared<Database>(ncfg->db_path);
     }
-    // MqttClient 不可移动,故整体换 shared_ptr。旧 client 析构时停 loop 并断连;
+    // MqttClient 不可移动,故整体换 shared_ptr。旧 client 析构时断连并 join 掉
+    // 网络线程(见 ~MqttClient),这一步会短暂阻塞主循环 —— 换 broker 是人工低频
+    // 操作,用一次可预期的停顿换「回调确定不再触发」这个前提,值。
     // 新 client 必须重新挂 handler 并重新订阅,否则下行链路中断。
     if (r.mqtt_changed) {
         LOG_INFO("%s", "mqtt config changed → reconnecting");
@@ -263,15 +265,28 @@ bool GatewayApp::setupDownlink() {
 void GatewayApp::startMqtt() {
     auto cfg = ConfigManager::current();
 
+    // handler 捕获它所属的那个 client 的裸指针,而不是回头读成员 client_。
+    //
+    // 读成员是错的:handler 跑在 mosquitto 线程上,而 reloadConfig 会在主线程给
+    // client_ 赋新值。shared_ptr 的引用计数是原子的,指针本身的读写不是,这就是
+    // 一处货真价实的数据竞争 —— 且换 client 时要先跑完阻塞的 mosquitto_connect,
+    // 窗口并不窄。
+    //
+    // 捕获裸指针则既躲开竞争,语义也更正:拒收原因本就该从「收到这条命令的那条
+    // 连接」发回去。指针的有效性由 ~MqttClient 保证 —— 它先 disconnect 再
+    // loop_stop(false) 等网络线程 join,handler 不可能跑在对象析构之后。
+    MqttClient* owner = client_.get();
+
     // 本 handler 在 mosquitto 线程执行,只做翻译与投递,不访问串口。
     // 初次挂载与重连后复用同一份定义,避免两处拷贝漂移。
-    client_->setMessageHandler([this](const std::string& topic, const std::string& payload) {
+    client_->setMessageHandler([this, owner](const std::string& topic,
+                                             const std::string& payload) {
         auto r = translateCommand(topic, payload);
         if (!r.ok) {
             LOG_WARN("downlink rejected: %s", r.error.c_str());
             // 拒绝原因回到 MQTT,避免命令无声消失。
-            // 注意此处由 mosquitto 线程调用 publish —— MqttClient 的锁因此不可省。
-            client_->publish("gateway/ack/rejected", r.error);
+            // publish 可跨线程并发调用,不需要外部串行化,见 MqttClient::publish。
+            owner->publish("gateway/ack/rejected", r.error);
             return;
         }
         cmd_queue_.push(std::move(r.cmd));
