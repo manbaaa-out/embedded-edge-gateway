@@ -58,6 +58,10 @@ namespace gateway{
                 channel* ch = static_cast<channel*>(events[i].data.ptr);
                 uint32_t revents = events[i].events;
 
+                // 同批内可能已被别的回调摘除（见 channel::dead）。指针仍有效，
+                // 但这条 channel 已不该再被驱动。
+                if (ch->dead) continue;
+
                 if (revents & EPOLLIN) {
                     ch->handleRead();
                 }
@@ -91,6 +95,7 @@ namespace gateway{
 
         auto it = channels_.find(fd);
         if (it != channels_.end()) {
+            it->second->dead = true;        // 同批后续事件不再驱动它
             dying_.push_back(it->second);   // 延迟回收，撑到批末
             channels_.erase(it);
         }

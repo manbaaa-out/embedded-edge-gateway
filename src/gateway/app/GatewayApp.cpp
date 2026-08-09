@@ -231,6 +231,9 @@ std::shared_ptr<channel> GatewayApp::makeSerialChannel() {
     ch->fd      = link_->fd();
     ch->events  = EPOLLIN | EPOLLET;   // ET 要求回调循环读至 EAGAIN
     ch->on_read = [this] { link_->drainAndParse(); };
+    // 串口 fd 归 SerialPort 所有,channel 只借来挂 epoll。不放弃所有权就是双重关闭,
+    // 且热加载换串口时关掉的会是新 fd —— 理由见 channel::owns_fd 的声明。
+    ch->owns_fd = false;
     return ch;
 }
 
