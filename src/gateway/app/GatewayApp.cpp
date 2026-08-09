@@ -1,6 +1,7 @@
 #include "gateway/app/GatewayApp.h"
 
 #include "gateway/core/config/Config.h"
+#include "gateway/core/format/Number.h"
 #include "gateway/core/log/Logger.h"
 #include "gateway/io/http/HttpServer.h"
 #include "gateway/pipeline/TelemetryDecoder.h"
@@ -117,7 +118,7 @@ void GatewayApp::onAckFrame(const Frame& f) {
         const double t = edge_u16_be_read(&f.payload[2]) / double(EDGE_TEMP_SCALE);
         const double h = edge_u16_be_read(&f.payload[4]) / double(EDGE_HUMI_SCALE);
         client_->publish("gateway/resp/" + seq_str,
-                         "ok," + std::to_string(t) + "," + std::to_string(h));
+                         "ok," + formatValue(t) + "," + formatValue(h));
     } else if (data_len >= 2) {
         client_->publish("gateway/resp/" + seq_str,
                          "ok," + std::to_string(edge_u16_be_read(&f.payload[2])));

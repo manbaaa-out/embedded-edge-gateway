@@ -46,5 +46,5 @@ target_link_libraries(gw_http
     PUBLIC  gateway_includes
     PRIVATE gateway_options
     PUBLIC  gw_event              # HttpServer.h 里出现 EventLoop / channel
-    PRIVATE gw_storage gw_log
+    PRIVATE gw_storage gw_log gw_format   # formatValue:JSON 里的数值格式
 )

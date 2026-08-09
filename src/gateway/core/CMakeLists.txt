@@ -19,6 +19,12 @@ target_link_libraries(gw_log
 add_library(gw_concurrent INTERFACE)
 target_link_libraries(gw_concurrent INTERFACE gateway_includes Threads::Threads)
 
+# ---- format:遥测数值的文本格式(纯函数,header-only)----
+# 被 pipeline(MQTT 上行)、app(查询应答)、io/http(JSON)三处共用,
+# 抽成独立 target 是为了让「谁在依赖这份格式约定」在链接图上看得见。
+add_library(gw_format INTERFACE)
+target_link_libraries(gw_format INTERFACE gateway_includes)
+
 # ---- config:解析 + 热加载(load-then-swap)----
 add_library(gw_config STATIC
     config/Config.cpp

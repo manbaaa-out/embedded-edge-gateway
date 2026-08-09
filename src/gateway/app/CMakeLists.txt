@@ -14,5 +14,5 @@ target_link_libraries(gw_app
             gw_serial gw_event gw_http
             gw_protocol gw_storage gw_cloud
             gw_link gw_pipeline
-    PRIVATE gateway_options
+    PRIVATE gateway_options gw_format   # formatValue:查询应答的数值格式
 )

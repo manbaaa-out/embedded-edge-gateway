@@ -8,5 +8,5 @@ add_library(gw_pipeline STATIC
 )
 target_link_libraries(gw_pipeline
     PUBLIC  gateway_includes gw_protocol gw_concurrent gw_storage gw_cloud
-    PRIVATE gateway_options gw_log
+    PRIVATE gateway_options gw_log gw_format   # formatValue:上行数值的文本格式
 )

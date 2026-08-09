@@ -1,4 +1,5 @@
 #include "gateway/io/http/HttpServer.h"
+#include "gateway/core/format/Number.h"
 #include "gateway/core/log/Logger.h"
 #include "gateway/io/event/EventLoop.h"
 #include "gateway/io/http/HttpRequest.h"
@@ -55,9 +56,11 @@ static std::string rowsToJson(const std::vector<DataRow>& rows) {
     for (size_t i = 0; i < rows.size(); ++i) {
         const auto& r = rows[i];
         char buf[256];
+        // 数值走 formatValue 而非就地 %.2f:同一个读数在 MQTT 上行、查询应答、
+        // 本处 JSON 三个出口必须长得一样,否则对不上账。位数由协议的定标决定。
         snprintf(buf, sizeof(buf),
-                 "{\"device_id\":\"%s\",\"value\":%.2f,\"ts\":%ld}",
-                 r.device_id.c_str(), r.value, r.ts);
+                 "{\"device_id\":\"%s\",\"value\":%s,\"ts\":%ld}",
+                 r.device_id.c_str(), formatValue(r.value).c_str(), r.ts);
         json += buf;
         if (i + 1 < rows.size()) json += ",";
     }
