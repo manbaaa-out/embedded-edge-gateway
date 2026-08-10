@@ -34,7 +34,7 @@ std::string baseline(const std::string& overrides = "") {
            "serial_baud = 9600\n"
            "mqtt_host = 192.168.1.5\n"
            "mqtt_port = 1884\n"
-           "worker_count = 8\n" +
+           "http_port = 8890\n" +
            overrides;
 }
 
@@ -61,7 +61,7 @@ TEST(Config, InitParsesAllFields) {
     EXPECT_EQ(c->serial_baud, 9600);
     EXPECT_EQ(c->mqtt_host, "192.168.1.5");
     EXPECT_EQ(c->mqtt_port, 1884);
-    EXPECT_EQ(c->worker_count, 8);
+    EXPECT_EQ(c->http_port, 8890);
 }
 
 // 未出现的键应保留 Config 结构体的默认值,而非置为 0 或空串
@@ -90,7 +90,7 @@ TEST(Config, ReloadReportsOnlyWhatActuallyChanged) {
         "serial_baud = 9600\n"         // 没变
         "mqtt_host = 192.168.1.5\n"    // 没变
         "mqtt_port = 1884\n"
-        "worker_count = 8\n");
+        "http_port = 8890\n");
 
     auto r = ConfigManager::reload();
     ASSERT_TRUE(r.ok);
@@ -116,18 +116,18 @@ TEST(Config, ReloadDetectsMqttAndDbChanges) {
     EXPECT_FALSE(r.serial_changed) << "串口没动就不该重开";
 }
 
-// C 档(端口 / worker_count)运行期不可变,热加载必须整体忽略而非部分生效
+// C 档(两个端口)运行期不可变,热加载必须整体忽略而非部分生效
 TEST(Config, TierCChangesAreIgnored) {
     ConfFile f("tierc");
     f.write(baseline());
     ASSERT_NO_THROW(ConfigManager::init(f.path));
 
-    f.write(baseline("mqtt_port = 9999\nhttp_port = 7777\nworker_count = 2\n"));
+    f.write(baseline("mqtt_port = 9999\nhttp_port = 7777\n"));
 
     auto r = ConfigManager::reload();
     ASSERT_TRUE(r.ok);
     EXPECT_EQ(ConfigManager::current()->mqtt_port, 1884) << "应保持启动值而非 9999";
-    EXPECT_EQ(ConfigManager::current()->worker_count, 8) << "线程池大小不可热改";
+    EXPECT_EQ(ConfigManager::current()->http_port, 8890) << "监听端口不可热改";
 }
 
 // load-then-swap 的核心保证:解析失败时旧配置原封不动,进程继续运行。

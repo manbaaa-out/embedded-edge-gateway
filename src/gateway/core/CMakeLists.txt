@@ -16,6 +16,7 @@ target_link_libraries(gw_log
 )
 
 # ---- concurrent:线程安全队列 + 线程池(模板,header-only)----
+# ThreadPool 当前无使用者,作为并发原语保留,理由见其头文件。
 add_library(gw_concurrent INTERFACE)
 target_link_libraries(gw_concurrent INTERFACE gateway_includes Threads::Threads)
 

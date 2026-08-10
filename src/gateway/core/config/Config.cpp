@@ -64,7 +64,6 @@ Config ConfigManager::parseFile(const std::string& path) {
         else if (key == "serial_baud")    c.serial_baud    = toInt(val, key);
         else if (key == "mqtt_port")      c.mqtt_port      = toInt(val, key);
         else if (key == "http_port")      c.http_port      = toInt(val, key);
-        else if (key == "worker_count")   c.worker_count   = toInt(val, key);
         else if (key == "serial_path")    c.serial_path    = val;
         else if (key == "mqtt_host")      c.mqtt_host      = val;
         else if (key == "db_path")        c.db_path        = val;
@@ -83,8 +82,6 @@ bool ConfigManager::validate(const Config& c) {
     };
     checkPort("mqtt_port", c.mqtt_port);
     checkPort("http_port", c.http_port);
-    if (c.worker_count < 1) { LOG_WARN("worker_count invalid: %d (>=1)", c.worker_count); ok = false; }
-    else if (c.worker_count > 64) LOG_WARN("worker_count=%d looks large (allowed)", c.worker_count);
     if (c.idle_timeout   <= 0) { LOG_WARN("idle_timeout invalid: %d (>0)", c.idle_timeout); ok = false; }
     if (c.report_n       <= 0) { LOG_WARN("report_n invalid: %d (>0)", c.report_n); ok = false; }
     if (c.mqtt_keepalive <  0) { LOG_WARN("mqtt_keepalive invalid: %d (>=0)", c.mqtt_keepalive); ok = false; }
@@ -123,7 +120,6 @@ ConfigManager::ReloadResult ConfigManager::reload() {
         };
         restoreC("mqtt_port",    fresh->mqtt_port,    startup_->mqtt_port);
         restoreC("http_port",    fresh->http_port,    startup_->http_port);
-        restoreC("worker_count", fresh->worker_count, startup_->worker_count);
 
         auto old = std::atomic_load(&current_);
         assert(old && "reload() called before init()");

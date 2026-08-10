@@ -27,6 +27,22 @@ public:
         return true;
     }
 
+    // 队列满则立刻返回 false 而不等待,供「宁可丢也不能阻塞生产者」的场景使用。
+    //
+    // 与 push 的取舍按数据性质决定,不是风格差异:
+    //   下行命令  用 push     —— 命令不可丢,阻塞投递方是可接受的代价;
+    //   上行遥测  用 try_push —— 生产者是主 Reactor 线程,一旦阻塞,串口收帧、
+    //                           ACK 配对、超时重发、SIGTERM 会一起停摆。
+    //                           传感器读数丢一条无关紧要,Reactor 停住是事故。
+    bool try_push(T value) {
+        std::lock_guard<std::mutex> lock(mtx_);
+        if (shutdown_) return false;
+        if (capacity_ != 0 && queue_.size() >= capacity_) return false;
+        queue_.push(std::move(value));
+        not_empty_cv_.notify_one();
+        return true;
+    }
+
     std::optional<T> pop() {
         std::unique_lock<std::mutex> lock(mtx_);
         not_empty_cv_.wait(lock, [this](){return !queue_.empty() || shutdown_;});

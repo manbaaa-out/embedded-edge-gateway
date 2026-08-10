@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
     try {
         gateway::GatewayApp app;
         const int rc = app.run();   // 阻塞至 SIGTERM / SIGINT
-        // app 在此析构(停 HTTP 线程、drain 线程池、关连接),随后 main 返回,
+        // app 在此析构(停 HTTP 线程、写线程落完剩余记录、关连接),随后 main 返回,
         // 静态对象析构,AsyncLogger 把缓冲里剩下的日志刷出去。
         // 所以这里必须先取到 rc 再返回,不能写成 return app.run() ——
         // 那样也能正确析构,只是把「返回之后还有事发生」这件事藏起来了。

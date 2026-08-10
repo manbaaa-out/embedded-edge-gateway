@@ -45,21 +45,26 @@ bool GatewayApp::blockManagedSignals() {
     return true;
 }
 
-// db_ / client_ 用 shared_ptr 而非 unique_ptr:线程池 task 需要捕获它们的快照,
-// 见 TelemetryPipeline.h。
+// client_ 用 shared_ptr 而非 unique_ptr:热加载换 broker 时整体替换指针,
+// 而 mosquitto 线程上的 handler 需要一个确定活着的对象,见 startMqtt。
 GatewayApp::GatewayApp() {
     auto cfg = ConfigManager::current();   // 启动配置快照
 
-    db_ = std::make_shared<Database>(cfg->db_path);
+    // 写连接建完即交给 pipeline_,app 层不再持有 —— 从这行往下,能调用它的
+    // 只有 pipeline_ 内部的写线程。建库必须最先做:roDb_ 以只读方式打开,
+    // 要求库文件与表已存在。
+    auto db = std::make_shared<Database>(cfg->db_path);
     LOG_INFO("sqlite(rw) opened at %s", cfg->db_path.c_str());
 
     client_ = std::make_shared<MqttClient>("gateway-main", cfg->mqtt_host, cfg->mqtt_port,
                                            cfg->mqtt_keepalive);
 
-    pool_ = std::make_unique<ThreadPool>(cfg->worker_count);   // worker_count 属 C 档
-    LOG_INFO("thread pool started (%d workers)", cfg->worker_count);
-
-    pipeline_.emplace(*pool_);   // 依赖 pool_,须在其之后构造
+    // 这一步会起遥测写线程。与下面的 http_thread_ 不同,它可以放在会抛异常的
+    // link_ 之前:pipeline_ 是 RAII 封装的线程,构造中途抛异常时已构造完的成员
+    // 仍会析构,~TelemetryPipeline 会 join 掉它。裸的 std::thread 成员没有这个
+    // 性质 —— 析构时撞上 joinable 就直接 terminate,这正是 http_thread_ 必须
+    // 放在最后的原因。
+    pipeline_.emplace(std::move(db));
 
     link_ = std::make_unique<NodeLink>(cfg->serial_path, cfg->serial_baud);
 
@@ -71,7 +76,7 @@ GatewayApp::GatewayApp() {
     // 串口打不开(serial_path 写错、设备没插)恰恰是本构造函数最常见的失败,
     // 所以把起线程放在所有可能抛的动作之后:线程存在时,构造已必然成功。
     //
-    // roDb_ 仍在 db_ 之后创建 —— 只读连接要求库文件已存在,见 L10。
+    // roDb_ 仍在写连接之后创建 —— 只读连接要求库文件已存在。
     // 线程按值捕获 roDb 副本,即便成员 roDb_ 被换掉,该副本仍持有连接。
     //
     // idle_timeout / report_n 属 A 档,若一并在此取值就等于把它们降级成 C 档。
@@ -108,9 +113,24 @@ void GatewayApp::onFrame(const Frame& f) {
     }
 
     LOG_DEBUG("frame type=0x%02X len=%zu", f.type, f.payload.size());
-    // 取收帧时刻而非入库时刻,避免线程池排队延迟污染时间戳
-    const long ts = static_cast<long>(time(nullptr));
-    pipeline_->submit(decodeTelemetry(f), db_, client_, ts);
+    // 取收帧时刻而非入库时刻,避免写队列的排队延迟污染时间戳
+    const long ts       = static_cast<long>(time(nullptr));
+    const auto readings = decodeTelemetry(f);
+
+    // 上云在本线程直接发。mosquitto_publish 只是把报文塞进库的发送队列就返回,
+    // 真正的 socket 写在 mosquitto 自己的网络线程上,所以这里是 µs 级且不阻塞;
+    // publish 无锁、允许跨线程并发调用(见 MqttClient.h)。
+    // 与 onAckFrame / onCmdTimer 的上报走同一条路径,不另开线程 —— 在库自带的
+    // 发送队列前面再套一个队列,只会多一跳延迟。
+    for (const auto& r : readings) {
+        client_->publish("gateway/up/" + r.device, formatValue(r.value));
+    }
+
+    // 落库交给写线程。返回 false 只可能是磁盘写不动导致队列积满,
+    // 此时丢弃新数据而不是阻塞 Reactor,见 TelemetryPipeline::submit。
+    if (!pipeline_->submit(readings, ts)) {
+        LOG_WARN("telemetry queue full, dropped %zu readings", readings.size());
+    }
 }
 
 // 与发命令、超时扫描同在主线程,故 tracker_ 无需加锁。
@@ -226,10 +246,12 @@ void GatewayApp::reloadConfig() {
     Logger::setLevel(static_cast<LogLevel>(ncfg->log_level));
 
     // B 档:按 diff 重建,仅重建确实变更的资源。
-    // 换掉 db_ 的 shared_ptr 即可:在飞 task 持有旧 db 快照,旧对象续命至其完成。
+    // 换库不是在这里改指针,而是往写队列里投一条换库指令:写线程会在自己的
+    // 时间线上按顺序执行它 —— 先把此前排队的记录落进旧库,再切到新库。
+    // 于是「换库」与「落库」天然互斥,既不需要锁,也不会有记录写错库。
     if (r.db_changed) {
         LOG_INFO("%s", "db_path changed → reopening database");
-        db_ = std::make_shared<Database>(ncfg->db_path);
+        pipeline_->swapDatabase(std::make_shared<Database>(ncfg->db_path));
     }
     // MqttClient 不可移动,故整体换 shared_ptr。旧 client 析构时断连并 join 掉
     // 网络线程(见 ~MqttClient),这一步会短暂阻塞主循环 —— 换 broker 是人工低频
@@ -399,8 +421,9 @@ int GatewayApp::run() {
 
     // 走到这里说明是被信号叫停的。返回之后依次发生:
     //   ~GatewayApp   停 HTTP 线程并 join
-    //   成员逆序析构   pool_ drain 在飞 task → link_ 关串口 → client_ 停 mosquitto
-    //                 网络线程 → roDb_ / db_ 关连接
+    //   成员逆序析构   pipeline_ 关队列、写线程把剩余记录落完再 join(见
+    //                 ~TelemetryPipeline)→ link_ 关串口 → client_ 停 mosquitto
+    //                 网络线程 → roDb_ 关连接
     //   main 返回      静态对象析构 → ~AsyncLogger 把双缓冲里剩下的日志刷出去
     // 最后这一步正是这次要的:停机原因不会再随缓冲一起消失。
     LOG_INFO("%s", "main loop exited, shutting down");

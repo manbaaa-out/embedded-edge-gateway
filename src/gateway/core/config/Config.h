@@ -18,7 +18,6 @@ struct Config {
     // C 档(运行期不可变)
     int mqtt_port    = 1883;
     int http_port    = 8888;
-    int worker_count = 4;
 };
 
 class ConfigManager {
