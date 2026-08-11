@@ -1,4 +1,10 @@
 #pragma once
+
+// 内嵌 HTTP 监控服务的对外接口:一个入口函数 + 它需要的注入项。
+//
+// 这一层只暴露「要什么」,不关心「从哪来」:数据库连接、运行期配置的取值器、
+// 停机判据都由 app 层递进来。io 层因此不必知道 ConfigManager 或 SIGTERM 的存在。
+
 #include "gateway/core/config/Config.h"   // 仅为 kMaxReportN,见下方说明
 #include "gateway/storage/Database.h"
 

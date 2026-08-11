@@ -1,3 +1,11 @@
+// 双缓冲的两侧:append 跑在任意业务线程,flushThread 独占后端。
+//
+// 全文围绕一句话:持锁的时间只够交换指针,真正的 write 发生在锁外。
+// 由此派生出三条不变量,改动时先确认它们还成立 ——
+//   一、一次 append = 一整行,行不跨缓冲、不跨 write,故多线程不交错;
+//   二、失败时不留半毁状态,队列到顶宁可丢日志也不丢进程;
+//   三、只有 flushThread 写 fd,全进程唯一写者。
+
 #include "gateway/core/log/AsyncLogger.h"
 
 #include <fcntl.h>

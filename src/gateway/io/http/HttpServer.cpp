@@ -1,3 +1,10 @@
+// 第二个 EventLoop:监控页与 /api/data。与主 Reactor 完全隔离,只共享一个只读
+// SQLite 连接。
+//
+// 这条线程不知道 ConfigManager 存在:idle_timeout / report_n 由 app 层注入取值器,
+// 每次用时现取 —— 取好值传下来就等于把 A 档配置悄悄降级成需要重启的 C 档。
+// should_stop 同理:它只知道「有人会告诉我该走了」,不知道那是 SIGTERM。
+
 #include "gateway/io/http/HttpServer.h"
 #include "gateway/core/format/Number.h"
 #include "gateway/core/log/Logger.h"

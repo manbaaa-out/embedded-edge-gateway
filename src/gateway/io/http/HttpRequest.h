@@ -1,4 +1,12 @@
 #pragma once
+
+// HTTP 请求的四态增量解析:请求行 → 头部 → 体 → 完整。
+//
+// 之所以是状态机而不是「读完再解析」,理由与串口收帧 FSM 完全相同:TCP 是字节流,
+// 一次 recv 的边界不可预测,解析器必须能随时被打断、随时从上次的位置继续。
+//
+// 只解析、不碰 I/O,所以可以单测 —— 喂进一个 Buffer,断言状态与字段。
+
 #include <string>
 #include <map>
 #include "gateway/io/http/Buffer.h"

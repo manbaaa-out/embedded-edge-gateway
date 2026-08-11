@@ -1,3 +1,6 @@
+// 帧 → 记录的纯函数。一帧温湿度扇出成两条记录,这个 1→N 的扇出正是 pipeline 层
+// 存在的理由。不碰 I/O、不碰时间,所以可以直接单测。
+
 #include "gateway/pipeline/TelemetryDecoder.h"
 
 #include "gateway/core/log/Logger.h"

@@ -1,4 +1,11 @@
 #pragma once
+
+// 全进程唯一的日志入口:LOG_* 宏 → Logger::log 在栈上格式化 → AsyncLogger 双缓冲。
+//
+// 分成两层是因为两件事的变化频率不同:「怎么格式化一条日志」几乎不变,
+// 「日志往哪去、什么时候落盘」则换过好几次(文件 → stderr → journald)。
+// 本层只管前者,后端换掉时这个文件一行不动。
+
 #include <cstdio>
 #include <cstdarg>     // va_list, va_start, va_end
 
@@ -17,7 +24,8 @@ public:
     static LogLevel level() noexcept { return level_; }
     static void setLevel(LogLevel lv) noexcept { level_ = lv; }
 
-    // 格式化并输出一条日志,整条一次写出以避免多线程交错
+    // 在栈缓冲上格式化完整一行(含结尾换行),整行一次交给后端。
+    // 「一次调用 = 一整行」是多线程不交错的前提,详见 .cpp。
     static void log(LogLevel lv, const char* file, int line, const char* fmt, ...);
 
 private:
@@ -26,7 +34,10 @@ private:
 
 } // namespace gateway
 
-// 以宏包一层:自动捕获 __FILE__ / __LINE__,并在级别不足时短路,避免参数求值
+// 包一层宏的两个理由:自动捕获 __FILE__ / __LINE__;级别不足时短路,省掉参数求值。
+//
+// 注意 fmt 之后至少要给一个变参 —— 无参数时写 LOG_INFO("%s", "text") 而非
+// LOG_INFO("text"),否则 ##__VA_ARGS__ 这个 GNU 扩展在 -Wpedantic 下会告警。
 #define LOG_DEBUG(fmt, ...) \
     ::gateway::Logger::log(::gateway::LogLevel::DEBUG, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
 #define LOG_INFO(fmt, ...) \

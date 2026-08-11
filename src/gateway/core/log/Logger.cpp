@@ -1,3 +1,9 @@
+// 日志的同步外壳。整个文件只做一件事:把一条日志在【栈上】拼成完整一行。
+//
+// 栈缓冲不是随手写的,它是多线程不交错的第一道保证:每条线程各拼各的私有内存,
+// 这一步不可能相互干扰。第二道保证在 AsyncLogger —— 整行一次 append,锁的粒度
+// 正好是一整行。若改成分段 append(先前缀、再正文),行就会交错。
+
 #include "gateway/core/log/Logger.h"
 #include "gateway/core/log/AsyncLogger.h"
 
@@ -18,11 +24,10 @@ static const char* levelName(LogLevel lv) {
 void Logger::log(LogLevel lv, const char* file, int line, const char* fmt, ...) {
     if (lv < level_) return;
 
-    // 在栈缓冲上格式化整条日志。
-    // snprintf 返回的是「本应写入的长度」而非实际写入的长度:前缀含文件路径,
-    // 路径够长时 prefix_len 会超过 sizeof(buf),此时 buf + prefix_len 已越界,
-    // 且 sizeof(buf) - prefix_len 作为 size_t 会下溢成巨大值,vsnprintf 将据此
-    // 向越界地址写入。故必须先夹紧再使用。
+    // snprintf 返回的是「本应写入的长度」,不是实际写入的长度。前缀含 __FILE__,
+    // 路径够长时 ret 会超过 sizeof(buf):此时 buf + prefix_len 已越界,而
+    // sizeof(buf) - prefix_len 作为 size_t 会下溢成巨大值,vsnprintf 便据此
+    // 向越界地址一路写下去。所以下面每一处用 ret 之前都必须先夹紧。
     char buf[1024];
     int  ret = snprintf(buf, sizeof(buf), "[%s] %s:%d ", levelName(lv), file, line);
     if (ret < 0) return;                                  // 格式化失败,丢弃

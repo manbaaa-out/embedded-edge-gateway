@@ -1,3 +1,9 @@
+// 串口读写与编解码的粘合。
+//
+// drainAndParse 里那个 while(true) 是 ET 模式的必需品而非风格:边沿触发只在
+// 「从无到有」那一刻通知一次,不读到 EAGAIN,剩下的字节就烂在内核缓冲区里,
+// 链路静默卡死。
+
 #include "gateway/link/NodeLink.h"
 
 #include "gateway/core/log/Logger.h"

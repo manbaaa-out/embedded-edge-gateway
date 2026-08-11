@@ -1,3 +1,8 @@
+// topic + payload → 一条待发命令的翻译。纯函数,不起 broker 就能单测。
+//
+// 这里的数字解析刻意比 HTTP 那边严格:参数要写进设备,"12abc" 这种宽松解析
+// 在读接口上无害,在写接口上就是把一个没人确认过的值送进硬件。
+
 #include "gateway/cloud/CommandTranslator.h"
 
 #include <cstdlib>

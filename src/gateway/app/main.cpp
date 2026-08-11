@@ -1,3 +1,8 @@
+// 进程入口。只做三件事:屏蔽信号、读配置、把余下一切交给 GatewayApp。
+//
+// 顺序不能动:信号屏蔽必须早于任何线程创建(掩码按线程生效并被新线程继承),
+// 晚一步就会有线程不屏蔽 SIGHUP,而它的默认动作是终止进程。
+
 #include "gateway/core/log/Logger.h"
 #include "gateway/core/config/Config.h"
 #include "gateway/app/GatewayApp.h"

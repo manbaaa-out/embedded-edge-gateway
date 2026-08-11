@@ -1,3 +1,6 @@
+// 四态解析的状态转移。每一态都从 Buffer 里【尽量取】,取不够就原样返回等下次 recv,
+// 绝不假设一次读到了完整结构 —— 与串口收帧 FSM 是同一套纪律。
+
 #include "gateway/io/http/HttpRequest.h"
 #include <algorithm>
 

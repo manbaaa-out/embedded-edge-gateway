@@ -1,4 +1,15 @@
 #pragma once
+
+// libmosquitto 的薄封装:连接、订阅、发布、自动重连。
+//
+// 本类不碰串口,这是刻意的:命令【产生】在 mosquitto 线程,却必须【发出】在主线程。
+// 中间那一跳(队列 + eventfd)不是性能优化,而是「串口只有一个写者」这条纪律的
+// 实现代价 —— 正因守住了它,SerialPort 与 CommandTracker 内部一把锁都不需要。
+//
+// 本类自己的锁只剩一把静态的 lib_mtx_,保护 mosquitto_lib_init/cleanup 这对全局
+// 初始化的引用计数。句柄本身不在此列:libmosquitto 2.0 自身线程安全,再包一层锁
+// 不但白加,还会与「on_connect 在库内部锁下回调进来」构成反向锁序。
+
 #include <mosquitto.h>
 #include <functional>
 #include <mutex>
@@ -97,27 +108,19 @@ public:
                                      + mosquitto_strerror(rc));
     }
 
-    // 唯一允许跨线程并发调用的成员:主线程(命令应答与超时判死)、线程池 worker
-    // (遥测上行)、mosquitto 网络线程(下行命令的拒收原因)都会调它。
+    // 唯一允许跨线程并发调用的成员:主线程(遥测上行、命令应答与超时判死)与
+    // mosquitto 网络线程(下行命令的拒收原因)都会调它。
     //
-    // 这里不加本类的锁,是两条理由叠起来的结论:
+    // 不加本类的锁,两条理由叠起来:
+    //   一、加了白加。libmosquitto 2.0 自身线程安全(mosquitto.h 的 "Topic: Threads",
+    //       唯一例外是 lib_init),而 loopStart 用的 mosquitto_loop_start 已自动置上
+    //       库切换多线程行为所需的 threaded 标志。句柄的内部状态人家护住了。
+    //   二、加了危险。onConnectTrampoline 是库在自己的内部锁下回调进来的,它若再抢
+    //       本类的锁、而 publish 持本类的锁去调库,两条路径就是反向锁序 —— ABBA 的
+    //       形状。是否真成环取决于库内部用了哪几把锁,不该让正确性依赖看不见的细节。
     //
-    //   一、加了也是白加。libmosquitto 2.0 自身线程安全(见 mosquitto.h 的
-    //       "Topic: Threads",唯一例外是 lib_init),而 loopStart() 用的
-    //       mosquitto_loop_start 会自动置上 threaded 标志 —— 该标志正是库切换到
-    //       多线程行为的开关(见 mosquitto_threaded_set 文档)。句柄的内部状态
-    //       人家已经护住了。
-    //
-    //   二、加了反而危险。onConnectTrampoline 是 libmosquitto 在自己的内部锁下
-    //       回调进来的,若它再去抢本类的锁,而 publish 这边持本类的锁去调库,
-    //       两条路径的加锁顺序就相反,构成 ABBA 死锁的形状。是否真的成环取决于
-    //       库内部用了哪几把锁 —— 那是本项目看不见也控制不了的实现细节,
-    //       不该让正确性依赖它。
-    //
-    // 附带的好处:失败分支的日志不再落在临界区里。broker 断开时每条 publish
-    // 都会失败,若带锁,六条线程会一起排队记这条日志,恰好在最需要吞吐的时刻
-    // 自我放大。改走 LOG_WARN 后单次代价已从"无缓冲 stderr 写"降到"取一次
-    // AsyncLogger 的锁 + 一次 memcpy",但把它留在锁外仍然更好。
+    // 附带好处:失败分支的日志不落在临界区里。broker 断开时每条 publish 都会失败,
+    // 带锁就会让多条线程排队记同一条日志,恰在最需要吞吐时自我放大。
     void publish(const std::string& topic, const std::string& payload,
                  int qos = 0, bool retain = false) {
         int rc = mosquitto_publish(mosq_, nullptr, topic.c_str(),

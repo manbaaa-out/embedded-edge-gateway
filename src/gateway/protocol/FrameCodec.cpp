@@ -1,3 +1,8 @@
+// 蹦床的落地处。这里唯一的技术点是 C 回调怎么弹回 C++ 成员:
+// 注册一个静态函数,把 this 通过 void* user 带进去,静态函数里再转回来。
+// 没有这个 user 参数,C 回调想找到对应的 C++ 对象就只能靠全局指针 ——
+// 那样一个进程里就只能有一个解析器实例。
+
 #include "gateway/protocol/FrameCodec.h"
 
 namespace gateway {

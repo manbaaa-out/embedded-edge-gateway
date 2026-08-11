@@ -1,3 +1,9 @@
+// 配置的解析与热加载实现。
+//
+// 两种错误的处理力度刻意不同:格式坏的行只跳过并警告(宽容),值转不成整数直接抛
+// 异常(严格)。理由是多一行看不懂的东西不影响其余配置的正确性,而一个说不清是多少
+// 的数字,继续用下去就是拿默认值冒充用户意图。
+
 #include "gateway/core/config/Config.h"
 #include "gateway/core/log/Logger.h"
 #include <fstream>

@@ -1,4 +1,13 @@
 #pragma once
+
+// 异步日志后端:双缓冲 + 一条 flush 线程。形状取自 muduo,尺寸按本机场景重定。
+//
+// 它要解决的不是「比 journald 快」,而是【别让 Reactor 线程阻塞在 I/O 上】。
+// 就算终点是 stderr,同步 write() 到 journald 的 socket 一样会阻塞,而 journald
+// 变慢恰恰发生在故障风暴时 —— 于是「越卡越写、越写越卡」的正反馈成立。
+// 这个问题 journald 替不了我们解决,因为阻塞发生在 socket 的【我们这一侧】。
+// 本类把前端代价压成一次锁内 memcpy,仅此而已。
+
 #include <string>
 #include <vector>
 #include <memory>

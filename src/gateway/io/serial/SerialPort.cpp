@@ -1,3 +1,10 @@
+// termios 的逐位配置。这里每一个标志位都是「关掉某个终端行为」——
+// 内核默认把串口当交互终端(回显、行缓冲、把 \r 转成 \n、Ctrl-C 当信号),
+// 而我们要的是一条透明的字节管道,任何一位没关干净都会悄悄改写协议帧。
+//
+// 短写循环见 write():write 返回值小于请求长度是【合法】的,不是错误。
+// 这个形状与 AsyncLogger::safe_write 同构。
+
 #include "gateway/io/serial/SerialPort.h"
 #include "gateway/core/log/Logger.h"
 

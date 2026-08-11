@@ -1,3 +1,10 @@
+// 主循环与 channel 的增删。
+//
+// 全文的要害在 removeChannel 与 loop 的配合:回调函数本身就存在 channel 里,
+// 在回调中当场析构自己所属的 channel,等于销毁正在执行的 std::function ——
+// 在自己站着的树枝上锯。所以摘除只置标志并转入 dying_,真正的回收推迟到批末,
+// 那时没有任何回调在栈上。退出判定同理放在批末,不半途 break。
+
 #include "gateway/io/event/EventLoop.h"
 #include "gateway/core/log/Logger.h"
 #include <sys/socket.h>
@@ -60,7 +67,7 @@ namespace gateway{
                 channel* ch = static_cast<channel*>(events[i].data.ptr);
                 uint32_t revents = events[i].events;
 
-                // 同批内可能已被别的回调摘除（见 channel::dead）。指针仍有效，
+                // 同批内可能已被别的回调摘除(见 channel::dead)。指针仍有效,
                 // 但这条 channel 已不该再被驱动。
                 if (ch->dead) continue;
 
@@ -97,7 +104,7 @@ namespace gateway{
         auto it = channels_.find(fd);
         if (it != channels_.end()) {
             it->second->dead = true;        // 同批后续事件不再驱动它
-            dying_.push_back(it->second);   // 延迟回收，撑到批末
+            dying_.push_back(it->second);   // 延迟回收,撑到批末
             channels_.erase(it);
         }
     }
