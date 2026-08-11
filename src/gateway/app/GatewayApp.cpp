@@ -249,9 +249,25 @@ void GatewayApp::reloadConfig() {
     // 换库不是在这里改指针,而是往写队列里投一条换库指令:写线程会在自己的
     // 时间线上按顺序执行它 —— 先把此前排队的记录落进旧库,再切到新库。
     // 于是「换库」与「落库」天然互斥,既不需要锁,也不会有记录写错库。
+    // 下面三个分支都在重建外部资源,每一个都可能失败(路径写错、设备没插、broker
+    // 地址打错)。此前它们都没有 try-catch,异常会一路穿出 loop() 与 run(),被 main
+    // 接住后 return 1,systemd 依 Restart=on-failure 重启进程 —— 而重启后读到的是
+    // 同一份坏配置,启动路径上会以同样的方式再抛一次,于是变成崩溃循环,直到有人
+    // 手工改回配置文件。热加载的全部意义就是不重启,却因为一次手滑的改动而让进程
+    // 永久起不来,这个代价方向完全反了。
+    //
+    // 所以每个分支各自接住异常:失败只丢掉这一项功能,已经跑着的其余部分照常。
+    // 这与 app 层既有的错误分级一致 —— 致命的在启动期抛,运行期的一律降级。
+    bool all_applied = true;
+
     if (r.db_changed) {
         LOG_INFO("%s", "db_path changed → reopening database");
-        pipeline_->swapDatabase(std::make_shared<Database>(ncfg->db_path));
+        try {
+            pipeline_->swapDatabase(std::make_shared<Database>(ncfg->db_path));
+        } catch (const std::exception& e) {
+            all_applied = false;
+            LOG_ERROR("db reopen failed, keep writing to the old database: %s", e.what());
+        }
     }
     // MqttClient 不可移动,故整体换 shared_ptr。旧 client 析构时断连并 join 掉
     // 网络线程(见 ~MqttClient),这一步会短暂阻塞主循环 —— 换 broker 是人工低频
@@ -259,9 +275,17 @@ void GatewayApp::reloadConfig() {
     // 新 client 必须重新挂 handler 并重新订阅,否则下行链路中断。
     if (r.mqtt_changed) {
         LOG_INFO("%s", "mqtt config changed → reconnecting");
-        client_ = std::make_shared<MqttClient>("gateway-main", ncfg->mqtt_host, ncfg->mqtt_port,
-                                               ncfg->mqtt_keepalive);
-        startMqtt();
+        // 这里没有强异常保证可依赖:旧 client_ 一旦被赋值覆盖就已析构。所以先建新的,
+        // 建成功了再换 —— 与 NodeLink::reopen 现在的形状一致。
+        try {
+            auto fresh = std::make_shared<MqttClient>("gateway-main", ncfg->mqtt_host,
+                                                      ncfg->mqtt_port, ncfg->mqtt_keepalive);
+            client_ = std::move(fresh);
+            startMqtt();
+        } catch (const std::exception& e) {
+            all_applied = false;
+            LOG_ERROR("mqtt rebuild failed, uplink may be degraded: %s", e.what());
+        }
     }
     // 串口 fd 在 epoll 中,须连同 Channel 一起替换:先 removeChannel 摘除旧 fd
     // (转入 dying_,批末析构),再重开 port,最后建全新 channel 指向新 fd。
@@ -270,11 +294,24 @@ void GatewayApp::reloadConfig() {
     if (r.serial_changed) {
         LOG_INFO("%s", "serial config changed → reopening port");
         loop_.removeChannel(serial_channel_->fd);
-        link_->reopen(ncfg->serial_path, ncfg->serial_baud);
-        serial_channel_ = makeSerialChannel();
+        try {
+            link_->reopen(ncfg->serial_path, ncfg->serial_baud);
+        } catch (const std::exception& e) {
+            all_applied = false;
+            // reopen 是强异常保证:抛出时 link_ 仍持有旧 port,旧 fd 依然有效。
+            // 所以下面那两行无论成败都能跑 —— 失败时它把【旧 fd】重新挂回 epoll,
+            // 采集继续;成功时挂的是新 fd。epoll 两条路都保持一致,不会残留空洞。
+            LOG_ERROR("serial reopen failed, staying on the previous port: %s", e.what());
+            // 此刻 ConfigManager::current()->serial_path 已是新值,而实际在用的是旧口。
+            // 这个不一致必须说出来,否则读日志的人会以为新路径已经生效。
+            LOG_WARN("effective serial path is still the old one, not '%s'",
+                     ncfg->serial_path.c_str());
+        }
+        serial_channel_ = makeSerialChannel();   // 取 link_ 当前【实际】的 fd
         loop_.addChannel(serial_channel_);
     }
-    LOG_INFO("%s", "reload done");
+
+    LOG_INFO("reload done%s", all_applied ? "" : " (with degraded items, see ERROR above)");
 }
 
 // ---- 事件源装配 ----

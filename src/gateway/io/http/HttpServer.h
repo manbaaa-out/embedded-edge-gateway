@@ -1,4 +1,5 @@
 #pragma once
+#include "gateway/core/config/Config.h"   // 仅为 kMaxReportN,见下方说明
 #include "gateway/storage/Database.h"
 
 #include <functional>
@@ -19,13 +20,16 @@ struct HttpRuntimeConfig {
 // 与 link / pipeline / cloud 一样,下层只接收参数,不去够全局的 ConfigManager。
 using HttpRuntimeConfigProvider = std::function<HttpRuntimeConfig()>;
 
-// /api/data 单次返回的点数上限,防止一次查询把整张表拖进内存。
-inline constexpr int kMaxReportN = 1000;
+// kMaxReportN(/api/data 单次返回的点数上限,防止一次查询把整张表拖进内存)
+// 定义在 core/config/Config.h —— 它同时是配置项 report_n 的取值上限,而一个字段
+// 的合法范围该和字段待在一起。此处只包含那个头文件取常量,不使用 ConfigManager:
+// io 层依旧不知道配置从哪来,那是 app 层的事。
 
 // 把 /api/data 的 n 参数归一到 [1, kMaxReportN]。
 //
-// raw 为空表示请求未带该参数;非数字或越界一律回落到 default_n,而 default_n
-// 自身也会被夹紧 —— 配置只校验 report_n > 0,写 5000 照样能过。
+// raw 为空表示请求未带该参数;非数字或越界一律回落到 default_n。default_n 仍然
+// 要夹一次:配置侧现在会拦下越界的 report_n,但这个函数的另一个入口是 URL 上
+// 不可信的 ?n= 参数,不夹不行 —— 两个入口共用上限,校验各做各的。
 // 之所以独立成函数,是因为它是这条读路径上唯一不碰 I/O 的判断,可以单测。
 int clampReportN(const std::string& raw, int default_n);
 

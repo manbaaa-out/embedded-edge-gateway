@@ -177,3 +177,50 @@ TEST(Config, ValidationRejectsEmptyRequiredPaths) {
 TEST(Config, InitThrowsOnMissingFile) {
     EXPECT_THROW(ConfigManager::init("/tmp/definitely_not_here_9f3a.conf"), std::exception);
 }
+
+// init 与 reload 必须用同一把尺子。
+//
+// 此前 init 只解析不校验,于是同一份坏配置在两条路径上结果相反:SIGHUP 热加载
+// 会拒掉,开机启动却照单全收,然后在更下游以更难懂的方式失败。
+TEST(Config, InitRejectsWhatReloadWouldReject) {
+    ConfFile f("initvalidate");
+    f.write(baseline("http_port = 70000\n"));   // 越界端口:reload 一直都会拒
+
+    EXPECT_THROW(ConfigManager::init(f.path), std::exception)
+        << "启动期必须和热加载一样拦下越界端口";
+}
+
+TEST(Config, InitRejectsNonPositiveIdleTimeout) {
+    ConfFile f("initidle");
+    f.write(baseline("idle_timeout = 0\n"));
+
+    EXPECT_THROW(ConfigManager::init(f.path), std::exception);
+}
+
+// report_n 的上限此前只存在于 io 层的 clampReportN 里,配置侧只校验 > 0。
+// 于是写 5000 能过校验,值被静默夹成 1000 —— 改写用户给的值而不告诉他,
+// 比直接拒绝更糟。现在两个入口共用 kMaxReportN,配置侧负责拒绝。
+TEST(Config, ValidationRejectsReportNAboveMax) {
+    ConfFile f("reportnmax");
+    f.write(baseline());
+    ASSERT_NO_THROW(ConfigManager::init(f.path));
+    const int before = ConfigManager::current()->report_n;
+
+    f.write(baseline("report_n = 5000\n"));
+
+    auto r = ConfigManager::reload();
+    EXPECT_FALSE(r.ok) << "超过 kMaxReportN 应被拦下,而不是留给 HTTP 层静默夹紧";
+    EXPECT_EQ(ConfigManager::current()->report_n, before) << "失败后旧值不动";
+}
+
+TEST(Config, ValidationAcceptsReportNAtExactlyMax) {
+    ConfFile f("reportnedge");
+    f.write(baseline());
+    ASSERT_NO_THROW(ConfigManager::init(f.path));
+
+    f.write(baseline("report_n = " + std::to_string(kMaxReportN) + "\n"));
+
+    auto r = ConfigManager::reload();
+    EXPECT_TRUE(r.ok) << "上限本身是合法值,边界不能少算一个";
+    EXPECT_EQ(ConfigManager::current()->report_n, kMaxReportN);
+}

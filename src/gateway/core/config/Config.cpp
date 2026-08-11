@@ -83,7 +83,11 @@ bool ConfigManager::validate(const Config& c) {
     checkPort("mqtt_port", c.mqtt_port);
     checkPort("http_port", c.http_port);
     if (c.idle_timeout   <= 0) { LOG_WARN("idle_timeout invalid: %d (>0)", c.idle_timeout); ok = false; }
-    if (c.report_n       <= 0) { LOG_WARN("report_n invalid: %d (>0)", c.report_n); ok = false; }
+    // 上限与 io 层的 clampReportN 共用 kMaxReportN(定义在 Config.h)。此处拦下越界
+    // 而不是留给那边静默夹紧:配置写错了要让人知道,不能改完值当没事发生。
+    if (c.report_n <= 0 || c.report_n > kMaxReportN) {
+        LOG_WARN("report_n invalid: %d (1..%d)", c.report_n, kMaxReportN); ok = false;
+    }
     if (c.mqtt_keepalive <  0) { LOG_WARN("mqtt_keepalive invalid: %d (>=0)", c.mqtt_keepalive); ok = false; }
     if (c.serial_baud    <= 0) { LOG_WARN("serial_baud invalid: %d", c.serial_baud); ok = false; }
     auto checkPath = [&](const char* name, const std::string& p) {
@@ -97,6 +101,15 @@ bool ConfigManager::validate(const Config& c) {
 
 void ConfigManager::init(const std::string& path) {
     auto cfg = std::make_shared<Config>(parseFile(path));   // 解析失败的异常传给调用方
+
+    // init 必须和 reload 用同一把尺子。此前这里只解析不校验,于是同一份配置在两条
+    // 路径上有两套标准:http_port = 99999 会被 SIGHUP 热加载拒掉,开机启动却照单
+    // 全收 —— 然后在更下游以更难懂的方式失败(端口绑定、timerfd 参数越界)。
+    // 启动期校验失败是致命的:配置决定怎么启动,读出来的东西不可信就没法启动。
+    if (!validate(*cfg))
+        throw std::runtime_error("config validation failed: " + path +
+                                 " (具体哪一项见上面的 WARN 日志)");
+
     path_    = path;
     startup_ = std::make_shared<Config>(*cfg);
     std::atomic_store(&current_, std::shared_ptr<const Config>(cfg));

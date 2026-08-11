@@ -35,10 +35,26 @@ NodeLink::NodeLink(const std::string& path, int baud) {
 }
 
 void NodeLink::reopen(const std::string& path, int baud) {
-    // 先析构旧 port 关闭旧 fd,再打开新的。解析器状态一并重置:
-    // 换设备后残留的半截帧无意义,保留它只会导致新链路的第一帧被当作噪声丢弃。
-    port_.reset();
-    port_ = std::make_unique<SerialPort>(path.c_str(), toBaud(baud), /*nonblock=*/true);
+    // 先把新口开出来,成功了才替换 —— 强异常保证。
+    //
+    // 反过来写(先 port_.reset() 再 make_unique)看着更省一个 fd,但代价是:新路径
+    // 打不开时抛出的那一刻 port_ 已经是空的,而 fd() 就是 port_->get() —— 对空
+    // unique_ptr 解引用。于是调用方即便接住了异常也无路可走:旧链路已经没了,
+    // 新链路没建起来,对象处于既不能用也不能修的中间态。
+    // 现在失败时 port_ 原封不动,旧链路继续收数据,调用方 catch 住就能接着跑。
+    //
+    // 只有 baud 变、path 没变时,这里会短暂同时持有同一个 tty 的两个 fd。Linux 上
+    // 普通 tty 不带 O_EXCL,允许如此;且 termios 是每 tty 而非每 fd 的,新 fd 上的
+    // configure 同时作用于旧 fd —— 而旧 fd 下一行就被丢弃了,无影响。
+    auto fresh = std::make_unique<SerialPort>(path.c_str(), toBaud(baud), /*nonblock=*/true);
+    port_ = std::move(fresh);
+
+    // 注意 parser_ 的 FSM 状态【没有】被重置(此处曾有一句注释声称重置了,那是把
+    // port_.reset() 看成了重置解析器 —— 它重置的是 unique_ptr)。后果有限:换设备时
+    // FSM 若停在 READ_PAYLOAD,新链路的头几个字节会被当作旧半截帧的尾巴吃掉,
+    // 但 FSM 的"所有异常路径都回到 WAIT_HDR0"这条不变量保证它在 1-2 帧内自愈。
+    // 要真正修掉得给 protocol/ 加一个"只重置 FSM、不清统计"的接口 ——
+    // edge_parser_init 会把 frames_ok / crc_err 一并清零,而那是监控要用的累计值。
     LOG_INFO("node link reopened: %s @ %d", path.c_str(), baud);
 }
 
