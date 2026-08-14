@@ -204,12 +204,25 @@ void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config,
         return;
     }
 
+    // 这两条失败路径此前直接 return,把上面刚 bind + listen 好的 listen_fd 漏在那里
+    // (第二条还连 timerfd 一起漏)—— 而同一个函数里 bind/listen 失败却都老实关了,
+    // 两种风格并存。timerfd_create 失败在实践中几乎只发生于 fd 耗尽,而那正是最不该
+    // 再泄漏一个 fd 的时刻。
     int timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
-    if (timerfd == -1) { perror("timerfd_create"); return; }
+    if (timerfd == -1) {
+        LOG_ERROR("http timerfd_create failed: %s", strerror(errno));
+        close(listen_fd);
+        return;
+    }
     struct itimerspec value;
     value.it_value.tv_sec = 2;  value.it_value.tv_nsec = 0;
     value.it_interval.tv_sec = 1; value.it_interval.tv_nsec = 0;
-    if (timerfd_settime(timerfd, 0, &value, NULL) == -1) { perror("settime"); return; }
+    if (timerfd_settime(timerfd, 0, &value, NULL) == -1) {
+        LOG_ERROR("http timerfd_settime failed: %s", strerror(errno));
+        close(timerfd);
+        close(listen_fd);
+        return;
+    }
 
     EventLoop loop;
 
@@ -258,7 +271,8 @@ void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config,
             if (client_fd < 0) {
                 if (errno == EINTR) continue;
                 if (errno == EAGAIN) break;
-                perror("accept4"); break;
+                LOG_ERROR("http accept4 failed: %s", strerror(errno));
+                break;
             }
             g_conns[client_fd];
 
@@ -276,7 +290,10 @@ void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config,
                     if (n_read < 0) {
                         if (errno == EINTR) continue;
                         if (errno == EAGAIN) break;
-                        perror("recv");
+                        // 此前是 perror:它绕开 AsyncLogger 同步写 stderr,而这里正是
+                        // 每条连接的读路径 —— journald 堵住时会把 HTTP 线程钉在这一行,
+                        // 恰恰是异步日志要防的那件事。
+                        LOG_WARN("http recv failed on fd=%d: %s", client_fd, strerror(errno));
                         loop.removeChannel(client_fd); g_conns.erase(client_fd); return;
                     } else if (n_read == 0) {
                         loop.removeChannel(client_fd); g_conns.erase(client_fd); return;

@@ -40,8 +40,8 @@ bool TelemetryPipeline::submit(const std::vector<Reading>& readings, long ts) {
     return queue_.try_push(Job{std::move(b)});
 }
 
-void TelemetryPipeline::swapDatabase(std::shared_ptr<Database> db) {
-    queue_.push(Job{SwapDb{std::move(db)}});
+bool TelemetryPipeline::swapDatabase(std::shared_ptr<Database> db) {
+    return queue_.push_for(Job{SwapDb{std::move(db)}}, kSwapTimeout);
 }
 
 void TelemetryPipeline::writerLoop(std::shared_ptr<Database> db) {

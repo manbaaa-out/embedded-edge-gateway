@@ -8,6 +8,7 @@
 
 #include "gateway/core/log/Logger.h"
 
+#include <poll.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -17,6 +18,11 @@
 namespace gateway {
 
 namespace {
+
+// 短写补发的上界。一帧最多 69 字节而 tty 输出缓冲通常 4KB 起,这条路径几乎不会走到;
+// 真走到了也必须有界 —— 调用方是主 Reactor 线程,最坏停 3×20ms。
+constexpr int kWriteRetry  = 3;
+constexpr int kWriteWaitMs = 20;
 
 // 配置中存人类可读的 115200,termios 需要 Bxxxx 宏。转换隔离在链路层,
 // 使配置层不掺入串口实现细节。配置校验已排除 <= 0,default 分支为兜底。
@@ -90,12 +96,36 @@ bool NodeLink::send(uint8_t type, const std::vector<uint8_t>& payload) {
         return false;
     }
 
-    const ssize_t w = port_->write(frame.data(), frame.size());
-    if (w != static_cast<ssize_t>(frame.size())) {
-        LOG_WARN("serial write incomplete: type=0x%02X ret=%zd/%zu", type, w, frame.size());
-        return false;
+    // 短写要补发,不能只报个警就走。
+    //
+    // SerialPort::write 在 EAGAIN 下返回【已写字节数】,而那些字节【已经上线了】。
+    // 此前这里把「没写完」一律当失败返回,于是线上留下半截帧:节点按 LEN 继续等后续
+    // 字节,等到的是下一帧的帧头,CRC 对不上 → resync,损失 1-2 帧。更糟的是上层据此
+    // 不登记在途表(「等一条未发出的命令的 ACK 没有意义」),可这条命令其实发出去了
+    // 一半 —— 既不会重发也不会上报超时,无声消失,云端只看到一条 WARN。
+    //
+    // 现在改为等可写再续,总等待有上界(kWriteRetry × kWriteWaitMs),不会卡住 Reactor。
+    std::size_t sent = 0;
+    for (int attempt = 0;; ++attempt) {
+        const ssize_t w = port_->write(frame.data() + sent, frame.size() - sent);
+        if (w < 0) {
+            LOG_ERROR("serial write failed: type=0x%02X after %zu/%zu bytes: %s",
+                      type, sent, frame.size(), strerror(errno));
+            return false;
+        }
+        sent += static_cast<std::size_t>(w);
+        if (sent == frame.size()) return true;
+
+        if (attempt >= kWriteRetry) break;
+        struct pollfd pfd { port_->get(), POLLOUT, 0 };
+        if (::poll(&pfd, 1, kWriteWaitMs) <= 0) break;   // 超时或出错,不再等
     }
-    return true;
+
+    // 走到这里说明线上确实留了半截帧。记 ERROR 而非 WARN:它会让节点丢 1-2 帧,
+    // 且这条命令不会被登记、不会重发。
+    LOG_ERROR("serial write incomplete: type=0x%02X %zu/%zu bytes — a partial frame is on the wire",
+              type, sent, frame.size());
+    return false;
 }
 
 }  // namespace gateway

@@ -92,20 +92,26 @@ public:
         handler_ = std::move(h);
     }
 
-    // 订阅并【记住】它。配置期接口。
+    // 登记一条订阅。配置期接口,【只记不发】。
     //
     // 记住这一步不是多余的:客户端以 clean_session = true 连接,broker 不保存会话,
     // 所以每次连接都必须重新提交订阅。loop_start 起的网络线程在断线后会自动重连 ——
     // 连接确实恢复了,发布也照常成功,唯独订阅没了,下行命令从此静默收不到,
     // 直到进程重启。这个故障没有任何报错,只表现为「命令发出去没反应」。
     // 因此订阅列表由本类持有,并在每次 CONNACK 后由 onConnectTrampoline 重放。
+    //
+    // 此处不再立刻调 mosquitto_subscribe,两个理由:
+    //   一、多余。CONNACK 的重放覆盖【所有】连接,首连也不例外 —— 原先的写法会让
+    //       首次连接发出两次 SUBSCRIBE(幂等,无害,但制造了「订阅在两处发生」的错觉)。
+    //   二、危险。原先它在 rc != SUCCESS 时抛异常,而调用点 GatewayApp::startMqtt 的
+    //       顺序是 setMessageHandler → subscribe → loopStart:一抛,loopStart 就被跳过,
+    //       于是留下一个「连上了 broker 却没有网络线程」的客户端 —— 下行永远收不到,
+    //       publish 只是把报文塞进库的发送队列再也发不出去,却还返回 MOSQ_ERR_SUCCESS。
+    //       而热加载那侧只记一句 "may be degraded" 就继续跑。只记不发之后本函数不会
+    //       失败,loopStart 必然执行,这条静默死亡的路径随之消失。
     void subscribe(const std::string& topic, int qos = 1) {
         requireNotStarted("subscribe");
         subs_.emplace_back(topic, qos);
-        int rc = mosquitto_subscribe(mosq_, nullptr, topic.c_str(), qos);
-        if (rc != MOSQ_ERR_SUCCESS)
-            throw std::runtime_error(std::string("subscribe failed: ")
-                                     + mosquitto_strerror(rc));
     }
 
     // 唯一允许跨线程并发调用的成员:主线程(遥测上行、命令应答与超时判死)与
@@ -131,9 +137,18 @@ public:
     }
 
     // 起网络线程,并把本对象推进运行期。此后配置期接口一律拒绝。
-    void loopStart() {
+    //
+    // 不抛异常:这是链路上最后一步,失败了也要让调用方拿到一个状态明确的对象。
+    // 但返回值必须看 —— 没有网络线程的客户端是【静默】失效的,publish 照样返回成功。
+    bool loopStart() {
         started_ = true;
-        mosquitto_loop_start(mosq_);
+        const int rc = mosquitto_loop_start(mosq_);
+        if (rc != MOSQ_ERR_SUCCESS) {
+            LOG_ERROR("mosquitto_loop_start failed: %s — 上行与下行均不可用",
+                      mosquitto_strerror(rc));
+            return false;
+        }
+        return true;
     }
 
 private:

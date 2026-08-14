@@ -276,7 +276,11 @@ void GatewayApp::reloadConfig() {
     if (r.db_changed) {
         LOG_INFO("%s", "db_path changed → reopening database");
         try {
-            pipeline_->swapDatabase(std::make_shared<Database>(ncfg->db_path));
+            // 限时投递:队列满(磁盘写不动)时最多等 200ms 就放弃,不能让主循环无限期停摆。
+            if (!pipeline_->swapDatabase(std::make_shared<Database>(ncfg->db_path))) {
+                all_applied = false;
+                LOG_ERROR("%s", "db swap not delivered (write queue full), still writing to the old database");
+            }
         } catch (const std::exception& e) {
             all_applied = false;
             LOG_ERROR("db reopen failed, keep writing to the old database: %s", e.what());
@@ -396,8 +400,14 @@ void GatewayApp::startMqtt() {
         }
     });
 
+    // subscribe 只登记,真正的 SUBSCRIBE 由每次 CONNACK 后的重放发出(见 MqttClient)。
+    // 所以这三行都不会抛,loopStart 必然执行 —— 不会再留下「连上了却没有网络线程」
+    // 的半死客户端。
     client_->subscribe("gateway/cmd/#", 1);
-    client_->loopStart();
+    if (!client_->loopStart()) {
+        LOG_ERROR("%s", "mqtt loop start failed, uplink and downlink are both dead");
+        return;
+    }
     LOG_INFO("mqtt connected: %s:%d", cfg->mqtt_host.c_str(), cfg->mqtt_port);
 }
 

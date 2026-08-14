@@ -28,6 +28,13 @@ enum class ParseResult {
 
 class HttpRequest {
     public:
+    // 请求体上限。本服务只提供 GET,不需要任何请求体,取 64KB 纯属留有余地。
+    //
+    // 没有它时 Content-Length 是无上限的:声明一个巨大的值再持续灌数据,Buffer 会
+    // 一路 resize 下去。实测过 —— 发 80MB 进程 RSS 就涨 80MB,而这个服务绑在
+    // 0.0.0.0 上且没有任何认证。上限必须在解析层拦,不能指望调用方。
+    static constexpr long kMaxBodySize = 64 * 1024;
+
     ParseResult parse(Buffer* buf);
 
     const std::string& method() const { return method_; }

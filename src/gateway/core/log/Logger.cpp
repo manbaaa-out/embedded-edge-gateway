@@ -9,7 +9,7 @@
 
 namespace gateway {
 
-LogLevel Logger::level_ = LogLevel::INFO;   // 默认不输出 DEBUG
+std::atomic<LogLevel> Logger::level_{LogLevel::INFO};   // 默认不输出 DEBUG
 
 static const char* levelName(LogLevel lv) {
     switch (lv) {
@@ -22,7 +22,7 @@ static const char* levelName(LogLevel lv) {
 }
 
 void Logger::log(LogLevel lv, const char* file, int line, const char* fmt, ...) {
-    if (lv < level_) return;
+    if (lv < level_.load(std::memory_order_relaxed)) return;
 
     // snprintf 返回的是「本应写入的长度」,不是实际写入的长度。前缀含 __FILE__,
     // 路径够长时 ret 会超过 sizeof(buf):此时 buf + prefix_len 已越界,而

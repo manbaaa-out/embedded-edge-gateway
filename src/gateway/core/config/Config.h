@@ -25,12 +25,15 @@ struct Config {
     int log_level      = 1;
     int idle_timeout   = 5;
     int report_n       = 10;   // 合法范围 [1, kMaxReportN]
-    int mqtt_keepalive = 60;
     // B 档:需重建对应资源
     std::string serial_path = "/tmp/ttyV0";
     int         serial_baud = 115200;
     std::string mqtt_host   = "localhost";
     std::string db_path     = "/tmp/gateway.db";
+    // keepalive 属 B 档而非 A 档:它被写进 CONNECT 报文,改内存不会生效,必须重连。
+    // reload() 一直是按 B 档处理的(它进 mqtt_changed 的 diff),此前只是错挂在
+    // A 档的注释下 —— 照那个分档去理解,会以为改它是零代价的,实际上行会短暂中断。
+    int mqtt_keepalive = 60;
     // C 档:运行期不可变
     int mqtt_port    = 1883;
     int http_port    = 8888;

@@ -34,9 +34,21 @@ namespace gateway{
         }
     }
 
+    // channels_ 与 dying_ 必须跟着一起搬。
+    //
+    // 只搬 epoll_fd_ 的话:目标对象管着 epoll,却看不到任何 channel —— removeChannel
+    // 找不到条目、forEachChannel 遍历为空;而源对象析构时会把那些 channel 连同 fd
+    // 一起关掉,等于把目标脚下的 fd 抽走。实测过:移动后源仍持有 1 条,目标是 0 条。
+    //
+    // 搬容器本身是安全的:channel 由 shared_ptr 持有,对象地址不变,内核里那些
+    // data.ptr 仍然指向同一批对象。
     EventLoop::EventLoop(EventLoop&& other) noexcept{
         epoll_fd_ = other.epoll_fd_;
         other.epoll_fd_ = -1;
+        channels_ = std::move(other.channels_);
+        dying_    = std::move(other.dying_);
+        other.channels_.clear();
+        other.dying_.clear();
     }
 
     EventLoop& EventLoop::operator=(EventLoop&& other) noexcept{
@@ -47,6 +59,10 @@ namespace gateway{
             }
             epoll_fd_ = other.epoll_fd_;
             other.epoll_fd_ = -1;
+            channels_ = std::move(other.channels_);
+            dying_    = std::move(other.dying_);
+            other.channels_.clear();
+            other.dying_.clear();
         }
         return *this;
     }
@@ -74,7 +90,13 @@ namespace gateway{
                 if (revents & EPOLLIN) {
                     ch->handleRead();
                 }
-                if (revents & EPOLLOUT) {
+                // 必须复查 dead:handleRead 可能摘除了【自己】(HTTP 的 on_read 在
+                // recv 返回 0 或解析出错时就是这么做的)。此时 fd 已被 EPOLL_CTL_DEL,
+                // 而同一批事件里 EPOLLIN 与 EPOLLOUT 可以同时就绪 —— 继续跑
+                // handleWrite,一旦它把 out_buf 发空就会去调 modifyChannel,
+                // EPOLL_CTL_MOD 在已摘除的 fd 上返回 ENOENT,而那个函数是抛异常的,
+                // 异常一路穿出 loop() 就是整条 HTTP 线程结束。
+                if ((revents & EPOLLOUT) && !ch->dead) {
                     ch->handleWrite();
                 }
 

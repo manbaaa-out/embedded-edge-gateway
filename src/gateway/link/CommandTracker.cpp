@@ -45,7 +45,12 @@ TrackerActions CommandTracker::tick(TimePoint now) {
     }
 
     for (uint8_t seq : expired) {
-        Entry& e = inflight_[seq];
+        // 用 at() 而不是 operator[]:后者找不到就【默认构造插入】,而这里的语义是
+        // 「我确定它存在」(seq 刚从同一个 map 里遍历出来,中间没有删除)。
+        // 意图与工具不匹配的代价是隐蔽的 —— 哪天有人在两个循环之间插一段清理逻辑,
+        // operator[] 会静默插入一条 type=0x00 的空记录,再在下个 tick 里被当成超时
+        // 命令发出去一帧垃圾,而 0x00 恰好是协议里保留的非法 TYPE。
+        Entry& e = inflight_.at(seq);
         if (e.cmd.retry_count < max_retry_) {
             e.cmd.retry_count++;
             e.sent_at = now;

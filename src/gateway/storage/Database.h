@@ -111,6 +111,7 @@ public:
     void insertBatch(const std::vector<DataRow>& rows) {
         if (rows.empty()) return;
 
+        // BEGIN 失败不致命(退化成逐条自动提交,只慢不错),故仍用 execNoThrow。
         execNoThrow("BEGIN;");
         for (const auto& r : rows) {
             insertStmt_->bind(1, r.device_id);
@@ -121,7 +122,15 @@ public:
             }
             insertStmt_->reset();
         }
-        execNoThrow("COMMIT;");
+        // COMMIT 必须查返回值。它失败时事务【仍然开着】,而 SQLite 不支持嵌套事务 ——
+        // 于是下一批的 BEGIN 也失败,此后每一批都在自动提交模式下逐条写,
+        // 永久退化且只慢不错,是最难被发现的一类故障。补一次 ROLLBACK 把连接
+        // 拉回无事务状态,让下一批还能正常开事务。
+        if (!exec("COMMIT;")) {
+            LOG_ERROR("db COMMIT failed: %s — rolling back to clear the open transaction",
+                      sqlite3_errmsg(db_));
+            execNoThrow("ROLLBACK;");
+        }
     }
 
     std::vector<DataRow> query(const std::string& device_id, int limit) {
@@ -147,10 +156,22 @@ public:
     }
 
 private:
+    // 执行并返回是否成功。调用方需要区分成败时用它(目前只有 COMMIT)。
+    bool exec(const char* sql) {
+        char* err = nullptr;
+        if (sqlite3_exec(db_, sql, nullptr, nullptr, &err) != SQLITE_OK) {
+            sqlite3_free(err);
+            return false;
+        }
+        return true;
+    }
+
     void execNoThrow(const char* sql) {
         char* err = nullptr;
         if (sqlite3_exec(db_, sql, nullptr, nullptr, &err) != SQLITE_OK) {
-            LOG_WARN("db pragma failed: %s", err ? err : "?");
+            // 措辞不再写死成 pragma:本函数也用于 BEGIN / ROLLBACK,
+            // 报错里说"pragma failed"会把排障的人带偏。
+            LOG_WARN("db exec failed [%s]: %s", sql, err ? err : "?");
             sqlite3_free(err);
         }
     }

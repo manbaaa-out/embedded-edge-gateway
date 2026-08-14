@@ -8,6 +8,7 @@
 //
 // 两处用法刻意不同,见 try_push 与 try_pop 各自的说明。
 
+#include <chrono>
 #include <queue>
 #include <mutex>
 #include <condition_variable>
@@ -32,6 +33,25 @@ public:
         if (shutdown_) return false;
         queue_.push(std::move(value));
         lock.unlock();                   // 先解锁再通知,免得被唤醒者醒来又撞上锁
+        not_empty_cv_.notify_one();
+        return true;
+    }
+
+    // 限时入队:满则等,但等待有上界。返回 false 表示超时或已关停。
+    //
+    // 给「这条数据丢不起,但调用线程也停不起」的场景用 —— 目前只有热加载换库:
+    // 它由主 Reactor 线程发起,而阻塞 push 会在队列满时把 Reactor 无限期卡住,
+    // 且「队列满」正是磁盘写不动的时候,恰恰也是运维最可能发 SIGHUP 换 db_path 的时候。
+    // 有了上界,最坏是这次换库不生效并报错,而不是整条主循环停摆。
+    template <typename Rep, typename Period>
+    bool push_for(T value, const std::chrono::duration<Rep, Period>& timeout) {
+        std::unique_lock<std::mutex> lock(mtx_);
+        const bool ready = not_full_cv_.wait_for(lock, timeout, [this](){
+            return capacity_ == 0 || queue_.size() < capacity_ || shutdown_;
+        });
+        if (!ready || shutdown_) return false;
+        queue_.push(std::move(value));
+        lock.unlock();
         not_empty_cv_.notify_one();
         return true;
     }

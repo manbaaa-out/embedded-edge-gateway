@@ -22,6 +22,7 @@
 #include "gateway/pipeline/TelemetryDecoder.h"
 #include "gateway/storage/Database.h"
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
 #include <thread>
@@ -57,11 +58,19 @@ public:
     // Reactor 停住不是。
     bool submit(const std::vector<Reading>& readings, long ts);
 
-    // SIGHUP 改了 db_path 时调用,把新连接交给写线程。
+    // 换库指令的最长等待。调用方是主 Reactor 线程,不能无限期等。
+    static constexpr std::chrono::milliseconds kSwapTimeout{200};
+
+    // SIGHUP 改了 db_path 时调用,把新连接交给写线程。返回 false 表示没投进去。
     //
-    // 这条用阻塞 push:换库指令丢了,写线程会一直往旧库写,而旧库正是本次
-    // 热加载要换掉的东西 —— 与遥测记录不同,它不可丢。
-    void swapDatabase(std::shared_ptr<Database> db);
+    // 换库指令与遥测记录不同,它不可丢:丢了写线程会一直往旧库写,而旧库正是本次
+    // 热加载要换掉的东西。所以不能用 try_push。
+    //
+    // 但也不能用无限期的阻塞 push —— 调用方跑在主 Reactor 线程上,队列满时它会
+    // 连同串口收帧、ACK 配对、超时重发、SIGTERM 一起停摆;而队列会满只可能是磁盘
+    // 写不动了,那恰恰也是运维最可能发 SIGHUP 去改 db_path 的时刻。
+    // 折中是限时等待:最坏这次换库不生效并记 ERROR,主循环最多停 200ms。
+    bool swapDatabase(std::shared_ptr<Database> db);
 
 private:
     // 一批待落库的记录。在 Reactor 线程就转成 DataRow,使写线程只依赖 storage 层。
