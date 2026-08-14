@@ -12,7 +12,7 @@
 
   <!-- ================= Panel a : uplink ================= -->
   <text x="60" y="100" font-size="17" fill="#333" font-weight="bold">a</text>
-  <text x="82" y="100" font-size="15" fill="#777">上行数据通路 (uplink:采集 → 双写 → 上云)</text>
+  <text x="82" y="100" font-size="15" fill="#777">上行数据通路 (uplink:采集 → 解码扇出 → 落库 / 上云)</text>
 
   <rect x="60"  y="258" width="140" height="66" rx="8" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
   <text x="130" y="296" text-anchor="middle" font-size="14.5" fill="#333">STM32 Node</text>
@@ -21,12 +21,12 @@
   <rect x="460" y="260" width="168" height="62" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
   <text x="544" y="285" text-anchor="middle" font-size="14" fill="#333"><tspan x="544" dy="0">FrameParser</tspan><tspan x="544" dy="16">CRC16 校验</tspan></text>
   <rect x="678" y="258" width="170" height="66" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
-  <text x="763" y="284" text-anchor="middle" font-size="14" fill="#333"><tspan x="763" dy="0">Thread Pool</tspan><tspan x="763" dy="16">N workers · 双写</tspan></text>
+  <text x="763" y="284" text-anchor="middle" font-size="14" fill="#333"><tspan x="763" dy="0">onFrame 扇出</tspan><tspan x="763" dy="16">Reactor 线程内</tspan></text>
 
   <rect x="912" y="168" width="160" height="60" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
   <text x="992" y="203" text-anchor="middle" font-size="14" fill="#333">MQTT Client</text>
   <rect x="912" y="262" width="160" height="62" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
-  <text x="992" y="288" text-anchor="middle" font-size="14" fill="#333"><tspan x="992" dy="0">SQLite · WAL</tspan><tspan x="992" dy="16">rw + ro</tspan></text>
+  <text x="992" y="288" text-anchor="middle" font-size="14" fill="#333"><tspan x="992" dy="0">SQLite · WAL</tspan><tspan x="992" dy="16">写线程 rw + HTTP ro</tspan></text>
   <rect x="912" y="372" width="186" height="60" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
   <text x="1005" y="407" text-anchor="middle" font-size="14" fill="#333">HTTP Server :8888</text>
 
@@ -41,7 +41,7 @@
   <text x="651" y="280" text-anchor="middle" font-size="12.5" fill="#777">decoded</text>
   <line x1="848" y1="278" x2="908" y2="200" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
   <line x1="848" y1="294" x2="908" y2="293" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="862" y="250" font-size="12.5" fill="#777">双写</text>
+  <text x="862" y="250" font-size="12.5" fill="#777"><tspan>队列 → 写线程</tspan></text>
   <line x1="992" y1="324" x2="992" y2="368" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
   <text x="1000" y="352" font-size="12" fill="#777">ro</text>
   <line x1="1072" y1="198" x2="1236" y2="198" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
@@ -100,7 +100,7 @@
     <rect x="60" y="946" width="14" height="14" rx="3" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.4"/>
     <text x="80" y="957">主线程 · Reactor / 处理</text>
     <rect x="250" y="946" width="14" height="14" rx="3" fill="#EAF4EC" stroke="#55A868" stroke-width="1.4"/>
-    <text x="270" y="957">I/O 线程(pool / mosquitto / http)</text>
+    <text x="270" y="957">I/O 线程(写线程 / mosquitto / http)</text>
     <rect x="520" y="946" width="14" height="14" rx="3" fill="#FAF4E0" stroke="#B8973A" stroke-width="1.4"/>
     <text x="540" y="957">队列 / 在途表</text>
     <rect x="670" y="946" width="14" height="14" rx="3" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.4"/>

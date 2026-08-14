@@ -1,17 +1,17 @@
 # embedded-edge-gateway
 
-> 跑在树莓派上的 **C++17 嵌入式边缘网关** —— 单进程、事件驱动,把 STM32 节点的串口数据**双写**到本地 SQLite 与云端 MQTT,并支持云端下发命令、内嵌实时监控页、systemd 托管与配置热加载。
+> 跑在树莓派上的 **C++17 嵌入式边缘网关** —— 单进程、事件驱动,把 STM32 节点的串口数据同时**落本地 SQLite**与**上行云端 MQTT**,并支持云端下发命令、内嵌实时监控页、systemd 托管与配置热加载。
 
 [![CI](https://github.com/manbaaa-out/embedded-edge-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/manbaaa-out/embedded-edge-gateway/actions/workflows/ci.yml)
 ![C++](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)
 ![CMake](https://img.shields.io/badge/CMake-3.21%2B-064F8C?logo=cmake&logoColor=white)
 ![Reactor](https://img.shields.io/badge/I%2FO-epoll%20Reactor-8e24aa)
 ![Stack](https://img.shields.io/badge/stack-MQTT%20%7C%20SQLite%20%7C%20HTTP-5e35b1)
-![Tests](https://img.shields.io/badge/tests-72%20unit%20%2B%2022%20e2e-success)
+![Tests](https://img.shields.io/badge/tests-99%20unit%20%2B%2022%20e2e-success)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Raspberry%20Pi%204B-555)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-一条 epoll 主循环统一调度**串口 I/O、下行命令、超时重试、信号热加载**;配合**单一写者** + **线程池双写** + **读写分离**,在资源受限的树莓派上把「采集上云」与「云端控制」两条链路做得稳、省、可观测。
+一条 epoll 主循环统一调度**串口 I/O、下行命令、超时重试、信号热加载**;配合**单一写者** + **单写线程 + 有类型队列** + **读写分离**,在资源受限的树莓派上把「采集上云」与「云端控制」两条链路做得稳、省、可观测。
 
 与配套的 [STM32 FreeRTOS 传感节点](https://github.com/manbaaa-out/stm32-learning) **编译同一份协议源码** —— 见 [协议契约](#协议契约一份源码两端共用)。
 
@@ -35,6 +35,7 @@ STM32 节点  ──UART(自定义帧)──▶  网关  ──┬──▶  SQL
   - [下行命令](#下行命令)
 - [测试](#测试)
 - [配置](#配置)
+- [已知边界](#已知边界)
 - [部署](#部署)
 - [项目结构](#项目结构)
 - [许可证](#许可证)
@@ -45,22 +46,27 @@ STM32 节点  ──UART(自定义帧)──▶  网关  ──┬──▶  SQL
 - **协议单一真相** — TYPE 字典、结果码、量纲、时序契约集中在一份 C99 头文件里,**网关与 STM32 固件编译同一份源码**、跑同一份金标准向量,漂移由脚本机器检测。
 - **统一事件驱动** — 串口数据、下行命令(eventfd)、超时重试(timerfd)、SIGHUP 信号(signalfd)全部封装成 `channel`,挂在主线程同一个 epoll 循环上。
 - **单一写者** — 串口 fd 只由主线程写,跨线程命令经线程安全队列 + eventfd 投递,`SerialPort` 无需加锁。
-- **线程池双写** — 每条记录由 worker 同时落本地 SQLite 与 MQTT 上行,互不阻塞主链。
+- **单写线程 + 机会式攒批** — 遥测经有界队列交给一条专属写线程,它独占 SQLite 写连接(连接活在它的栈上,别处拿不到,故 `Database` 内部零锁);取一条后再用 `try_pop` 把此刻已排队的一并取走合进同一个事务——**不引入任何等待**,空闲时一批就是一帧,忙时批量自动变大。上云则在 Reactor 线程直接 `publish`(µs 级,只塞进库的发送队列),两条路并列而非串联。
 - **读写并发** — HTTP 查询走独立的**只读** SQLite 连接(`SQLITE_OPEN_READONLY`),靠 WAL 与主链写连接并发,查询不阻塞落库。
 - **内嵌监控页** — HTML/JS/CSS 在 CMake 配置期嵌入二进制,单文件部署、离线自包含、不依赖 CDN。
 - **配置热加载** — `SIGHUP` 触发 load-then-swap 原子换配置,解析失败保留旧配置不中断;串口 / MQTT / DB 按 diff 仅重建真正变化的资源。
-- **可测性** — 协议编解码、在途命令表、业务解码、命令翻译均为无 I/O 的纯逻辑,72 个单测覆盖;另有 22 项 e2e 断言在虚拟串口上跑完上行、下行、故障注入、热加载全流程。
+- **可测性** — 协议编解码、在途命令表、业务解码、命令翻译均为无 I/O 的纯逻辑,99 个单测覆盖;另有 22 项 e2e 断言在虚拟串口上跑完上行、下行、故障注入、热加载全流程。
 - **稳健工程化** — RAII 管控资源与析构顺序、致命错误优雅退出交由 systemd 重启接管、`-Wall -Wextra -Wpedantic -Wconversion` 下编译零警告、CI 跑 ASan/UBSan。
 
 ## 架构
 
 单进程把「采集 → 双写 → 上云」与「下发 → 串口 → ACK」两条链路串到一起。下图分两栏:**(a) 上行数据通路** 与 **(b) 下行命令通路**(单一写者 + 超时重发)。**实线 = 数据面**,**虚线 = 控制 / 命令面**。
 
-![网关架构](docs/architecture.png)
+![网关架构](docs/architecture.svg)
 
-**上行(采集)** — STM32 经 UART 把传感器数据按自定义二进制帧发来。主线程的 epoll 循环把串口、eventfd、timerfd、信号统统作为 channel 挂在一起;串口数据经帧解析状态机(CRC16 校验)解码成一条条记录后提交线程池,每个 worker 同时**落本地 SQLite + 向 MQTT 上行发布**,即「双写」。
+**上行(采集)** — STM32 经 UART 把传感器数据按自定义二进制帧发来。主线程的 epoll 循环把串口、eventfd、timerfd、信号统统作为 channel 挂在一起;串口数据经帧解析状态机(CRC16 校验)解码成一条条记录后,在 Reactor 线程里**扇出成两条并列的路**:一条直接 `publish` 上行(µs 级,不阻塞),另一条 `try_push` 进有界队列交给**遥测写线程**批量落库——队列满(磁盘写不动)时宁可丢新数据也不阻塞 Reactor。
 
 **下行(命令)** — 运维往 `gateway/cmd/<命令>` 发 MQTT 消息,mosquitto 网络线程把它翻译成命令、塞进线程安全队列、戳一下 eventfd 唤醒主循环——**自己绝不碰串口**。主循环在 eventfd 回调里分配 seq、组帧、写串口,并登记到「在途表」。STM32 的 ACK / 查询应答经串口回来,由解析器配对在途表后销账、再经 MQTT 回发结果;另有 timerfd 周期扫描在途表,超时未收 ACK 就按同一 seq 重发(幂等),重试耗尽判失败并回 `gateway/ack/<seq> = timeout`。
+
+**线程构成** — 进程内恰好五条:主 Reactor、遥测写线程、mosquitto 网络线程、HTTP 监控线程,
+以及 `AsyncLogger` 的日志 flush 线程(由单例在第一次 `LOG_*` 时启动,是全进程唯一写日志 fd 的那条)。
+线程之间**一律用队列通信,不共享可变状态**,所以进程里只剩队列自身与日志双缓冲那几把锁——
+`CommandTracker`、`SerialPort`、`Database` 内部一把锁都没有,不是忘了加,是没有共享可保护。
 
 **监控** — HTTP 服务跑在独立线程,持有一个**只读** SQLite 连接,靠 WAL 与主链读写连接并发——查询不阻塞落库。浏览器访问即可看到实时设备卡片与 uPlot 历史曲线。
 
@@ -69,7 +75,7 @@ STM32 节点  ──UART(自定义帧)──▶  网关  ──┬──▶  SQL
 ```
 app        装配:把下面各层接起来(唯一能看见全部的层)
  ├─ link       与节点的链路:NodeLink(收发帧)· CommandTracker(在途表,纯逻辑)
- ├─ pipeline   遥测数据流:TelemetryDecoder(纯函数)· 双写扇出
+ ├─ pipeline   遥测数据流:TelemetryDecoder(纯函数)· TelemetryPipeline(写线程 + 攒批)
  ├─ cloud      MQTT 客户端 · CommandTranslator(纯函数)
  ├─ storage    SQLite 封装
  ├─ io         与 OS 打交道:串口 · epoll · HTTP
@@ -237,7 +243,7 @@ mosquitto_pub -h localhost -t gateway/cmd/set_period  -m 2000    # 设采样周�
 ## 测试
 
 ```bash
-ctest --preset dev              # 72 个单测
+ctest --preset dev              # 99 个单测
 ctest --preset asan             # 同样的单测跑在 ASan + UBSan 下
 ./scripts/e2e_vserial.sh        # 22 项端到端断言(虚拟串口,含故障注入)
 ./scripts/check_proto_sync.sh   # 协议核心漂移守卫
@@ -263,16 +269,29 @@ ctest --preset asan             # 同样的单测跑在 ASan + UBSan 下
 | **A**(改内存即生效) | `log_level` | `1` | 日志级别 0=DEBUG 1=INFO 2=WARN 3=ERROR |
 | | `idle_timeout` | `5` | HTTP 空闲连接超时(秒) |
 | | `report_n` | `10` | HTTP 曲线默认拉取点数 |
-| | `mqtt_keepalive` | `60` | MQTT keepalive(秒) |
 | **B**(热加载重建对应资源) | `serial_path` | `/dev/ttyUSB0` | 串口设备路径 |
 | | `serial_baud` | `115200` | 波特率(9600/19200/38400/57600/115200) |
 | | `mqtt_host` | `localhost` | MQTT broker 地址 |
 | | `db_path` | `/tmp/gateway.db` | SQLite 路径(真机建议 `/var/lib/gateway/gateway.db`) |
+| | `mqtt_keepalive` | `60` | MQTT keepalive(秒)。它被写进 CONNECT 报文,改内存不生效,**必须重连**——所以是 B 档不是 A 档 |
 | **C**(改了需重启进程) | `mqtt_port` | `1883` | MQTT 端口 |
 | | `http_port` | `8888` | HTTP 监控端口 |
-| | `worker_count` | `4` | 线程池工作线程数 |
 
 热加载:改完配置发 `SIGHUP`(`kill -HUP $(pgrep -x gateway)`,或 systemd 下 `systemctl reload gateway`)。A 档改内存即生效;B 档按 diff 仅重建变化的资源;C 档热加载会忽略并告警。
+
+## 已知边界
+
+写在前面比被人发现好。这些不是「还没来得及做」,是**当前设计明确的取舍**:
+
+| 边界 | 现状 | 要突破需要什么 |
+|---|---|---|
+| **只支持单节点** | 协议帧里没有设备寻址字段 | v2.0 的协议头扩展,**不向后兼容** |
+| **断网不补传** | 上行 `publish` 用 QoS 0,断网期间的读数只落在本地库里 | 一条「历史批量重发」的路径——顺带,那是本项目唯一能让线程池的 λ×W 算得过账的场景 |
+| **数据无限增长** | 没有分区 / 定期删除 / 降采样,按 1.5 条·秒⁻¹ 估算约 6 MB/天 | 写线程里加一条周期性 `DELETE FROM device_data WHERE ts < ?` |
+| **无 TLS / 无认证** | MQTT 明文;HTTP 绑 `0.0.0.0` 且无鉴权(请求体已限 64 KB) | 上公网前必须先补;临时方案是绑 `127.0.0.1` + SSH 端口转发 |
+| **无指标导出** | FSM 的 `frames_ok` / `crc_err` / `resync` 只进日志,没有 `/metrics` | 链路质量目前要靠翻日志看 |
+| **幂等窗口深度不足** | 节点窗口深度 1,而网关不限在途条数,协议 §6.2 的条件并不成立 | 双边改动:网关限在途上限 + 节点开环形缓存 + 共享 `EDGE_MAX_INFLIGHT`。**后果已由 §6.6 的语义约束限定在「多执行一次无害操作」** |
+| **串口断开不自动重连** | 只记日志,不重建 | 设备热插拔后需人工 `SIGHUP` |
 
 ## 部署
 
@@ -306,7 +325,7 @@ embedded-edge-gateway/
 │   │   └── http/       #   HTTP 服务
 │   │       └── assets/ #     监控页资源(编译期嵌进二进制,见下)
 │   ├── link/           #   与节点的链路:收发帧 · 在途命令表
-│   ├── pipeline/       #   遥测解码 · 双写扇出
+│   ├── pipeline/       #   遥测解码 · 写线程与攒批
 │   └── app/            #   GatewayApp(装配 + 主循环)· main.cpp
 ├── tools/node-sim/     # 节点模拟器(响应命令 + 故障注入)
 ├── tests/              # GoogleTest + CTest,按层与 src 一一对应
