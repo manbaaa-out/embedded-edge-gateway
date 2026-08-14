@@ -193,6 +193,9 @@ void GatewayApp::onDownlinkWakeup() {
         LOG_DEBUG("%s", "eventfd read returned short");
     }
 
+    // 一次排空队列,在途条数不设上限。这使节点侧那个深度为 1 的幂等窗口不足以拦下
+    // 全部重发(§6.2 要求窗口深度 >= 在途上限),重复执行之所以无害,靠的是 §6.6 的
+    // 语义约束:下行命令只能是查询型或绝对值设置型。新增非幂等命令前必须先补上限。
     while (auto cmd = cmd_queue_.try_pop()) {
         const uint8_t seq = tracker_.nextSeq();
 

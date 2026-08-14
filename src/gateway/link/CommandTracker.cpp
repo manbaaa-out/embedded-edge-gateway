@@ -49,8 +49,10 @@ TrackerActions CommandTracker::tick(TimePoint now) {
         if (e.cmd.retry_count < max_retry_) {
             e.cmd.retry_count++;
             e.sent_at = now;
-            // 复用同一个 seq。§6.2 据此保证节点侧幂等:节点见到刚处理过的 seq
-            // 只补发应答,不重复执行命令本体。
+            // 复用同一个 seq,节点据此识别重发(§6.2)。
+            // 但节点的幂等窗口只有最近一条,而本类不限在途条数 —— 若重发到达时中间已
+            // 插进别的命令,旧 seq 已被顶出窗口,命令本体会被再执行一次。真正兜住这件事
+            // 的是 §6.6:下行命令必须是查询型或绝对值设置型,重复执行无害。
             actions.resend.push_back(
                 TrackerActions::Resend{seq, e.cmd.type, e.cmd.arg, e.cmd.retry_count});
         } else {
