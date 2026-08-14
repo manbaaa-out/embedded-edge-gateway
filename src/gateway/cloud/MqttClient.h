@@ -177,13 +177,15 @@ private:
 
     // ---- libmosquitto 的进程级 init/cleanup ----
     //
-    // 本类唯一的锁在这儿。mosquitto_lib_init 的文档明说它不是线程安全的,而本类的
-    // 析构未必发生在主线程:在飞的线程池 task 按值持有 client 的 shared_ptr 快照,
-    // 热加载换 broker 时最后一个释放者可能就是某个 worker。于是「主线程构造新 client
-    // (init)」与「worker 析构旧 client(cleanup)」会同时进出库的全局初始化。
+    // 真正吃劲的是计数器,不是那把锁。热加载换 broker 走「先建新的,建成功了再换」
+    // (见 GatewayApp::reloadConfig),新旧实例必有一段共存期 —— 旧实例析构时若无条件
+    // 调 mosquitto_lib_cleanup,就会把新实例脚下的库全局状态拆掉。计数让 cleanup
+    // 只在最后一个实例消失时才真正执行。
     //
-    // 计数器让 cleanup 只在最后一个实例消失时真正执行 —— 否则旧 client 的析构会
-    // 把新 client 脚下的库全局状态拆掉。
+    // 锁是给约束本身上的保险。mosquitto_lib_init 的文档明说它不线程安全,而本类从未
+    // 在接口上承诺「实例只能在同一条线程上建与析构」。当前唯一的持有者是 GatewayApp,
+    // 构造与析构都落在主线程,这把锁一次也竞争不到 —— 但那是调用方的现状而非本类的
+    // 契约,不该让正确性依赖它。代价是每次构造/析构各一次无竞争加锁。
     static void libInit() {
         std::lock_guard<std::mutex> lock(lib_mtx_);
         if (lib_refcount_++ == 0) mosquitto_lib_init();
