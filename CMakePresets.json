@@ -47,7 +47,8 @@
             "inherits": "base",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-                "GATEWAY_BUILD_TESTS": "OFF"
+                "GATEWAY_BUILD_TESTS": "OFF",
+                "GATEWAY_WARNINGS_AS_ERRORS": "OFF"
             }
         }
     ],

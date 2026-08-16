@@ -175,7 +175,7 @@ STM32 与树莓派都是 3.3V TTL，可直连（**切勿**接 RS232 或 5V，会
 
 - **USB-TTL 转接器**（最省事）：STM32 `TX→适配器 RX`、`RX→适配器 TX`、`GND↔GND`，设备名通常 `/dev/ttyUSB0`
 - **树莓派板载 UART**：STM32 `TX→GPIO15 (pin10)`、`RX→GPIO14 (pin8)`、`GND↔GND`，设备名 `/dev/serial0`
-  （需 `raspi-config` 关串口控制台、开串口硬件；Pi 3/4 建议加 `dtoverlay=disable-bt`，改完重启）
+  （需关闭串口登录控制台并启用 UART；下方安装脚本会自动处理，首次安装后需重启）
 
 ```bash
 sudo usermod -aG dialout $USER     # 免 sudo 读写串口，需重新登录
@@ -201,14 +201,69 @@ ctest --preset asan             # 同样的单测跑在 ASan + UBSan 下
 协议编解码、在途命令表、业务解码、命令翻译、配置热加载都是**无 I/O 的纯逻辑**，
 时间由调用方注入——所以「重试三次后判死」这种真机上要等 2 秒的场景，单测里注入假时钟瞬间跑完。
 
-部署以 systemd 托管，配置在 `/etc/gateway.conf`：
+部署以 systemd 托管，配置在 `/etc/gateway.conf`。从开发机一条命令同步、在
+ARM64 目标机编译并安装（`GW_REMOTE` 按实际地址填写）：
+
+```bash
+GW_REMOTE=pi@192.168.1.10 GW_SERIAL_DEV=/dev/serial0 \
+  ./scripts/sync_build.sh --test --install
+```
+
+`--install` 会在目标机请求一次 `sudo`，安装低权限的动态 systemd 用户、持久化
+数据库目录与 journal 策略，并在使用板载 UART 时关闭 `console=serial0`。若脚本提示需要重启：
+
+```bash
+ssh pi@192.168.1.10 'sudo reboot'
+# 重连后检查
+ssh pi@192.168.1.10 'systemctl status gateway --no-pager'
+curl http://192.168.1.10:8888/
+```
+
+项目已经在树莓派本机时，也可直接执行：
 
 ```bash
 cmake --preset release && cmake --build --preset release
-sudo cmake --install build/release         # 二进制 + 配置样例 + service 单元
-sudo systemctl enable --now gateway
+sudo ./scripts/install_rpi.sh                 # 默认 /dev/serial0
+# USB-TTL：sudo ./scripts/install_rpi.sh --serial /dev/ttyUSB0
 sudo systemctl reload gateway              # 发 SIGHUP 热加载，无需重启
 journalctl -u gateway -f
+# 按启动周期查看持久日志
+journalctl --list-boots
+journalctl -u gateway -b -1
+```
+
+### 当前开发机作为 MQTT Broker
+
+当前部署让开发机 `192.168.1.6` 提供 Broker，树莓派 `192.168.1.10` 的
+`mqtt_host` 指向该地址。本机 Broker 由系统 Mosquitto 托管：
+
+```bash
+systemctl status mosquitto
+sudo tail -f /var/log/mosquitto/mosquitto.log
+```
+
+WSL 的 Hyper-V 防火墙规则只允许树莓派访问本机 `1883/TCP`；需要重建规则时，
+以管理员 PowerShell 运行 [scripts/allow_wsl_mqtt.ps1](scripts/allow_wsl_mqtt.ps1)。
+Broker 配置见
+[deploy/mosquitto-workstation.conf](deploy/mosquitto-workstation.conf)。网关尚未支持
+MQTT 认证，因此这个监听器只适合可信局域网。
+
+首次在开发机安装监听配置：
+
+```bash
+sudo install -m 0644 deploy/mosquitto-workstation.conf \
+  /etc/mosquitto/conf.d/90-gateway-workstation.conf
+sudo systemctl restart mosquitto
+```
+
+在开发机监听全部网关消息并下发命令：
+
+```bash
+mosquitto_sub -h 192.168.1.6 -t 'gateway/#' -v
+
+mosquitto_pub -h 192.168.1.6 -t gateway/cmd/query_th -m ''
+mosquitto_pub -h 192.168.1.6 -t gateway/cmd/query_light -m ''
+mosquitto_pub -h 192.168.1.6 -t gateway/cmd/set_period -m '5'
 ```
 
 ## 配置
@@ -219,7 +274,7 @@ journalctl -u gateway -f
 | 档 | 键 | 默认 | 热加载行为 |
 |---|---|---|---|
 | **A** 改内存即生效 | `log_level` `idle_timeout` `report_n` | `1` `5` `10` | 换指针就完了，使用方每次现取 |
-| **B** 重建对应资源 | `serial_path` `serial_baud` `mqtt_host` `db_path` `mqtt_keepalive` | `/dev/ttyUSB0` `115200` `localhost` `/tmp/gateway.db` `60` | 按 diff 只重建变化的；失败保留旧资源并告警 |
+| **B** 重建对应资源 | `serial_path` `serial_baud` `mqtt_host` `db_path` `mqtt_keepalive` | `/dev/serial0` `115200` `localhost` `/var/lib/gateway/gateway.db` `60` | 按 diff 只重建变化的；失败保留旧资源并告警 |
 | **C** 需重启进程 | `mqtt_port` `http_port` | `1883` `8888` | 压回启动值并告警 |
 
 > `mqtt_keepalive` 属 B 档而非 A 档：它被写进 CONNECT 报文，改内存不生效，必须重连。

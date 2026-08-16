@@ -43,6 +43,20 @@ check() {  # check "描述" <条件是否成立:0/1>
   else red "  FAIL  $1"; fi
 }
 
+# AsyncLogger 的稳态刷新周期是 3 秒。业务结果（例如 MQTT timeout）可能已经
+# 到达，但对应日志仍在内存缓冲里；直接 grep 会把日志后端的正常异步行为误判成
+# 业务失败。这里轮询到一个刷新周期之外，并在内容出现后立刻返回。
+wait_for_log() {  # wait_for_log <正则> [最多轮询次数，每次 0.1s]
+  local pattern="$1"
+  local attempts="${2:-40}"
+  local i
+  for ((i=0; i<attempts; ++i)); do
+    grep -qE "$pattern" "$GW_LOG" 2>/dev/null && return 0
+    sleep 0.1
+  done
+  return 1
+}
+
 PIDS=()
 cleanup() {
   for pid in "${PIDS[@]:-}"; do kill "$pid" 2>/dev/null; done
@@ -151,7 +165,8 @@ check "三次重发复用同一个 seq(§6.2)" "$([[ "$SEQS" -eq 1 ]] && echo 0 
 IDEM=$(grep -c '重发 → 补发上次应答' "$SIM_LOG")
 check "节点按 seq 判重发未重复执行(实际 $IDEM 次)" "$([[ "$IDEM" -eq 3 ]] && echo 0 || echo 1)"
 
-check "重试耗尽后判失败" "$(grep -q 'downlink FAILED' "$GW_LOG" && echo 0 || echo 1)"
+wait_for_log 'downlink FAILED'
+check "重试耗尽后判失败" "$?"
 check "失败结局回到 MQTT" "$(grep -q 'timeout' "$ACK_LOG" && echo 0 || echo 1)"
 
 # ============================================================
@@ -172,9 +187,10 @@ info "=== E. 热加载:SIGHUP 后进程存活且继续工作 ==="
 GW_PID=$(pgrep -f "$GATEWAY_BIN $CONF" | head -1)
 if [[ -n "$GW_PID" ]]; then
   kill -HUP "$GW_PID"
-  sleep 1
+  wait_for_log 'reload done'
+  RELOAD_LOGGED=$?
   check "SIGHUP 后进程仍存活" "$(kill -0 "$GW_PID" 2>/dev/null && echo 0 || echo 1)"
-  check "热加载走到 reload done" "$(grep -q 'reload done' "$GW_LOG" && echo 0 || echo 1)"
+  check "热加载走到 reload done" "$RELOAD_LOGGED"
 
   BEFORE=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM device_data;")
   sleep 3

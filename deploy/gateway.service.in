@@ -1,18 +1,22 @@
 [Unit]
 Description=Embedded Edge Gateway
-Documentation=https://github.com/<你的仓库地址>
+Documentation=https://github.com/manbaaa-out/embedded-edge-gateway
 After=network-online.target
 Wants=network-online.target
-# 若依赖本机 mosquitto broker,取消下面两行注释,确保 broker 先起:
-After=mosquitto.service
-Wants=mosquitto.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/gateway /etc/gateway.conf
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/gateway @GATEWAY_CONFIG_FILE@
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=3
+
+# 不以 root 运行。systemd 为本服务动态分配低权限用户；dialout 只用于访问 UART，
+# StateDirectory 则创建并授权 /var/lib/gateway，进程无需持有系统目录写权限。
+DynamicUser=yes
+SupplementaryGroups=dialout
+StateDirectory=gateway
+StateDirectoryMode=0750
 
 # ---- 日志 ----
 # 进程只往 stderr 写(AsyncLogger 单例的去向),轮转与持久化交给 journald。
@@ -24,13 +28,11 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=gateway
 
-# ---- 安全加固(可选,但生产推荐)----
-# 网关只需读配置、写自己的数据库,不需要乱碰系统其他地方:
+# ---- 安全加固 ----
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-# 允许写入数据库目录(配合 db_path=/var/lib/gateway/...):
-ReadWritePaths=/var/lib/gateway
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target

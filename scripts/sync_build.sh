@@ -4,10 +4,10 @@
 #
 #   ./scripts/sync_build.sh                 # 同步 + release 构建
 #   ./scripts/sync_build.sh --test          # 顺带跑单测(需目标机装 libgtest-dev)
-#   ./scripts/sync_build.sh --install       # 顺带装到 /usr/local/bin 并重启服务
+#   ./scripts/sync_build.sh --install       # 顺带安装/更新 systemd 服务
 #
 # 目标机地址等用环境变量覆盖,与本目录其它脚本一致:
-#   GW_REMOTE=pi@192.168.1.10  GW_PRESET=release  ./scripts/sync_build.sh
+#   GW_REMOTE=pi@192.168.1.10 GW_SERIAL_DEV=/dev/serial0 ./scripts/sync_build.sh --install
 #
 # 为什么用 rsync 而不是 git push/pull:开发中途的改动往往还没提交,
 # 而恰恰是这些改动需要立刻拿到真机上编。rsync 同步工作区,不关心提交状态。
@@ -17,6 +17,11 @@ set -uo pipefail
 REMOTE="${GW_REMOTE:-pi@raspberrypi.local}"
 REMOTE_DIR="${GW_REMOTE_DIR:-embedded-edge-gateway}"
 PRESET="${GW_PRESET:-release}"
+SERIAL_DEV="${GW_SERIAL_DEV:-/dev/serial0}"
+
+[[ "$PRESET" =~ ^[A-Za-z0-9._-]+$ ]] || { printf '非法 preset: %s\n' "$PRESET" >&2; exit 2; }
+[[ "$REMOTE_DIR" =~ ^[A-Za-z0-9._/-]+$ ]] || { printf '非法远端目录: %s\n' "$REMOTE_DIR" >&2; exit 2; }
+[[ "$SERIAL_DEV" =~ ^/dev/[A-Za-z0-9._/+:-]+$ ]] || { printf '非法串口路径: %s\n' "$SERIAL_DEV" >&2; exit 2; }
 
 DO_TEST=0
 DO_INSTALL=0
@@ -52,6 +57,8 @@ info "=== 2. 同步源码 → $REMOTE:$REMOTE_DIR ==="
 rsync -az --delete --info=stats1 \
     --exclude='build*/' --exclude='.git/' --exclude='.cache/' \
     ./ "$REMOTE:$REMOTE_DIR/" 2>&1 | grep -E "^(sent|total size)" | sed 's/^/  /'
+sync_rc=${PIPESTATUS[0]}
+if [[ $sync_rc -ne 0 ]]; then red "源码同步失败"; exit 1; fi
 
 # ---- 3. 远端构建 ----
 info "=== 3. 远端构建(preset: $PRESET)==="
@@ -76,19 +83,19 @@ if [[ $DO_TEST -eq 1 ]]; then
 fi
 
 # ---- 5. 安装(可选)----
-# 不用 cmake --install:它按 CMAKE_INSTALL_SYSCONFDIR 把配置装到 <prefix>/etc,
-# 而 gateway.service 里写的是 /etc/gateway.conf,两者对不上。这里只换二进制,
-# 配置与 unit 由首次部署时手工放好(见 README 部署一节)。
+# 目标机安装脚本会保留已有配置、配置板载 UART、安装低权限 systemd unit，
+# 并根据是否需要重启决定立即启动还是留到下次开机启动。
 if [[ $DO_INSTALL -eq 1 ]]; then
-    info "=== 5. 安装并重启服务 ==="
-    ssh -t "$REMOTE" "cd '$REMOTE_DIR' && \
-        sudo install -m755 build/$PRESET/gateway /usr/local/bin/gateway && \
-        sudo install -m755 build/$PRESET/tools/node-sim/node-sim /usr/local/bin/node-sim 2>/dev/null; \
-        systemctl is-enabled gateway >/dev/null 2>&1 && sudo systemctl restart gateway && \
-            echo '  服务已重启' || echo '  服务未 enable,跳过重启'"
+    info "=== 5. 安装 systemd 服务(串口: $SERIAL_DEV) ==="
+    if ! ssh -t "$REMOTE" "cd '$REMOTE_DIR' && \
+        sudo ./scripts/install_rpi.sh --build-dir 'build/$PRESET' --serial '$SERIAL_DEV'"; then
+        red "安装失败"
+        exit 1
+    fi
 fi
 
 echo
 green "完成。目标机上的产物: $REMOTE_DIR/build/$PRESET/gateway"
-[[ $DO_INSTALL -eq 0 ]] && echo "  装到系统里: $0 --install"
-[[ $DO_TEST    -eq 0 ]] && echo "  顺带跑单测: $0 --test"
+if [[ $DO_INSTALL -eq 0 ]]; then echo "  装到系统里: $0 --install"; fi
+if [[ $DO_TEST    -eq 0 ]]; then echo "  顺带跑单测: $0 --test"; fi
+exit 0

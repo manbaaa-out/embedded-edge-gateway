@@ -95,6 +95,13 @@ public:
     // 非阻塞取数,Reactor 线程用 —— 它绝不能阻塞在队列上。
     // 它靠 eventfd 得知「有货了」再来取:队列送数据,eventfd 送通知,两件事分开。
     // 而 eventfd 的计数会合并,所以调用方必须循环取空,不能只取一条。
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 14
+    // GCC 13 在 -O2 下实例化 T=std::variant<非平凡类型...> 时，会把已激活分支的
+    // move 构造误报为 maybe-uninitialized；GCC 14、Debug 和 sanitizers 均正常。
+    // 抑制只包住触发误报的这一处模板，不放宽其他队列操作或业务代码的告警基线。
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
     std::optional<T> try_pop() {
         std::lock_guard<std::mutex> lock(mtx_);
         if (queue_.empty()) {
@@ -105,6 +112,9 @@ public:
         not_full_cv_.notify_one();
         return value;
     }
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 14
+#pragma GCC diagnostic pop
+#endif
 
     // 这两个的返回值天然是过时的 —— 拿到手时别的线程可能已经改了。
     // 只适合做日志与监控,不能用来做「先判空再 pop」这类决策。
@@ -138,4 +148,3 @@ private:
 };
 
 }
-
