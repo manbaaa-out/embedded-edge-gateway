@@ -60,14 +60,11 @@ endif()
 # ---- 10. 安装(树莓派部署:见 README「部署」)----
 include(GNUInstallDirs)
 
-# 配置和 unit 是系统级文件，不应跟随 /usr/local 前缀落到
-# /usr/local/etc 与 /usr/local/lib/systemd/system。绝对路径仍可通过
-# DESTDIR 做打包暂存；实际树莓派部署优先使用 scripts/install_rpi.sh，
-# 它会保留已有配置并处理板载 UART。
+# unit 里的运行时路径必须是绝对路径；安装目的地则必须保持相对，才能让
+# `cmake --install --prefix <暂存目录>` 真正重定位整棵安装树。生产部署优先使用
+# scripts/install_rpi.sh，它会明确安装到 /usr/local 与 /etc，并保留已有配置。
 set(GATEWAY_CONFIG_FILE "/etc/gateway.conf" CACHE FILEPATH
     "网关运行配置的绝对路径")
-set(GATEWAY_SYSTEMD_UNIT_DIR "/etc/systemd/system" CACHE PATH
-    "gateway.service 的安装目录")
 
 configure_file(
     deploy/gateway.service.in
@@ -75,10 +72,8 @@ configure_file(
     @ONLY
 )
 
-get_filename_component(GATEWAY_CONFIG_DIR "${GATEWAY_CONFIG_FILE}" DIRECTORY)
-get_filename_component(GATEWAY_CONFIG_NAME "${GATEWAY_CONFIG_FILE}" NAME)
 install(TARGETS gateway RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES deploy/gateway.conf
-        DESTINATION "${GATEWAY_CONFIG_DIR}" RENAME "${GATEWAY_CONFIG_NAME}")
+        DESTINATION ${CMAKE_INSTALL_SYSCONFDIR} RENAME gateway.conf)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/gateway.service
-        DESTINATION "${GATEWAY_SYSTEMD_UNIT_DIR}")
+        DESTINATION lib/systemd/system)
