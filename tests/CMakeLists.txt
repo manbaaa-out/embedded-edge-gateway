@@ -1,12 +1,5 @@
-# 测试树:GoogleTest + CTest。
-#
-# 默认用 FetchContent 拉取源码;树莓派或离线环境可用 -DGATEWAY_USE_SYSTEM_GTEST=ON
-# 改用系统 GTest。
-#
-# 不默认走 find_package 的原因:WSL 上 find_package(GTest) 可能匹配到挂载盘里的
-# Windows 版 gtest.lib,配置期正常而链接期报出一批 MSVC 未定义符号。
-# 默认自行拉取源码可规避该情形,确有可用系统库时显式开启开关即可。
-
+# 测试总入口负责获取 GoogleTest、定义统一目标工厂并按模块加入测试目录。
+# 默认构建固定版本以保证环境一致；离线或目标机环境可显式使用系统安装版本。
 option(GATEWAY_USE_SYSTEM_GTEST "用系统安装的 GTest 而非 FetchContent 拉源码" OFF)
 
 if(GATEWAY_USE_SYSTEM_GTEST)
@@ -20,7 +13,7 @@ else()
         GIT_TAG        v1.15.2
         GIT_SHALLOW    TRUE
     )
-    # gtest 自身的警告不应触发本项目的 -Werror
+    # gtest_force_shared_crt 兼容 Windows CRT；INSTALL_GTEST 防止安装网关时夹带测试依赖。
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
@@ -28,25 +21,24 @@ endif()
 
 include(GoogleTest)
 
-# gateway_add_test(<name> SOURCES ... LIBS ... [LABELS ...])
-#
-# 把建 target、链接 gtest_main、注册进 CTest 三步收拢为一个函数,
-# 避免每个测试目录重复同样的样板。
+# gateway_add_test(name SOURCES ... LIBS ... LABELS ...)：name 是目标名，SOURCES 是测试
+# 源文件，LIBS 是被测模块，LABELS 用于 CTest 过滤。函数统一链接测试入口并自动发现 TEST。
 function(gateway_add_test name)
+    # T_ 前缀保存 cmake_parse_arguments 解析出的多值参数，避免污染调用方变量。
     cmake_parse_arguments(T "" "" "SOURCES;LIBS;LABELS" ${ARGN})
 
     add_executable(${name} ${T_SOURCES})
     target_link_libraries(${name} PRIVATE
         ${T_LIBS}
         GTest::gtest_main
-        gateway_options        # 测试代码同样遵守零警告基线
+        gateway_options        # 测试源码与产品源码使用相同的警告基线。
     )
-    # 测试里要读 protocol/vectors/frames.csv 这类数据文件,给个绝对路径宏,
-    # 免得测试可执行文件的工作目录一变就找不到数据。
+    # GATEWAY_TEST_DATA_DIR 是绝对源码根，向量测试不依赖 CTest 的工作目录。
     target_compile_definitions(${name} PRIVATE
         GATEWAY_TEST_DATA_DIR="${CMAKE_SOURCE_DIR}"
     )
 
+    # DISCOVERY_TIMEOUT 限制测试枚举阶段，LABELS 原样附加到发现的每个用例。
     gtest_discover_tests(${name}
         PROPERTIES LABELS "${T_LABELS}"
         DISCOVERY_TIMEOUT 30

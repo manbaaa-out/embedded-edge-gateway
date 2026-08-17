@@ -1,11 +1,8 @@
-// 遥测写线程:阻塞取一批,再 try_pop 把此刻已排队的一并取走,合进一个事务落库。
-//
-// try_pop 不等待是关键:空闲时一批就是一帧,落库延迟与逐条写相同;忙起来队列自然
-// 堆积,批量自动变大,事务开销随之摊薄。攒批力度由负载自己决定,因此不需要配一个
-// 攒批窗口,也就不必在「延迟」与「吞吐」之间预先选边。
-//
-// 换库不是跨线程改指针,而是往同一条队列投一条指令,排进写线程自己的时间线 ——
-// 于是「换库」与「落库」天然互斥,既不需要锁,也不会有记录写错库。
+/**
+ * @file
+ * 遥测写线程实现。消费者阻塞等待首个任务，随后只合并已经到达的任务，不设置额外
+ * 攒批窗口：空闲时保持低延迟，积压时自动提高事务批量。
+ */
 
 #include "gateway/pipeline/TelemetryPipeline.h"
 
@@ -17,7 +14,7 @@
 namespace gateway {
 
 TelemetryPipeline::TelemetryPipeline(std::shared_ptr<Database> db) {
-    // db 按值捕获后转交 writerLoop,自此只有写线程的栈上持有它。
+    // 将 shared_ptr 按值移入线程入口，使连接生命周期覆盖整个消费循环。
     writer_ = std::thread([this, db = std::move(db)]() mutable {
         writerLoop(std::move(db));
     });
@@ -30,11 +27,11 @@ TelemetryPipeline::~TelemetryPipeline() {
 }
 
 bool TelemetryPipeline::submit(const std::vector<Reading>& readings, long ts) {
-    if (readings.empty()) return true;   // 心跳帧解出空集,不是失败
+    if (readings.empty()) return true;
 
-    Batch b;
+    Batch b;  // 当前帧对应的一组数据库行。
     b.rows.reserve(readings.size());
-    for (const auto& r : readings) {
+    for (const auto& r : readings) {  // r 是一条已完成定标的业务读数。
         b.rows.push_back(DataRow{r.device, r.value, ts});
     }
     return queue_.try_push(Job{std::move(b)});
@@ -45,19 +42,13 @@ bool TelemetryPipeline::swapDatabase(std::shared_ptr<Database> db) {
 }
 
 void TelemetryPipeline::writerLoop(std::shared_ptr<Database> db) {
-    std::vector<DataRow> rows;
+    std::vector<DataRow> rows;  // 当前事务候选行，不跨越 SwapDb 任务。
 
-    while (auto job = queue_.pop()) {
-        // 内层循环做「机会式攒批」:先处理阻塞取到的这一条,再用 try_pop 把此刻
-        // 队列里已经排着的一并取走,合进同一个事务。
-        //
-        // 关键是它不引入任何等待 —— 空闲时 try_pop 立刻返回空,一批就是一帧,
-        // 落库延迟与逐条写完全相同;忙起来队列自然堆积,批量自动变大,事务开销
-        // 随之摊薄。攒批的力度由负载自己决定,不需要配置攒批窗口。
+    while (auto job = queue_.pop()) {  // job 是本轮首先阻塞取得、随后尝试取得的任务。
+        // 阻塞取得第一项后，仅合并此刻已经排队的批次。
         do {
-            if (auto* swap = std::get_if<SwapDb>(&*job)) {
-                // 换库前必须先把已攒的记录落进旧库:它们是热加载生效之前收到的,
-                // 属于旧库。攒批不得跨越换库边界。
+            if (auto* swap = std::get_if<SwapDb>(&*job)) {  // 非空表示遇到换库边界。
+                // 换库任务是批次边界，之前积累的记录仍写入旧连接。
                 if (!rows.empty()) {
                     db->insertBatch(rows);
                     rows.clear();
@@ -67,7 +58,7 @@ void TelemetryPipeline::writerLoop(std::shared_ptr<Database> db) {
                 break;
             }
 
-            auto& b = std::get<Batch>(*job);
+            auto& b = std::get<Batch>(*job);  // 当前待合并的数据批次。
             rows.insert(rows.end(),
                         std::make_move_iterator(b.rows.begin()),
                         std::make_move_iterator(b.rows.end()));

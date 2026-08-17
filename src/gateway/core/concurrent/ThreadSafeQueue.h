@@ -1,12 +1,10 @@
 #pragma once
 
-// 有界/无界阻塞队列,本项目全部跨线程移交的唯一通道。
+// 支持有界或无界容量的多生产者、多消费者 FIFO 队列。
 //
-// 这不只是「有个队列好用」:除队列自身这几把锁外,进程里没有别的锁 —— 在途命令表、
-// 串口 fd、SQLite 写连接,每一样都只归一条线程独占,要传东西一律经由本队列。
-// 这条纪律是整个并发设计的全部,别处不加锁不是忘了,是不需要。
-//
-// 两处用法刻意不同,见 try_push 与 try_pop 各自的说明。
+// 一把互斥量同时保护元素、容量和关停状态；两个条件变量分别表达“可读”和“可写”。
+// shutdown() 是单向状态转换：之后所有入队操作失败，出队操作仍可排空已有元素，
+// 最终以 nullopt 表达消费循环应退出。empty()/size() 仅提供瞬时观测，不参与同步决策。
 
 #include <chrono>
 #include <queue>
@@ -16,36 +14,55 @@
 
 namespace gateway{
 
+/**
+ * @tparam T 队列元素类型，须可移动构造。元素构造异常会向调用方传播；
+ *            pop()/try_pop() 在 T 的移动构造抛出时不提供强异常保证。
+ *
+ * 析构函数不会自动通知等待者；调用方必须在对象销毁前结束并发访问，
+ * 需要终止消费循环时应先调用 shutdown()。
+ */
 template <typename T>
 class ThreadSafeQueue {
 public:
-    // capacity == 0 表示不限长
+    /**
+     * @brief 创建空队列。
+     * @param capacity 最大元素数；0 表示不设容量上限。
+     */
     ThreadSafeQueue(size_t capacity = 0): capacity_(capacity) {};
 
+    /** @param other 不会被读取；队列含独立同步状态，因此禁止复制构造。 */
     ThreadSafeQueue(const ThreadSafeQueue& other) = delete;
+    /** @param other 不会被读取；禁止用其覆盖本队列的元素和关停状态。 */
     ThreadSafeQueue& operator=(const ThreadSafeQueue& other) = delete;
 
-    // 阻塞入队:满则等。返回 false 表示队列已关停,调用方据此放弃这条数据。
+    /**
+     * @brief 阻塞到元素入队或队列关停。
+     * @param value 按值接收的元素，成功时移动进队列。
+     * @return 成功入队返回 true；等待期间或调用前已关停则返回 false。
+     */
     bool push(T value) {
-        std::unique_lock<std::mutex> lock(mtx_);
+        std::unique_lock<std::mutex> lock(mtx_); // 条件等待期间可自动释放并重新取得互斥量。
         not_full_cv_.wait(lock, [this](){return capacity_ == 0 || queue_.size() < capacity_ || shutdown_;});
 
         if (shutdown_) return false;
         queue_.push(std::move(value));
-        lock.unlock();                   // 先解锁再通知,免得被唤醒者醒来又撞上锁
+        lock.unlock();
         not_empty_cv_.notify_one();
         return true;
     }
 
-    // 限时入队:满则等,但等待有上界。返回 false 表示超时或已关停。
-    //
-    // 给「这条数据丢不起,但调用线程也停不起」的场景用 —— 目前只有热加载换库:
-    // 它由主 Reactor 线程发起,而阻塞 push 会在队列满时把 Reactor 无限期卡住,
-    // 且「队列满」正是磁盘写不动的时候,恰恰也是运维最可能发 SIGHUP 换 db_path 的时候。
-    // 有了上界,最坏是这次换库不生效并报错,而不是整条主循环停摆。
+    /**
+     * @brief 在限定时间内尝试入队。
+     * @tparam Rep timeout 的计数类型。
+     * @tparam Period timeout 的时间单位比例。
+     * @param value 按值接收的元素，成功时移动进队列。
+     * @param timeout 队列满时允许等待的最长时长。
+     * @return 成功入队返回 true；超时或关停返回 false。
+     */
     template <typename Rep, typename Period>
     bool push_for(T value, const std::chrono::duration<Rep, Period>& timeout) {
-        std::unique_lock<std::mutex> lock(mtx_);
+        std::unique_lock<std::mutex> lock(mtx_); // wait_for 所需的可解锁互斥句柄。
+        // ready 区分“条件满足”与“等待超时”；谓词同时响应容量释放和关停。
         const bool ready = not_full_cv_.wait_for(lock, timeout, [this](){
             return capacity_ == 0 || queue_.size() < capacity_ || shutdown_;
         });
@@ -56,15 +73,13 @@ public:
         return true;
     }
 
-    // 非阻塞入队:满则立刻返回 false,供「宁可丢也不能阻塞生产者」的场景使用。
-    //
-    // 与 push 的取舍按数据性质定,不是风格差异:
-    //   下行命令  用 push     —— 命令不可丢,而投递方是 mosquitto 线程,阻塞得起;
-    //   上行遥测  用 try_push —— 投递方是主 Reactor,一旦阻塞,串口收帧、ACK 配对、
-    //                           超时重发、SIGTERM 会一起停摆。丢一条读数无关紧要,
-    //                           Reactor 停住是事故。
+    /**
+     * @brief 不等待地尝试入队。
+     * @param value 按值接收的元素，成功时移动进队列。
+     * @return 成功入队返回 true；容量已满或队列已关停返回 false。
+     */
     bool try_push(T value) {
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::lock_guard<std::mutex> lock(mtx_); // 覆盖状态检查与 push，避免超卖容量。
         if (shutdown_) return false;
         if (capacity_ != 0 && queue_.size() >= capacity_) return false;
         queue_.push(std::move(value));
@@ -72,42 +87,40 @@ public:
         return true;
     }
 
-    // 阻塞取数,消费线程用。返回 nullopt 即「关停且已排空,可以退出了」——
-    // 用类型表达退出信号,消费循环就能写成 while (auto job = q.pop())。
-    //
-    // 判据是 queue_.empty() 而不是 shutdown_:关停后仍先把剩余的取完。
-    // 这一条直接决定停机是优雅 drain 还是粗暴丢弃。
+    /**
+     * @brief 阻塞到取得一个元素，或确认关停队列已排空。
+     * @return 队首元素的移动结果；关停且排空后返回 nullopt。
+     */
     std::optional<T> pop() {
-        std::unique_lock<std::mutex> lock(mtx_);
+        std::unique_lock<std::mutex> lock(mtx_); // 等待期间允许生产者取得互斥量。
         not_empty_cv_.wait(lock, [this](){return !queue_.empty() || shutdown_;});
 
         if (queue_.empty()) {
             return std::nullopt;
         }
 
-        T value = std::move(queue_.front());
+        T value = std::move(queue_.front()); // 先取得元素所有权，再从容器删除节点。
         queue_.pop();
         lock.unlock();
         not_full_cv_.notify_one();
         return value;
     }
 
-    // 非阻塞取数,Reactor 线程用 —— 它绝不能阻塞在队列上。
-    // 它靠 eventfd 得知「有货了」再来取:队列送数据,eventfd 送通知,两件事分开。
-    // 而 eventfd 的计数会合并,所以调用方必须循环取空,不能只取一条。
+    /**
+     * @brief 不等待地尝试取出队首元素。
+     * @return 队首元素的移动结果；队列为空返回 nullopt，不区分是否已关停。
+     */
 #if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 14
-    // GCC 13 在 -O2 下实例化 T=std::variant<非平凡类型...> 时，会把已激活分支的
-    // move 构造误报为 maybe-uninitialized；GCC 14、Debug 和 sanitizers 均正常。
-    // 抑制只包住触发误报的这一处模板，不放宽其他队列操作或业务代码的告警基线。
+    // GCC 13 会在部分非平凡 T 的移动构造上误报；仅在该实例化点抑制告警。
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
     std::optional<T> try_pop() {
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::lock_guard<std::mutex> lock(mtx_); // 覆盖判空、移动和 pop 的完整临界区。
         if (queue_.empty()) {
             return std::nullopt;
         }
-        T value = std::move(queue_.front());
+        T value = std::move(queue_.front()); // 返回给调用方的队首值。
         queue_.pop();
         not_full_cv_.notify_one();
         return value;
@@ -116,34 +129,33 @@ public:
 #pragma GCC diagnostic pop
 #endif
 
-    // 这两个的返回值天然是过时的 —— 拿到手时别的线程可能已经改了。
-    // 只适合做日志与监控,不能用来做「先判空再 pop」这类决策。
+    /** @return 调用瞬间队列是否为空的快照；返回后可能立即过时。 */
     bool empty() const {
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::lock_guard<std::mutex> lock(mtx_); // const 观测仍需与写操作同步。
         return queue_.empty();
     }
 
+    /** @return 调用瞬间的元素数量快照；返回后可能立即过时。 */
     size_t size() const {
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::lock_guard<std::mutex> lock(mtx_); // 保护底层容器的 size() 读取。
         return queue_.size();
     }
 
-    // 单向,没有 restart —— 关停就是要退出了。
-    // 这里用 notify_all 而非 notify_one:要叫醒的是所有人,一起退出。
+    /** 永久关停队列，并唤醒所有等待中的生产者和消费者。重复调用无额外效果。 */
     void shutdown() {
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::lock_guard<std::mutex> lock(mtx_); // 将状态切换与等待谓词原子化。
         shutdown_ = true;
         not_empty_cv_.notify_all();
         not_full_cv_.notify_all();
     }
 
 private:
-    mutable std::mutex mtx_;
-    std::condition_variable not_empty_cv_;
-    std::condition_variable not_full_cv_;
-    std::queue<T> queue_;
-    bool shutdown_ = false;
-    size_t capacity_ = 0;
+    mutable std::mutex mtx_;                 /**< 保护以下全部共享状态；mutable 支持 const 快照。 */
+    std::condition_variable not_empty_cv_;  /**< 元素入队或关停时唤醒消费者。 */
+    std::condition_variable not_full_cv_;   /**< 元素出队或关停时唤醒生产者。 */
+    std::queue<T> queue_;                   /**< 按进入顺序保存尚未消费的元素。 */
+    bool shutdown_ = false;                 /**< 一旦为 true 永不恢复为 false。 */
+    size_t capacity_ = 0;                   /**< 0 为无界，否则是 queue_ 的元素上限。 */
 
 };
 

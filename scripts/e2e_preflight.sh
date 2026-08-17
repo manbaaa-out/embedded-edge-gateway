@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
-# 端到端联调预检:实体 STM32 + /dev/ttyUSB0
-# 只做检查 + 准备配置,不启动网关本体(网关在前台单独跑,方便看日志)
+# 实体 STM32 联调预检。依次验证串口设备与权限、命令行依赖、Broker 连通性和原始帧头，
+# 再从部署模板生成一次性配置；不启动网关，以便调用者在前台观察完整日志。
 set -uo pipefail
 
-SERIAL_DEV="${SERIAL_DEV:-/dev/ttyUSB0}"
-SERIAL_BAUD="${SERIAL_BAUD:-115200}"
-BROKER_HOST="${BROKER_HOST:-localhost}"
-DB_PATH="${DB_PATH:-/tmp/gateway.db}"
-CONF_OUT="${CONF_OUT:-/tmp/gateway.e2e.conf}"
-SRC_CONF="${SRC_CONF:-deploy/gateway.conf}"
+# 所有联调路径均可由同名环境变量覆盖，默认值适合本机 USB 转串口测试。
+SERIAL_DEV="${SERIAL_DEV:-/dev/ttyUSB0}"       # 实体节点连接到主机的串口设备。
+SERIAL_BAUD="${SERIAL_BAUD:-115200}"           # 抓取原始字节时使用的串口波特率。
+BROKER_HOST="${BROKER_HOST:-localhost}"         # 网关与验证客户端共同连接的 Broker。
+DB_PATH="${DB_PATH:-/tmp/gateway.db}"           # 联调网关写入的临时 SQLite 文件。
+CONF_OUT="${CONF_OUT:-/tmp/gateway.e2e.conf}"   # 根据部署模板生成的联调配置。
+SRC_CONF="${SRC_CONF:-deploy/gateway.conf}"     # 不直接修改的源配置模板。
 
+# 三个输出函数接收任意文本参数，分别标记失败、成功和阶段信息。
 red()   { printf '\033[31m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 info()  { printf '\033[36m[*]\033[0m %s\n' "$*"; }
 
-fail=0
-check() {  # check "描述" 命令...
+fail=0  # 任一硬性预检失败后置 1，末尾统一决定退出状态。
+check() {  # 第一个参数是描述，其余参数作为不经 shell 重解析的命令执行。
   local desc="$1"; shift
   if "$@" >/dev/null 2>&1; then green "  OK  $desc"; else red "  FAIL $desc"; fail=1; fi
 }
@@ -52,10 +54,9 @@ else
 fi
 
 info "=== 5. 串口是否真有数据(抓 3 秒原始字节) ==="
-# STM32 每秒发心跳帧 AA 55 01 03 ...,这里抓一下确认物理链路通
+# 按目标波特率切到 raw 模式后抓取帧头，避免 canonical 模式等待换行而误报无数据。
 if command -v timeout >/dev/null 2>&1; then
-  # 关键:先把线路设成 raw + 正确波特率再抓。否则默认 9600 + canonical(行缓冲)下,
-  # STM32 的二进制帧不含换行符,会被行规整缓冲吞掉,物理链路通也读成空 → 假阴性 WARN。
+  # RAW 保存最多 200 个字符的十六进制采样，既用于帧头判定也用于失败诊断。
   RAW=$( exec 3<>"$SERIAL_DEV"
          stty -F "$SERIAL_DEV" "$SERIAL_BAUD" raw -echo -crtscts 2>/dev/null
          timeout 3 cat <&3 2>/dev/null | od -An -tx1 | tr -s ' ' | head -c 200 )
@@ -65,7 +66,7 @@ if command -v timeout >/dev/null 2>&1; then
   else
     red   "  WARN 3 秒内没抓到 AA55 帧头。可能:STM32 没运行/TX-RX 接反/波特率不符。"
     red   "       抓到的原始字节(可能为空): $RAW"
-    # 不直接判 fail:有时心跳周期/采样周期长,先警告
+    # 无帧头可能只是采样间隔较长，因此保留为警告。
   fi
 else
   red "  WARN 没有 timeout 命令,跳过抓包"
@@ -73,7 +74,7 @@ fi
 
 info "=== 6. 生成联调配置 $CONF_OUT ==="
 if [[ -f "$SRC_CONF" ]]; then
-  # 用 | 作 sed 分隔符,避免路径里的 / 冲突(你 memory 里 sed 分隔符那条经验,这里同理)
+  # 使用非斜杠分隔符，以便设备和数据库路径直接参与替换。
   sed -e "s|^serial_path =.*|serial_path = $SERIAL_DEV|" \
       -e "s|^serial_baud =.*|serial_baud = $SERIAL_BAUD|" \
       -e "s|^db_path     =.*|db_path     = $DB_PATH|" \

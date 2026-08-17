@@ -1,5 +1,8 @@
+# 文件职责：在 main 分支变更进入仓库前验证 Linux 构建、测试、运行时内存安全、
+# MCU 协议可移植性和共享协议格式。各 job 相互独立，可由 GitHub Actions 并行调度。
 name: CI
 
+# push 与 pull_request 都限定 main，避免功能分支上的普通推送重复消耗两套 CI。
 on:
   push:
     branches: [ main ]
@@ -7,37 +10,42 @@ on:
     branches: [ main ]
 
 jobs:
-  # ------------------------------------------------------------
-  # 1. 构建 + 单测。-Werror 守住零警告基线。
-  # ------------------------------------------------------------
+  # 主机工具链基线：Debug 执行测试，Release 补充优化期告警，并验证安装目录可重定位。
   build-and-test:
     name: 构建 + 单测 (零警告)
+    # ubuntu-latest 提供项目支持的 Linux ABI；依赖在 job 内显式安装，避免依赖缓存偶然性。
     runs-on: ubuntu-latest
     steps:
+      # checkout 把触发本次工作流的提交放入 GITHUB_WORKSPACE。
       - uses: actions/checkout@v7
 
+      # build-essential 提供 C/C++ 工具链，Ninja 执行 preset，SQLite/Mosquitto 是生产依赖。
       - name: 安装依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build \
                                   libsqlite3-dev libmosquitto-dev
 
+      # dev preset 生成带测试和严格告警设置的 build/dev 目录。
       - name: 配置
         run: cmake --preset dev
 
+      # 使用与配置阶段配套的 build preset，避免脚本重复编码生成目录和并行参数。
       - name: 构建
         run: cmake --build --preset dev
 
+      # dev test preset 开启失败输出，使远端日志直接包含断言上下文。
       - name: 单测
         run: ctest --preset dev
 
-      # Release 走 -O2,glibc 的 _FORTIFY_SOURCE 才会生效 —— read/write 的
-      # warn_unused_result 这类警告【只在优化开启时出现】。只构建 Debug 是抓不到的。
+      # Release 的优化和 _FORTIFY_SOURCE 会暴露 Debug 看不到的结果未检查等告警；显式把
+      # GATEWAY_WARNINGS_AS_ERRORS 设为 ON，确保两种构建都维持零告警基线。
       - name: Release 构建(优化开启后才暴露的警告)
         run: |
           cmake --preset release -DGATEWAY_WARNINGS_AS_ERRORS=ON
           cmake --build --preset release
 
+      # --prefix 覆盖配置时安装前缀，随后检查可执行文件、配置和 systemd 单元均落在新根下。
       - name: 安装可重定位性
         run: |
           cmake --install build/release --prefix /tmp/install_check
@@ -45,46 +53,42 @@ jobs:
           test -f /tmp/install_check/etc/gateway.conf
           test -f /tmp/install_check/lib/systemd/system/gateway.service
 
-  # ------------------------------------------------------------
-  # 2. Sanitizer。ASan 查 use-after-free —— 正是热加载 reset db_/client_
-  #    时最怕的那类 bug;UBSan 查协议解析里的移位与窄化。
-  # ------------------------------------------------------------
+  # 运行时安全基线：ASan 检查越界和释放后使用，UBSan 检查移位、窄化等未定义行为。
   sanitizers:
     name: ASan + UBSan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
+      # 与普通构建使用相同系统库，差异只来自 asan preset 的编译/链接选项。
       - name: 安装依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build \
                                   libsqlite3-dev libmosquitto-dev
 
+      # 配置、构建和测试在同一步执行，任何阶段返回非零都会终止该 job。
       - name: 构建 + 单测
         run: |
           cmake --preset asan
           cmake --build --preset asan
           ctest --preset asan
 
-  # ------------------------------------------------------------
-  # 3. 共享协议核心必须能上 MCU。
-  #
-  #    protocol/ 声称"纯 C99、无 malloc/stdio/平台头、可直接编进固件"——
-  #    这个 job 用编译器证明它,而不是让 README 自说自话。
-  #    任何一个 #include <stdio.h> 都会在这里当场暴露。
-  # ------------------------------------------------------------
+  # 固件可移植性基线：不链接 Linux 主机库，直接以 Cortex-M3 freestanding C99 编译协议核心。
   protocol-portability:
     name: 协议核心可移植性 (arm-none-eabi)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
+      # arm-none-eabi-gcc 是无操作系统 ARM 固件工具链，不会隐式提供主机 POSIX 接口。
       - name: 安装 ARM 工具链
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-arm-none-eabi
 
+      # /tmp/armout 隔离交叉编译产物；GITHUB_WORKSPACE 是 checkout 根目录。
+      # 严格转换告警覆盖协议中的 8/16 位边界，-ffreestanding 禁止依赖宿主环境假设。
       - name: 按 Cortex-M3 freestanding 编译
         run: |
           mkdir -p /tmp/armout && cd /tmp/armout
@@ -95,11 +99,11 @@ jobs:
               -I$GITHUB_WORKSPACE/protocol/include
           arm-none-eabi-size *.o
 
+      # nm -u 列出目标文件未解析符号。协议函数之间的引用允许存在，但动态内存、格式化
+      # 输出和隐式块拷贝会使固件“零 libc 依赖”契约失效。
       - name: 确认对 libc 零依赖
         run: |
           cd /tmp/armout
-          # 未定义符号应当只有协议自己的函数。出现 malloc / printf / memcpy
-          # 等 libc 符号,说明"零依赖"这条契约已经破了。
           if arm-none-eabi-nm -u *.o | grep -qE 'malloc|printf|free|memcpy|memset'; then
             echo "协议核心引入了 libc 依赖,违反可移植性契约"
             arm-none-eabi-nm -u *.o
@@ -107,26 +111,23 @@ jobs:
           fi
           echo "OK:未定义符号中没有 libc"
 
+      # MANIFEST.sha256 是共享文件集合的内容指纹，该脚本阻止协议源码改动后遗漏清单更新。
       - name: 漂移守卫
         run: ./scripts/check_proto_sync.sh
 
-  # ------------------------------------------------------------
-  # 4. 格式检查 —— 只强制 protocol/。
-  #
-  # 那是两个仓库共享的源码,格式一致能让跨仓库 diff 保持干净,值得强制。
-  # src/ 下的既有代码有大量手工对齐的中文注释,全量 clang-format 会产生
-  # 上千处改动、且把对齐揉乱,收益不抵风险 —— 仓库根的 .clang-format
-  # 仍然提供给编辑器与新代码使用,只是不在 CI 里一刀切。
-  # ------------------------------------------------------------
+  # 共享源码格式基线：只强制 protocol/，使网关和 STM32 仓库同步时保持可读差异。
+  # 其他目录仍可使用根 .clang-format，但不在此 job 中做历史代码的全量格式迁移。
   format:
     name: clang-format (protocol/)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
+      # 使用 Ubuntu 仓库提供的 clang-format；具体规则来自仓库根 .clang-format。
       - name: 安装 clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
 
+      # find 以 NUL 分隔文件名交给 xargs；--dry-run --Werror 只检查，不改工作树。
       - name: 检查共享协议核心的格式
         run: |
           find protocol \( -name '*.c' -o -name '*.h' \) -print0 \

@@ -1,8 +1,5 @@
-// 网关侧 C++ 封装的边界测试。
-//
-// 同目录的另两个 target 测的是与固件共享的 C 核心;本文件测的是网关独有的那层胶水。
-// 胶水层最容易出的不是逻辑错,而是类型宽度错:C 接口按 uint8_t 收长度,std::vector
-// 按 size_t 给长度,两者之间那次窄化一旦无人把关,过长的 payload 就会被截成合法值。
+// 网关 FrameCodec C++ 封装测试。buildFrame 接收 size_t 长度的 vector，底层共享 C
+// 编码器只接受 uint8_t，因此本文件重点验证窄化前边界检查和逐字节透明性。
 
 #include "gateway/protocol/FrameCodec.h"
 
@@ -14,28 +11,29 @@ using gateway::buildFrame;
 
 namespace {
 
-std::vector<uint8_t> filled(std::size_t n) { return std::vector<uint8_t>(n, 0xAB); }
+// 生成长度为 n、内容固定为 0xAB 的负载，避免各边界用例重复构造数据。
+std::vector<uint8_t> filled(std::size_t n) {
+    return std::vector<uint8_t>(n, 0xAB);
+}
 
-}  // namespace
+} // namespace
 
-// 合法区间内,整帧长度应为 payload + 6(帧头 2 + LEN 1 + TYPE 1 + CRC 2)
+// 帧固定开销为帧头、长度、类型和 CRC，共六字节。
 TEST(BuildFrame, ValidPayloadLengthsProduceExpectedFrameSize) {
     EXPECT_EQ(buildFrame(EDGE_TYPE_HEARTBEAT, {}).size(), EDGE_FRAME_MIN);
     EXPECT_EQ(buildFrame(EDGE_TYPE_ACK, filled(2)).size(), 8u);
 
-    const auto max_frame = buildFrame(EDGE_TYPE_QUERY_RESP, filled(EDGE_PAYLOAD_MAX));
+    const auto max_frame =
+        buildFrame(EDGE_TYPE_QUERY_RESP, filled(EDGE_PAYLOAD_MAX)); // 最大合法帧。
     ASSERT_EQ(max_frame.size(), EDGE_FRAME_MAX);
     EXPECT_EQ(max_frame[2], EDGE_LEN_MAX) << "LEN = 1(TYPE) + 63";
 }
 
-// 超出 EDGE_PAYLOAD_MAX 一律拒绝,且拒绝的判据必须是 size_t 而非窄化后的值。
-//
-// 256 的整数倍是这里唯一危险的输入:强转成 uint8_t 后落回合法区间,
-// 会组出一个 CRC 自洽、收帧端无从察觉、内容却被腰斩的帧。
+// 在窄化前拒绝超长 vector，尤其覆盖转换后会回绕到合法长度的输入。
 TEST(BuildFrame, OversizedPayloadIsRejectedNotTruncated) {
     struct Case {
-        std::size_t size;
-        const char* why;
+        std::size_t size; // 输入 vector 的真实 size_t 长度。
+        const char* why;  // 若先窄化为 uint8_t 会产生的具体风险。
     };
     const Case cases[] = {
         {EDGE_PAYLOAD_MAX + 1u, "刚过上限"},
@@ -52,11 +50,11 @@ TEST(BuildFrame, OversizedPayloadIsRejectedNotTruncated) {
     }
 }
 
-// 合法路径下 C++ 封装与 C 接口必须产出逐字节相同的帧 —— 封装不得携带任何协议知识
+// C++ 封装不得改变共享 C 编码器生成的任何字节。
 TEST(BuildFrame, MatchesSharedEncoderByteForByte) {
-    const std::vector<uint8_t> payload = {0x09, 0x07, 0xD0};
+    const std::vector<uint8_t> payload = {0x09, 0x07, 0xD0}; // seq 与两字节周期组成的代表负载。
 
-    uint8_t       expected[EDGE_FRAME_MAX];
+    uint8_t expected[EDGE_FRAME_MAX]; // 共享 C 编码器写入的基准帧。
     const uint8_t n = edge_frame_encode(EDGE_TYPE_SET_PERIOD, payload.data(),
                                         static_cast<uint8_t>(payload.size()), expected);
 
@@ -64,15 +62,15 @@ TEST(BuildFrame, MatchesSharedEncoderByteForByte) {
               std::vector<uint8_t>(expected, expected + n));
 }
 
-// 组出的帧必须能被收帧 FSM 原样解回来 —— 编解码互为逆运算
+// 最大合法帧也必须被流式解析器完整还原。
 TEST(BuildFrame, RoundTripsThroughParser) {
-    const std::vector<uint8_t> payload = filled(EDGE_PAYLOAD_MAX);
-    const auto                 frame   = buildFrame(EDGE_TYPE_QUERY_RESP, payload);
+    const std::vector<uint8_t> payload = filled(EDGE_PAYLOAD_MAX); // 最大负载原文。
+    const auto frame = buildFrame(EDGE_TYPE_QUERY_RESP, payload);  // 待回环编码帧。
     ASSERT_FALSE(frame.empty());
 
-    gateway::FrameParser parser;
-    int                  delivered = 0;
-    gateway::Frame       got{};
+    gateway::FrameParser parser; // 网关侧增量解析器。
+    int delivered = 0;           // 回调实际触发次数。
+    gateway::Frame got{};        // 回调最后交付的类型和负载。
     parser.setOnFrame([&](const gateway::Frame& f) {
         delivered++;
         got = f;

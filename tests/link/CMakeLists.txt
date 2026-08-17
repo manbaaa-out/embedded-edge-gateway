@@ -1,12 +1,11 @@
-# link 层测试:在途命令表的全部时序路径,通过注入假时钟避免真实等待
+# command_tracker_test 链接 gw_link，并以可控时钟验证序号、重试与超时状态转换。
 gateway_add_test(command_tracker_test
     SOURCES CommandTrackerTest.cpp
     LIBS    gw_link
     LABELS  "unit;link"
 )
 
-# reopen 的强异常保证 —— 热加载"失败而不致命"的地基。用 pty 当真串口,
-# 因为 SerialPort 要对 fd 做 tcgetattr/tcsetattr,普通文件过不了。
+# node_link_reopen_test 依赖 Linux PTY，以真实 tty 验证串口重开和失败回滚。
 gateway_add_test(node_link_reopen_test
     SOURCES NodeLinkReopenTest.cpp
     LIBS    gw_link

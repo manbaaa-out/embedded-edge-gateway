@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!--
+  网关内嵌监控页。页面只依赖同一进程提供的 /api/data 与本地 uPlot 资源，
+  每两秒并行刷新设备卡片，并为当前选中设备绘制最近历史；无需外部 CDN。
+-->
 <html lang="zh">
 <head>
 <meta charset="utf-8">
@@ -6,6 +10,7 @@
 <title>Edge Gateway Monitor</title>
 <link rel="stylesheet" href="/uplot.css">
 <style>
+  /* 页面主题变量：背景、卡片、边框、正文、次要文字、正常和告警色。 */
   :root {
     --bg: #0f1117; --card: #1a1d27; --line: #2a2e3a;
     --txt: #e4e6eb; --muted: #8a8f9c; --accent: #22c55e; --warn: #ef4444;
@@ -34,7 +39,7 @@
   .card .unit { font-size: 14px; color: var(--muted); font-weight: 400; margin-left: 4px; }
   .card .time { font-size: 12px; color: var(--muted); margin-top: 10px; }
   .card.stale .value { color: var(--muted); }
-  /* 健康状态卡片:在线/故障用色块点 + 文字,区别于数值卡的大字号 */
+  /* 状态卡同时使用颜色、圆点和文字，避免只依赖单一视觉编码。 */
   .card .health { display: inline-flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 700; }
   .card .health-dot { width: 11px; height: 11px; border-radius: 50%; }
   .health.online  .health-dot { background: var(--accent); }
@@ -46,7 +51,7 @@
     padding: 18px 20px; margin-top: 18px;
   }
   .chart-title { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
-  /* uPlot 深色适配 */
+  /* 让图表组件沿用页面的深色主题。 */
   .u-legend { color: var(--txt); }
   .uplot { font-family: inherit; }
   footer { margin-top: 26px; font-size: 12px; color: var(--muted); text-align: center; }
@@ -70,10 +75,7 @@
 
 <script src="/uplot.js"></script>
 <script>
-// 设备清单。
-//   传感器数值量:temperature / humidity / illuminance。
-//   健康状态量:status_dht11 / status_bh1750 —— 由网关把 0x04 状态帧的 bitmask
-//   (bit0=DHT11 OK, bit1=BH1750 OK)按位拆开后落库,值 1.0=在线 0.0=故障。
+// 每个设备描述符定义 API 标识、展示名称、单位、曲线颜色及是否为离散状态。
 const DEVICES = [
   { id: "temperature",   name: "温度",   unit: "°C",  color: "#22c55e" },
   { id: "humidity",      name: "湿度",   unit: "%",   color: "#3b82f6" },
@@ -81,59 +83,67 @@ const DEVICES = [
   { id: "status_dht11",  name: "DHT11",  unit: "",    color: "#a855f7", isStatus: true },
   { id: "status_bh1750", name: "BH1750", unit: "",    color: "#ec4899", isStatus: true },
 ];
-const HISTORY_N = 40;       // 曲线取最近 40 个点
-let selected = "temperature";  // 当前曲线显示的设备
-let chart = null;
+const HISTORY_N = 40;          // 曲线查询的最近点数上限。
+let selected = "temperature"; // 当前卡片选择和曲线数据源的设备 id。
+let chart = null;              // 当前 uPlot 实例；首次绘图前为空。
 
+// 将 Unix 秒时间戳转为浏览器本地时间文本。
+// ts: 后端返回的 Unix 秒；返回值用于卡片“采集于”字段。
 function fmtTime(ts) { return new Date(ts * 1000).toLocaleTimeString(); }
+
+// 更新页面级连接指示。
+// ok: 本轮全部卡片查询是否成功。
 function setConn(ok) {
   document.getElementById("dot").className = ok ? "dot" : "dot dead";
   document.getElementById("conn").textContent = ok ? "已连接" : "连接异常";
 }
 
-// 拉某设备的历史数据 → {ts:[], val:[]}(uPlot 要求升序:旧→新)
+// 拉取一个设备的历史序列。
+// devId: /api/data 的逻辑设备标识；n: 请求的最近点数。
+// 返回 uPlot 使用的升序时间和值数组，以及最后一个点 latest。
 async function fetchHistory(devId, n) {
-  const resp = await fetch(`/api/data?dev=${devId}&n=${n}`);
-  const arr = await resp.json();        // 后端 ORDER BY ts DESC(新→旧)
-  arr.reverse();                         // 反转成 旧→新,符合时间轴
+  const resp = await fetch(`/api/data?dev=${devId}&n=${n}`); // HTTP 响应对象。
+  const arr = await resp.json(); // 后端按时间降序返回的数据库行数组。
+  arr.reverse();
   return {
-    ts:  arr.map(r => r.ts),
-    val: arr.map(r => r.value),
-    latest: arr.length ? arr[arr.length - 1] : null,
+    ts:  arr.map(r => r.ts),    // 升序 Unix 秒数组；r 为当前历史行。
+    val: arr.map(r => r.value), // 与 ts 同索引的读数数组。
+    latest: arr.length ? arr[arr.length - 1] : null, // 最新行；无数据时为空。
   };
 }
 
-// 创建/重建 uPlot 图表(切换设备时重建)
+// 为指定设备创建一张空图表；切换数据源时重建以更新单位、颜色和坐标轴。
+// dev: DEVICES 中当前选中的设备描述符。
 function makeChart(dev) {
-  const el = document.getElementById("chart");
+  const el = document.getElementById("chart"); // uPlot 挂载容器。
   el.innerHTML = "";
 
-  const isStatus = !!dev.isStatus;
+  const isStatus = !!dev.isStatus; // 是否使用 0/1 状态轴和阶梯线。
 
-  const seriesOpts = {
+  const seriesOpts = { // y 序列的显示配置，状态量会在下方扩展。
     label: dev.name + (dev.unit ? ` (${dev.unit})` : ""),
     stroke: dev.color,
     width: 2,
     points: { show: true, size: 4 },
   };
   if (isStatus) {
-    // 状态量是离散 0/1,用阶梯线;align:1 = 值在采样点处跳变,
-    // 贴合"状态保持到下次上报"的语义(平滑折线会出现误导性的斜坡)
+    // 离散状态保持到下一次上报，使用阶梯线而非连续插值。
     seriesOpts.paths = uPlot.paths.stepped({ align: 1 });
+    // u: uPlot 实例；v: 当前采样值。空值显示破折号，0/1 映射为状态文本。
     seriesOpts.value = (u, v) => (v == null ? "—" : (v >= 0.5 ? "在线" : "故障"));
   }
 
-  const opts = {
+  const opts = { // 当前设备对应的完整 uPlot 配置对象。
     width: el.clientWidth || 800,
     height: 280,
     cursor: { drag: { x: true, y: false } },
     scales: {
       x: { time: true },
-      // 状态量锁定 y 轴 [-0.1, 1.1],0/1 不贴边;数值量保持 auto
+      // 状态图固定 0/1 范围；连续读数由 uPlot 自动缩放。
       y: isStatus ? { range: [-0.1, 1.1] } : {},
     },
     series: [
-      {},  // x 轴(时间)
+      {},  // 时间轴
       seriesOpts,
     ],
     axes: [
@@ -142,7 +152,8 @@ function makeChart(dev) {
         ? {
             stroke: "#8a8f9c",
             grid: { stroke: "#2a2e3a" }, ticks: { stroke: "#2a2e3a" },
-            splits: () => [0, 1],                                  // 只在 0/1 处打刻度
+            splits: () => [0, 1],
+            // u: uPlot 实例；splits: y 轴刻度值；返回同长度的中文标签。
             values: (u, splits) => splits.map(v => (v >= 0.5 ? "在线" : "故障")),
           }
         : { stroke: "#8a8f9c", grid: { stroke: "#2a2e3a" }, ticks: { stroke: "#2a2e3a" } },
@@ -151,23 +162,24 @@ function makeChart(dev) {
   chart = new uPlot(opts, [[], []], el);
 }
 
+// 执行一次页面刷新：并行更新全部最新值，再更新当前历史曲线和连接状态。
 async function refresh() {
-  let allOk = true;
+  let allOk = true; // 任一卡片查询失败后置为 false。
 
-  // 1) 卡片:每个设备取最新 1 条
-  const cards = await Promise.all(DEVICES.map(async dev => {
+  // 卡片仅查询各设备的最新读数。
+  const cards = await Promise.all(DEVICES.map(async dev => { // dev 是当前设备描述符。
     try {
-      const resp = await fetch(`/api/data?dev=${dev.id}&n=1`);
-      const arr = await resp.json();
-      const cls = (dev.id === selected) ? "card active" : "card";
+      const resp = await fetch(`/api/data?dev=${dev.id}&n=1`); // 最新值查询响应。
+      const arr = await resp.json(); // 零条或一条数据库记录。
+      const cls = (dev.id === selected) ? "card active" : "card"; // 卡片视觉状态。
       if (arr.length === 0)
         return `<div class="${cls} stale" data-dev="${dev.id}"><div class="label">${dev.name}</div><div class="value">—</div><div class="time">无数据</div></div>`;
-      const r = arr[0];
+      const r = arr[0]; // 当前设备最新一条读数。
 
-      let valueHtml;
+      let valueHtml; // 卡片数值区的 HTML；状态量和连续量格式不同。
       if (dev.isStatus) {
-        // 健康状态:1.0=在线 0.0=故障,用 0.5 阈值避免浮点等值比较
-        const online = r.value >= 0.5;
+        // 阈值判断避免依赖浮点数精确相等。
+        const online = r.value >= 0.5; // true 映射“在线”，false 映射“故障”。
         valueHtml = `<span class="health ${online ? "online" : "offline"}">
                        <span class="health-dot"></span>${online ? "在线" : "故障"}
                      </span>`;
@@ -178,41 +190,46 @@ async function refresh() {
       return `<div class="${cls}" data-dev="${dev.id}"><div class="label">${dev.name}</div>
               <div class="value">${valueHtml}</div>
               <div class="time">采集于 ${fmtTime(r.ts)}</div></div>`;
-    } catch (e) { allOk = false;
+    } catch (e) { // e 是本设备查询或 JSON 解码失败的异常。
+      allOk = false;
       return `<div class="card stale" data-dev="${dev.id}"><div class="label">${dev.name}</div><div class="value" style="color:var(--warn)">错误</div><div class="time">${e}</div></div>`;
     }
   }));
   document.getElementById("grid").innerHTML = cards.join("");
 
-  // 卡片点击 → 切换曲线设备
-  document.querySelectorAll(".card").forEach(c => {
+  // 点击卡片后切换曲线数据源。
+  document.querySelectorAll(".card").forEach(c => { // c 是本轮重建后的单张卡片元素。
     c.onclick = () => { selected = c.dataset.dev; redrawChart(); refresh(); };
   });
 
-  // 2) 曲线:取选中设备的历史
   await redrawChart();
   setConn(allOk);
 }
 
+// 查询并绘制 selected 对应的历史数据；单次失败留待下一刷新周期重试。
 async function redrawChart() {
-  const dev = DEVICES.find(d => d.id === selected);
+  const dev = DEVICES.find(d => d.id === selected); // 当前设备描述符；d 为查找候选项。
   document.getElementById("chartTitle").textContent = `历史曲线 — ${dev.name}`;
   try {
-    const h = await fetchHistory(selected, HISTORY_N);
-    // 用 _devId 记住当前图表画的是哪个设备,切换设备就重建
-    //(比原来的 label 包含判断更可靠:设备名互含也不会漏重建)
+    const h = await fetchHistory(selected, HISTORY_N); // 升序历史序列。
+    // 用自定义标记判断图表配置是否与当前数据源匹配。
     if (!chart || chart._devId !== selected) {
       makeChart(dev);
       chart._devId = selected;
     }
     chart.setData([h.ts, h.val]);
-  } catch (e) { /* 忽略单次失败 */ }
+  } catch (e) { /* e 为本次历史查询/绘图异常；下一个刷新周期会重试。 */ }
 }
 
-// 初次 + 定时
+// 首次加载后每两秒刷新一次。
 refresh();
 setInterval(refresh, 2000);
-window.addEventListener("resize", () => { const d = DEVICES.find(x=>x.id===selected); makeChart(d); chart._devId = selected; redrawChart(); });
+window.addEventListener("resize", () => {
+  const d = DEVICES.find(x => x.id === selected); // d 为当前设备；x 为查找候选项。
+  makeChart(d);
+  chart._devId = selected;
+  redrawChart();
+});
 </script>
 </body>
 </html>

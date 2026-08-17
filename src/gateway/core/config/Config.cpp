@@ -1,8 +1,9 @@
-// 配置的解析与热加载实现。
+// key=value 配置文件的解析、校验和快照发布实现。
 //
-// 两种错误的处理力度刻意不同:格式坏的行只跳过并警告(宽容),值转不成整数直接抛
-// 异常(严格)。理由是多一行看不懂的东西不影响其余配置的正确性,而一个说不清是多少
-// 的数字,继续用下去就是拿默认值冒充用户意图。
+// 解析以 Config 默认值为基线，因此未出现的键沿用默认值，重复键以最后一行为准。
+// 语法没有引号或转义，值中首个 # 开始的内容一律视为注释。无法识别的整行或键只告警，
+// 但已知键的值必须完整解析且通过统一校验。启动和热加载共用同一条校验路径，区别仅在
+// 失败策略：init() 向上抛出，reload() 捕获后保留旧快照。
 
 #include "gateway/core/config/Config.h"
 #include "gateway/core/log/Logger.h"
@@ -13,23 +14,31 @@
 
 namespace gateway {
 
-// ---- 静态成员定义 ----
 std::string                   ConfigManager::path_;
 std::shared_ptr<const Config> ConfigManager::current_;
 std::shared_ptr<const Config> ConfigManager::startup_;
 
-// ---- 解析辅助 ----
+/**
+ * @param s 待处理原字符串。
+ * @return 去除两端空格、制表、回车和换行后的副本；全空白输入返回空串。
+ */
 static std::string trim(const std::string& s) {
-    size_t b = s.find_first_not_of(" \t\r\n");
+    size_t b = s.find_first_not_of(" \t\r\n"); // 首个非空白字符位置。
     if (b == std::string::npos) return "";
-    size_t e = s.find_last_not_of(" \t\r\n");
+    size_t e = s.find_last_not_of(" \t\r\n"); // 末个非空白字符位置。
     return s.substr(b, e - b + 1);
 }
 
+/**
+ * @param val 已去除首尾空白的整数文本。
+ * @param key 对应配置键，仅用于错误消息。
+ * @return 完整转换后的 int。
+ * @throws std::runtime_error 无数字、越界或存在尾随字符。
+ */
 static int toInt(const std::string& val, const std::string& key) {
     try {
-        size_t pos = 0;
-        int v = std::stoi(val, &pos);
+        size_t pos = 0;                  // std::stoi 停止解析后的字符偏移。
+        int v = std::stoi(val, &pos);    // 已转换、尚待检查尾随字符的整数。
         if (pos != val.size()) throw std::invalid_argument("trailing chars");
         return v;
     } catch (...) {
@@ -38,27 +47,27 @@ static int toInt(const std::string& val, const std::string& key) {
 }
 
 Config ConfigManager::parseFile(const std::string& path) {
-    std::ifstream in(path);
+    std::ifstream in(path); // 本次解析独占的输入流，函数返回时关闭。
     if (!in) throw std::runtime_error("cannot open config file: " + path);
 
-    Config c;
-    std::string line;
-    int lineno = 0;
+    Config c;          // 以结构体默认值为未配置字段的回退值。
+    std::string line;  // 当前尚未规范化的文件行。
+    int lineno = 0;    // 面向用户的 1-based 行号。
     while (std::getline(in, line)) {
         lineno++;
-        std::string t = trim(line);
+        std::string t = trim(line); // 去除首尾空白后的有效行。
         if (t.empty() || t[0] == '#') continue;
 
-        size_t eq = t.find('=');
+        size_t eq = t.find('='); // 第一个等号分隔键和值，值中后续等号原样保留。
         if (eq == std::string::npos) {
             LOG_WARN("config line %d: no '=', skipped: %s", lineno, t.c_str());
             continue;
         }
-        std::string key = trim(t.substr(0, eq));
-        std::string val = trim(t.substr(eq + 1));
+        std::string key = trim(t.substr(0, eq));     // 规范化后的配置键。
+        std::string val = trim(t.substr(eq + 1));   // 尚未移除行尾注释的配置值。
 
-        // 去除 value 中的行尾注释:第一个 '#' 及其之后全部丢弃
-        size_t hash = val.find('#');
+        // 值中第一个 '#' 开始的内容视为行尾注释。
+        size_t hash = val.find('#'); // 行尾注释起点；路径和主机名也遵循此语法。
         if (hash != std::string::npos) {
             val = trim(val.substr(0, hash));
         }
@@ -80,7 +89,8 @@ Config ConfigManager::parseFile(const std::string& path) {
 }
 
 bool ConfigManager::validate(const Config& c) {
-    bool ok = true;
+    bool ok = true; // 汇总全部字段错误，以便一次加载报告所有问题。
+    // name 仅用于诊断，p 是待检查的 TCP 端口。
     auto checkPort = [&](const char* name, int p) {
         if (p < 1 || p > 65535) {
             LOG_WARN("config %s invalid port: %d (1..65535)", name, p); ok = false;
@@ -89,13 +99,12 @@ bool ConfigManager::validate(const Config& c) {
     checkPort("mqtt_port", c.mqtt_port);
     checkPort("http_port", c.http_port);
     if (c.idle_timeout   <= 0) { LOG_WARN("idle_timeout invalid: %d (>0)", c.idle_timeout); ok = false; }
-    // 上限与 io 层的 clampReportN 共用 kMaxReportN(定义在 Config.h)。此处拦下越界
-    // 而不是留给那边静默夹紧:配置写错了要让人知道,不能改完值当没事发生。
     if (c.report_n <= 0 || c.report_n > kMaxReportN) {
         LOG_WARN("report_n invalid: %d (1..%d)", c.report_n, kMaxReportN); ok = false;
     }
     if (c.mqtt_keepalive <  0) { LOG_WARN("mqtt_keepalive invalid: %d (>=0)", c.mqtt_keepalive); ok = false; }
     if (c.serial_baud    <= 0) { LOG_WARN("serial_baud invalid: %d", c.serial_baud); ok = false; }
+    // 路径和 mqtt_host 共用非空约束；name 用于生成可定位的日志。
     auto checkPath = [&](const char* name, const std::string& p) {
         if (p.empty()) { LOG_WARN("config %s must not be empty", name); ok = false; }
     };
@@ -106,12 +115,9 @@ bool ConfigManager::validate(const Config& c) {
 }
 
 void ConfigManager::init(const std::string& path) {
-    auto cfg = std::make_shared<Config>(parseFile(path));   // 解析失败的异常传给调用方
+    auto cfg = std::make_shared<Config>(parseFile(path)); // 校验前的候选启动快照。
 
-    // init 必须和 reload 用同一把尺子。此前这里只解析不校验,于是同一份配置在两条
-    // 路径上有两套标准:http_port = 99999 会被 SIGHUP 热加载拒掉,开机启动却照单
-    // 全收 —— 然后在更下游以更难懂的方式失败(端口绑定、timerfd 参数越界)。
-    // 启动期校验失败是致命的:配置决定怎么启动,读出来的东西不可信就没法启动。
+    // 启动配置非法时直接失败，避免以部分默认值继续启动。
     if (!validate(*cfg))
         throw std::runtime_error("config validation failed: " + path +
                                  " (具体哪一项见上面的 WARN 日志)");
@@ -126,11 +132,12 @@ std::shared_ptr<const Config> ConfigManager::current() {
 }
 
 ConfigManager::ReloadResult ConfigManager::reload() {
-    ReloadResult result;
+    ReloadResult result; // 默认表示失败且没有可应用的资源差异。
     try {
-        auto fresh = std::make_shared<Config>(parseFile(path_));
-        if (!validate(*fresh)) return result;             // 校验失败,旧配置保持不变
+        auto fresh = std::make_shared<Config>(parseFile(path_)); // 尚未发布的新候选快照。
+        if (!validate(*fresh)) return result;
 
+        // fv 是文件候选值，sv 是启动期实际值；不可热加载字段始终恢复为 sv。
         auto restoreC = [](const char* name, int& fv, int sv) {
             if (fv != sv)
                 LOG_WARN("config '%s' needs restart (current=%d, file's %d takes effect after restart)",
@@ -140,7 +147,7 @@ ConfigManager::ReloadResult ConfigManager::reload() {
         restoreC("mqtt_port",    fresh->mqtt_port,    startup_->mqtt_port);
         restoreC("http_port",    fresh->http_port,    startup_->http_port);
 
-        auto old = std::atomic_load(&current_);
+        auto old = std::atomic_load(&current_); // 比较期间保持旧快照存活。
         assert(old && "reload() called before init()");
         if (old->serial_path != fresh->serial_path ||
             old->serial_baud != fresh->serial_baud) result.serial_changed = true;

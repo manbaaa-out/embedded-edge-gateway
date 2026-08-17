@@ -1,14 +1,12 @@
 #ifndef EDGE_FRAME_H
 #define EDGE_FRAME_H
 
-/*
- * 帧编解码:组帧(发送侧)与逐字节收帧 FSM(接收侧),互为逆运算。
+/**
+ * @file edge_frame.h
+ * @brief 无动态分配的帧编码器和增量接收状态机。
  *
- * 结构取定长数组、无堆分配,MCU 与 Linux 通用;网关侧在其上包一层 C++ RAII 即可
- * 拿回 vector / std::function 的接口手感。
- *
- * 本层不做 I/O:解析错误只累加到 edge_parser_stats_t,呈现方式由调用方决定 ——
- * 网关走 LOG_WARN,节点可塞进 0x04 状态帧上报。
+ * 协议层只处理字节结构：编码由调用方提供输出缓冲区，解析由调用方逐字节驱动。
+ * 它既不读写串口，也不记录日志；解析结果通过同步回调和累计计数交给上层。
  */
 
 #include "edge_proto/edge_proto.h"
@@ -20,68 +18,91 @@
 extern "C" {
 #endif
 
-/* ---- 组帧(发送侧) ---- */
-
-/* 把 type + payload 组装成完整帧写入 out,返回写入的字节数;参数非法返回 0。
+/**
+ * @brief 将消息类型和 payload 编码为完整线上帧。
+ * @param type 写入 TYPE 字段的原始值；本函数不判断业务方向或类型字典。
+ * @param payload payload 首字节地址；仅当 payload_len 为 0 时可为 NULL。
+ *                非空 payload 不得与 out 的写入区间重叠。
+ * @param payload_len payload 字节数，最大为 EDGE_PAYLOAD_MAX。
+ * @param out 调用方拥有的输出缓冲区，容量必须不少于 EDGE_FRAME_MAX。
+ * @return 实际帧长；out 为 NULL、payload_len 超限或非空 payload 缺失时返回 0，
+ *         且不写 out。缓冲区重叠不会被运行期检测。
  *
- * 前置条件:out 容量 >= EDGE_FRAME_MAX(调用方用定长数组 + 静态断言钉死,
- *   不为此增设一个运行期参数去比较两个编译期已知的数)。
- *   payload 可为 NULL,当且仅当 payload_len == 0;payload_len > EDGE_PAYLOAD_MAX 视为非法。
- *
- * 本函数不分配 seq:seq 属于请求-响应模型(§6.2),归上层命令管理,
- *   重发必须复用原 seq,这个决定权不能落在组帧函数手里。 */
+ * seq 属于业务 payload，由命令层分配；编码器不会生成或修改它。
+ */
 uint8_t edge_frame_encode(uint8_t type, const uint8_t* payload, uint8_t payload_len, uint8_t* out);
 
-/* ---- 收帧 FSM(接收侧) ---- */
-
-/* 8 状态,与 docs/protocol.md §5.1 的错误处理对照表一一对应 */
+/** 增量解析器下一步期望接收的字段。 */
 typedef enum {
-    EDGE_ST_WAIT_HDR0 = 0,
-    EDGE_ST_WAIT_HDR1,
-    EDGE_ST_WAIT_LEN,
-    EDGE_ST_WAIT_TYPE,
-    EDGE_ST_READ_PAYLOAD,
-    EDGE_ST_WAIT_CRC_LO,
-    EDGE_ST_WAIT_CRC_HI,
-    EDGE_ST_DELIVER /* 瞬态:交付后立即 resync,正常不会停留于此 */
+    EDGE_ST_WAIT_HDR0 = 0, /**< 搜索帧头首字节 0xAA。 */
+    EDGE_ST_WAIT_HDR1,     /**< 已收到 0xAA，等待帧头次字节 0x55。 */
+    EDGE_ST_WAIT_LEN,      /**< 等待并校验 LEN。 */
+    EDGE_ST_WAIT_TYPE,     /**< 等待 TYPE，并根据 LEN 决定是否继续读取 payload。 */
+    EDGE_ST_READ_PAYLOAD,  /**< 按 LEN 收集 payload。 */
+    EDGE_ST_WAIT_CRC_LO,   /**< 等待线上 CRC 的低字节。 */
+    EDGE_ST_WAIT_CRC_HI,   /**< 等待线上 CRC 的高字节。 */
+    EDGE_ST_DELIVER        /**< 瞬态：校验并回调，不会跨正常 feed 调用保留。 */
 } edge_state_t;
 
-/* 解析统计。协议层只计数不打印 */
+/** 从最近一次 edge_parser_init() 起累计的解析统计；超过 uint32_t 上限后回绕。 */
 typedef struct {
-    uint32_t frames_ok; /* 交付成功的帧数 */
-    uint32_t len_err;   /* LEN 越界(§5.3) */
-    uint32_t crc_err;   /* CRC 不匹配 */
-    uint32_t resync;    /* 异常路径回到起点的次数(含 DELIVER 态收到意外字节) */
+    uint32_t frames_ok; /**< CRC 正确并进入交付路径的帧数，即使回调为空也计数。 */
+    uint32_t len_err;   /**< LEN 小于 EDGE_LEN_MIN 或大于 EDGE_LEN_MAX 的次数。 */
+    uint32_t crc_err;   /**< 收到的 CRC 与本地累计值不一致的次数。 */
+    uint32_t resync;    /**< 显式错误使状态机回到 EDGE_ST_WAIT_HDR0 的次数。 */
 } edge_parser_stats_t;
 
-/* 收齐一帧且 CRC 校验通过时回调。
- * user 透传调用方上下文:节点侧传 NULL 即可,网关侧靠它把 C 回调弹回 C++ 对象,
- * 避免在协议层出现全局变量。 */
+/**
+ * @brief CRC 校验通过后的同步回调类型。
+ * @param type 已解析的 TYPE 原始值。
+ * @param payload 解析器内部缓冲区，只在本次回调返回前有效。
+ * @param payload_len payload 字节数，可为 0。
+ * @param user 初始化解析器时登记的调用方上下文，不由协议层解释或释放。
+ */
 typedef void (*edge_frame_cb_t)(uint8_t type, const uint8_t* payload, uint8_t payload_len,
                                 void* user);
 
+/** 增量解析器的全部可持久状态；调用前必须通过 edge_parser_init() 初始化。 */
 typedef struct {
-    edge_state_t state;
-    uint8_t len;  /* 本帧 LEN */
-    uint8_t type; /* 本帧 TYPE */
-    uint8_t payload[EDGE_PAYLOAD_MAX];
-    uint8_t received; /* payload 已收字节数 */
-    uint16_t crc;     /* CRC 累加值 */
-    uint8_t crc_lo;
-    uint8_t crc_hi;
+    edge_state_t state; /**< 当前接收状态。 */
+    uint8_t len;        /**< 当前帧的 LEN，包含 TYPE、不包含帧头和 CRC。 */
+    uint8_t type;       /**< 当前帧的 TYPE 原始值。 */
+    uint8_t payload[EDGE_PAYLOAD_MAX]; /**< 当前帧 payload 的固定容量存储。 */
+    uint8_t received;   /**< 已写入 payload 的字节数。 */
+    uint16_t crc;       /**< 从 LEN 起逐字节累计的本地 CRC。 */
+    uint8_t crc_lo;     /**< 线上帧尾收到的 CRC 低字节。 */
+    uint8_t crc_hi;     /**< 线上帧尾收到的 CRC 高字节。 */
 
-    edge_frame_cb_t on_frame;
-    void* user;
-    edge_parser_stats_t stats;
+    edge_frame_cb_t on_frame; /**< 可为空的同步交付回调。 */
+    void* user;                /**< 原样传给 on_frame 的调用方上下文。 */
+    edge_parser_stats_t stats; /**< 当前解析器的累计统计。 */
 } edge_parser_t;
 
-/* 置初态并装载回调。cb 可为 NULL,此时只统计不交付(如做链路探测) */
+/**
+ * @brief 初始化逻辑解析状态并清空统计。
+ * @param p 待初始化对象；为 NULL 时无操作。
+ * @param cb CRC 正确时调用的函数；可为 NULL，此时仍更新统计但不交付帧。
+ * @param user 传给 cb 的上下文指针；协议层不取得所有权。
+ *
+ * 该操作使先前半帧不再可继续，但不为无效的 payload 数组字节清零。
+ */
 void edge_parser_init(edge_parser_t* p, edge_frame_cb_t cb, void* user);
 
-/* 喂一个字节,驱动一次状态转移 */
+/**
+ * @brief 向状态机输入一个字节。
+ * @param p 已初始化的解析器；为 NULL 时无操作。
+ * @param byte 按线上顺序到达的下一个字节。
+ *
+ * 回调（若有）会在本函数返回前同步执行；同一解析器不可重入调用。
+ */
 void edge_parser_feed(edge_parser_t* p, uint8_t byte);
 
-/* 喂一段字节,等价于逐字节调用 edge_parser_feed */
+/**
+ * @brief 按顺序输入连续缓冲区，语义等同于逐字节调用 edge_parser_feed()。
+ * @param p 已初始化的解析器；为 NULL 时无操作。
+ * @param buf 输入缓冲区；为 NULL 时无论 n 为何都不执行操作。
+ * @param n 输入字节数。
+ */
 void edge_parser_feed_buf(edge_parser_t* p, const uint8_t* buf, size_t n);
 
 #ifdef __cplusplus

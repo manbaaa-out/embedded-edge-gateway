@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
-# 漂移守卫:校验共享协议核心与 MANIFEST.sha256 记录的指纹一致。
+# 共享协议漂移守卫。第一阶段用 MANIFEST.sha256 检查本仓库内容是否未经登记修改；
+# 可选第二阶段按同一清单逐文件比较另一仓库的 protocol/，确保两端解释相同字节。
 #
-# 网关与 STM32 固件两个仓库各带一份本脚本,CI 都会跑。
-# vendored 副本改了却没同步到另一端时,这里当场变红 ——
-# 「两端协议一致」于是成为构建系统强制的不变量,而不是靠人记得。
-#
-# 用法:
-#   ./scripts/check_proto_sync.sh                    # 校验本仓库副本自洽
-#   ./scripts/check_proto_sync.sh <另一仓库的 protocol 目录>   # 跨仓库比对
+# 调用方式：
+#   ./scripts/check_proto_sync.sh                    # 只核验本仓库副本与清单
+#   ./scripts/check_proto_sync.sh <对端 protocol 目录>        # 再执行逐文件跨仓库核验
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROTO_DIR="$REPO_ROOT/protocol"
-MANIFEST="$PROTO_DIR/MANIFEST.sha256"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"  # 当前网关仓库根目录。
+PROTO_DIR="$REPO_ROOT/protocol"                                # 本地共享协议副本。
+MANIFEST="$PROTO_DIR/MANIFEST.sha256"                          # 本地副本的预期指纹清单。
 
 if [[ ! -f "$MANIFEST" ]]; then
     echo "✗ 找不到 $MANIFEST,请先跑 ./scripts/gen_proto_manifest.sh" >&2
@@ -32,8 +29,8 @@ EOF
     exit 1
 fi
 
-# ---- 可选:与另一个仓库的副本逐文件比对 ----
-PEER_DIR="${1:-}"
+# 提供对端目录时，以清单中的相对路径逐文件比较。
+PEER_DIR="${1:-}"  # 可选的另一仓库 protocol/ 路径；为空时只检查本地自洽性。
 if [[ -n "$PEER_DIR" ]]; then
     echo
     echo "== 跨仓库比对:$PEER_DIR =="
@@ -42,8 +39,8 @@ if [[ -n "$PEER_DIR" ]]; then
         exit 1
     fi
 
-    drift=0
-    # 从 MANIFEST 里取文件清单(跳过 # 注释行),逐个 diff
+    drift=0  # 任一文件缺失或内容不同后置 1，完成全部比较再统一失败。
+    # 清单的前导说明行不参与文件比较。
     while read -r _hash file; do
         [[ "$_hash" == \#* ]] && continue
         if [[ ! -f "$PEER_DIR/$file" ]]; then

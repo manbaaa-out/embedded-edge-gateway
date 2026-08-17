@@ -1,9 +1,4 @@
-// 主循环与 channel 的增删。
-//
-// 全文的要害在 removeChannel 与 loop 的配合:回调函数本身就存在 channel 里,
-// 在回调中当场析构自己所属的 channel,等于销毁正在执行的 std::function ——
-// 在自己站着的树枝上锯。所以摘除只置标志并转入 dying_,真正的回收推迟到批末,
-// 那时没有任何回调在栈上。退出判定同理放在批末,不半途 break。
+/** @file EventLoop 的资源管理、epoll 派发和延迟回收实现。 */
 
 #include "gateway/io/event/EventLoop.h"
 #include "gateway/core/log/Logger.h"
@@ -21,7 +16,7 @@ namespace gateway{
     EventLoop::EventLoop(){
         epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
         if (epoll_fd_ == -1) {
-            int saved = errno;
+            int saved = errno;  // 在构造错误文本前保留系统调用错误码。
             throw std::runtime_error(std::string("epoll_create1") + " failed: " + strerror(saved));
         }
     }
@@ -34,14 +29,7 @@ namespace gateway{
         }
     }
 
-    // channels_ 与 dying_ 必须跟着一起搬。
-    //
-    // 只搬 epoll_fd_ 的话:目标对象管着 epoll,却看不到任何 channel —— removeChannel
-    // 找不到条目、forEachChannel 遍历为空;而源对象析构时会把那些 channel 连同 fd
-    // 一起关掉,等于把目标脚下的 fd 抽走。实测过:移动后源仍持有 1 条,目标是 0 条。
-    //
-    // 搬容器本身是安全的:channel 由 shared_ptr 持有,对象地址不变,内核里那些
-    // data.ptr 仍然指向同一批对象。
+    // 所有权容器随 epoll 一起移动；shared_ptr 管理的 channel 地址保持不变。
     EventLoop::EventLoop(EventLoop&& other) noexcept{
         epoll_fd_ = other.epoll_fd_;
         other.epoll_fd_ = -1;
@@ -68,34 +56,26 @@ namespace gateway{
     }
 
     void EventLoop::loop() {
-        // 退出判定放在批末:本轮已派发的回调要跑完,dying_ 也要回收干净,
-        // 之后才返回 —— 半途 break 会让回调栈上的指针失去 dying_ 的保护。
         while (running_.load(std::memory_order_relaxed)) {
-            struct epoll_event events[1024];
-            int n = epoll_wait(epoll_fd_, events, 1024, -1);
+            struct epoll_event events[1024];  // 单次系统调用接收的就绪事件批次。
+            int n = epoll_wait(epoll_fd_, events, 1024, -1);  // 本批有效元素数量。
             if (n == -1) {
-                int saved = errno;
-                if (saved == EINTR) continue;   // 被信号打断,重试
+                int saved = errno;  // 日志/异常构造前保存 errno。
+                if (saved == EINTR) continue;
                 throw std::runtime_error(std::string("epoll_wait") + " failed: " + strerror(saved));
             }
 
-            for (int i = 0; i < n; i++){
-                channel* ch = static_cast<channel*>(events[i].data.ptr);
-                uint32_t revents = events[i].events;
+            for (int i = 0; i < n; i++){  // i 是当前批次中的事件索引。
+                channel* ch = static_cast<channel*>(events[i].data.ptr);  // epoll 借用指针。
+                uint32_t revents = events[i].events;  // 本次实际发生的事件掩码。
 
-                // 同批内可能已被别的回调摘除(见 channel::dead)。指针仍有效,
-                // 但这条 channel 已不该再被驱动。
+                // 同批较早的回调可能已经移除了该 channel。
                 if (ch->dead) continue;
 
                 if (revents & EPOLLIN) {
                     ch->handleRead();
                 }
-                // 必须复查 dead:handleRead 可能摘除了【自己】(HTTP 的 on_read 在
-                // recv 返回 0 或解析出错时就是这么做的)。此时 fd 已被 EPOLL_CTL_DEL,
-                // 而同一批事件里 EPOLLIN 与 EPOLLOUT 可以同时就绪 —— 继续跑
-                // handleWrite,一旦它把 out_buf 发空就会去调 modifyChannel,
-                // EPOLL_CTL_MOD 在已摘除的 fd 上返回 ENOENT,而那个函数是抛异常的,
-                // 异常一路穿出 loop() 就是整条 HTTP 线程结束。
+                // 读回调可能移除自身，因此写回调前再次检查状态。
                 if ((revents & EPOLLOUT) && !ch->dead) {
                     ch->handleWrite();
                 }
@@ -107,11 +87,11 @@ namespace gateway{
     }
 
     void EventLoop::addChannel(std::shared_ptr<channel> ch) {
-        struct epoll_event ev;
+        struct epoll_event ev;  // 交给 EPOLL_CTL_ADD 的注册描述。
         ev.events = ch->events;
         ev.data.ptr = ch.get();
         if (epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, ch->fd, &ev) == -1) {
-            int saved = errno;
+            int saved = errno;  // 保留 ctl 失败原因。
             throw std::runtime_error(std::string("epoll_ctl") + " ADD failed: " + strerror(saved));
         }
 
@@ -123,26 +103,26 @@ namespace gateway{
             LOG_WARN("epoll_ctl DEL(fd=%d) failed: %s", fd, strerror(errno));
         }
 
-        auto it = channels_.find(fd);
+        auto it = channels_.find(fd);  // 活动表中对应的所有权条目。
         if (it != channels_.end()) {
-            it->second->dead = true;        // 同批后续事件不再驱动它
-            dying_.push_back(it->second);   // 延迟回收,撑到批末
+            it->second->dead = true;
+            dying_.push_back(it->second);
             channels_.erase(it);
         }
     }
 
     void EventLoop::modifyChannel(channel* ch) {
-        struct epoll_event ev;
+        struct epoll_event ev;  // 以 channel 最新掩码覆盖内核注册项。
         ev.events = ch->events;
         ev.data.ptr = ch;
         if (epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, ch->fd, &ev) == -1) {
-            int saved = errno;
+            int saved = errno;  // 异常构造前保留系统调用错误。
             throw std::runtime_error(std::string("epoll_ctl MOD failed: ") + strerror(saved));
         }
     }
 
     void EventLoop::forEachChannel(std::function<void(channel*)> fn) {
-        for (auto &kv: channels_) {
+        for (auto &kv: channels_) {  // kv=(fd, 活动 channel 所有权)。
             fn(kv.second.get());
         }
     }

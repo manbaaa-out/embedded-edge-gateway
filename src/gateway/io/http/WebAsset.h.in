@@ -1,9 +1,14 @@
 #pragma once
-// ⚠ 本文件由 CMake 在配置期从同目录的 assets/ 自动生成,请勿手改。
-//   嵌入式 asset embedding:前端(html+uPlot js/css)编进二进制,
-//   单文件部署、离线可用,不依赖外部文件路径或 CDN。
+/**
+ * @file
+ * 监控页资源的生成头模板。CMake 在配置阶段用 assets/ 原文替换 @...@ 占位符，
+ * HttpServer 随后把生成的字符串编入可执行文件，因此运行时不依赖静态文件目录。
+ */
 namespace gateway {
-static const char* const kIndexHtml = R"GWHTML(@WEB_INDEX_HTML@)GWHTML";
-static const char* const kUplotJs   = R"UPLOTJS(@WEB_UPLOT_JS@)UPLOTJS";
-static const char* const kUplotCss  = R"UPLOTCSS(@WEB_UPLOT_CSS@)UPLOTCSS";
+static const char* const kIndexHtml =  ///< 自有监控页 HTML 原文。
+    R"GWHTML(@WEB_INDEX_HTML@)GWHTML";
+static const char* const kUplotJs =  ///< 第三方 uPlot JavaScript 压缩资源。
+    R"UPLOTJS(@WEB_UPLOT_JS@)UPLOTJS";
+static const char* const kUplotCss =  ///< 第三方 uPlot CSS 压缩资源。
+    R"UPLOTCSS(@WEB_UPLOT_CSS@)UPLOTCSS";
 }

@@ -1,27 +1,31 @@
-# ---- 构建产物 ----
+# 文件职责：只忽略可重新生成的本地产物和开发工具状态；源码、部署配置与协议向量均入库。
+
+# CMake/Ninja 构建目录。build/ 覆盖默认目录，build*/ 覆盖 build-dev 等变体。
 build/
 build*/
+
+# 编译器和链接器生成的目标文件、静态库与共享库。
 *.o
 *.a
 *.so
 
-# CMake 用户本地覆盖(preset 的个人化配置,不入库)
+# CMake 用户级 preset 可能包含个人路径或机器参数，不应成为团队默认配置。
 CMakeUserPresets.json
 
-# ---- 运行期产物 ----
+# SQLite 主库及 WAL 伴随文件由运行期创建；日志文件同样不属于源码状态。
 *.db
 *.db-shm
 *.db-wal
 *.log
 
-# ---- 编辑器 / 工具 ----
+# 编辑器工程状态、通用缓存与语言服务生成的编译命令数据库。
 .vscode/
 .idea/
 .cache/
 compile_commands.json
 
-# WSL mark-of-the-web 垃圾(NTFS ADS)
+# Windows/WSL 从下载文件附带的 NTFS Zone.Identifier 替代数据流映射文件。
 *:Zone.Identifier
 
-# CMake 配置期从 http/assets/ 生成的嵌入头(产物,不入库;源在 assets/ + WebAsset.h.in)
+# WebAsset.h 由 WebAsset.h.in 和 assets/ 在 CMake 配置期生成，任意构建树位置都应忽略。
 **/WebAsset.h

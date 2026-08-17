@@ -1,11 +1,12 @@
-# CRC16-MODBUS 金标准向量 —— 网关与 STM32 节点共读同一份
+# 网关与 STM32 共用的 CRC-16/MODBUS 可执行样例。
 #
-# 来源:docs/protocol.md §4.3。任一向量不匹配即实现错误 两端 CI 均会失败。
-# 外部交叉验证:https://crccalc.com/ 选 CRC-16/MODBUS(该站字节序显示需交换)
+# 一次性 edge_crc16() 和逐字节 edge_crc16_update() 均应产生 expected_crc。
+# 向量包含常见 Modbus 报文、单字节、空输入和协议帧 CRC 覆盖段。
 #
-# 格式:input_hex,expected_crc,note        (# 开头为注释 空行忽略)
-#   input_hex   —— 空格分隔的输入字节
-#   expected_crc—— 期望的 CRC16 值(uint16 主机序 非帧内小端字节序)
+# 每行三列：input_hex,expected_crc,note。加载器忽略空行和以 # 开头的行。
+#   input_hex    以空格分隔的输入字节；空字段表示零字节。
+#   expected_crc 数值形式的 uint16_t CRC，不是帧尾低字节在前的线上排列。
+#   note         失败时显示的场景说明，不参与计算。
 
 01 03 00 00 00 02,0x0BC4,Modbus 读保持寄存器请求(经典公开向量)
 01 06 00 01 00 03,0x0B98,Modbus 写单寄存器请求

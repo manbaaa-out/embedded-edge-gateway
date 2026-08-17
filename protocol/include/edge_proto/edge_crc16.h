@@ -1,17 +1,12 @@
 #ifndef EDGE_CRC16_H
 #define EDGE_CRC16_H
 
-/*
- * CRC16-MODBUS:多项式 0xA001(0x8005 反射),初值 0xFFFF,反射输入输出,末位不异或。
+/**
+ * @file edge_crc16.h
+ * @brief CRC-16/MODBUS 的流式与整段计算接口。
  *
- * 选型理由:嵌入式串口事实标准,对 ≤16 位的突发错误 100% 检出 —— 而突发正是串口的
- * 典型故障形态;查表法每字节约 10 个时钟周期,MCU 上开销可忽略。
- *
- * 接口设计为纯函数(状态由调用方持有),使同一份实现同时服务接收端 FSM 的逐字节累加
- * 与发送端组帧的整段计算,两条路径不可能算出不同结果。
- *
- * docs/protocol.md §4.3 的测试向量是两端的验收线,任一向量不匹配即实现错误;
- * vectors/crc16.csv 与 tests/protocol 会逐条比对。
+ * 两个接口共用同一更新规则：编码器可逐字节更新，调用方也可一次校验完整缓冲区。
+ * 实现不分配内存、不执行 I/O，适合网关和 MCU 共用。
  */
 
 #include <stdint.h>
@@ -21,13 +16,23 @@
 extern "C" {
 #endif
 
+/** CRC-16/MODBUS 初值；反射多项式为 0xA001，最终结果不再异或。 */
 #define EDGE_CRC16_INIT 0xFFFFu
 
-/* 把一个字节累加进 crc,返回更新后的值。
- * 用法:uint16_t crc = EDGE_CRC16_INIT; crc = edge_crc16_update(crc, b); ... */
+/**
+ * @brief 将一个字节累加到已有 CRC 状态。
+ * @param crc 上一轮 CRC；首字节应传 EDGE_CRC16_INIT。
+ * @param byte 本轮参与校验的字节。
+ * @return 累加后的 CRC，可继续传给下一次调用。
+ */
 uint16_t edge_crc16_update(uint16_t crc, uint8_t byte);
 
-/* 计算整段 buffer 的 CRC,内部自 EDGE_CRC16_INIT 起累加 */
+/**
+ * @brief 从 EDGE_CRC16_INIT 开始计算一段连续数据的 CRC。
+ * @param data 输入缓冲区；len 大于 0 时必须指向至少 len 个有效字节。
+ * @param len 输入字节数；为 0 时返回初值，data 可为 NULL。
+ * @return 整段数据的 CRC-16/MODBUS 值。
+ */
 uint16_t edge_crc16(const uint8_t* data, size_t len);
 
 #ifdef __cplusplus

@@ -1,11 +1,11 @@
-# pipeline 层测试:帧 → 记录的业务解码
+# telemetry_decoder_test 链接 gw_pipeline，测试帧到 Reading 的纯函数映射。
 gateway_add_test(telemetry_decoder_test
     SOURCES TelemetryDecoderTest.cpp
     LIBS    gw_pipeline
     LABELS  "unit;pipeline"
 )
 
-# 落库写线程:持久化、攒批不变性、换库边界
+# telemetry_pipeline_test 使用真实临时 SQLite 文件验证异步写入、批处理和换库顺序。
 gateway_add_test(telemetry_pipeline_test
     SOURCES TelemetryPipelineTest.cpp
     LIBS    gw_pipeline

@@ -1,16 +1,17 @@
-// 日志的同步外壳。整个文件只做一件事:把一条日志在【栈上】拼成完整一行。
-//
-// 栈缓冲不是随手写的,它是多线程不交错的第一道保证:每条线程各拼各的私有内存,
-// 这一步不可能相互干扰。第二道保证在 AsyncLogger —— 整行一次 append,锁的粒度
-// 正好是一整行。若改成分段 append(先前缀、再正文),行就会交错。
+// Logger 的同步格式化实现。函数只使用栈内局部状态，不在多个调用线程之间共享缓冲区；
+// 生成的前缀、正文和换行一次性交给异步后端，避免多线程日志在行内交错。
 
 #include "gateway/core/log/Logger.h"
 #include "gateway/core/log/AsyncLogger.h"
 
 namespace gateway {
 
-std::atomic<LogLevel> Logger::level_{LogLevel::INFO};   // 默认不输出 DEBUG
+std::atomic<LogLevel> Logger::level_{LogLevel::INFO};
 
+/**
+ * @param lv 待呈现的严重度枚举。
+ * @return 指向静态五字符标签的非拥有指针；未知枚举返回 "?????"。
+ */
 static const char* levelName(LogLevel lv) {
     switch (lv) {
         case LogLevel::DEBUG: return "DEBUG";
@@ -24,31 +25,29 @@ static const char* levelName(LogLevel lv) {
 void Logger::log(LogLevel lv, const char* file, int line, const char* fmt, ...) {
     if (lv < level_.load(std::memory_order_relaxed)) return;
 
-    // snprintf 返回的是「本应写入的长度」,不是实际写入的长度。前缀含 __FILE__,
-    // 路径够长时 ret 会超过 sizeof(buf):此时 buf + prefix_len 已越界,而
-    // sizeof(buf) - prefix_len 作为 size_t 会下溢成巨大值,vsnprintf 便据此
-    // 向越界地址一路写下去。所以下面每一处用 ret 之前都必须先夹紧。
-    char buf[1024];
-    int  ret = snprintf(buf, sizeof(buf), "[%s] %s:%d ", levelName(lv), file, line);
-    if (ret < 0) return;                                  // 格式化失败,丢弃
+    // snprintf/vsnprintf 返回所需长度，计算后续写入位置前必须限制到缓冲区范围。
+    char buf[1024]; // 当前调用独占的完整日志行缓冲区，最后一字节可用于换行。
+    int ret = snprintf(buf, sizeof(buf), "[%s] %s:%d ", levelName(lv), file, line);
+    // ret 是完整前缀所需字符数，不等于发生截断时的实际写入数。
+    if (ret < 0) return;
 
-    size_t prefix_len = static_cast<size_t>(ret);
+    size_t prefix_len = static_cast<size_t>(ret); // 正文在 buf 中的起始偏移。
     if (prefix_len >= sizeof(buf) - 1) {
-        prefix_len = sizeof(buf) - 2;                     // 为换行与 '\0' 各留一字节
+        prefix_len = sizeof(buf) - 2;
     }
 
-    va_list ap;
+    va_list ap; // 指向 fmt 后的 printf 实参，仅在本次 vsnprintf 调用中有效。
     va_start(ap, fmt);
     int body_ret = vsnprintf(buf + prefix_len, sizeof(buf) - prefix_len, fmt, ap);
+    // body_ret 是未截断正文所需字符数，用于判断最终行长是否需要夹紧。
     va_end(ap);
 
-    if (body_ret < 0) return;   // 格式化失败,丢弃
+    if (body_ret < 0) return;
 
-    size_t total = prefix_len + static_cast<size_t>(body_ret);   // body_ret 同为「本应写入」
+    size_t total = prefix_len + static_cast<size_t>(body_ret); // 尚未加入换行的逻辑长度。
     if (total >= sizeof(buf)) total = sizeof(buf) - 1;
     buf[total++] = '\n';
 
-    // 异步落盘:AsyncLogger 单例内部为双缓冲 + 后台 flush 线程
     AsyncLogger::instance().append(buf, total);
 }
 

@@ -1,41 +1,27 @@
-# ============================================================
-# 全项目统一编译选项(modern CMake:用 INTERFACE 库收纳)
-#
-# 从顶层 CMakeLists 移出来单独成文件的理由:顶层只该讲「项目由哪些部分组成」,
-# 「每个部分怎么编」是另一件事。两者混在一起,顶层文件会随选项增多而失焦。
-#
-# 与 STM32 节点侧 cmake/gcc-arm-none-eabi.cmake + n6_options 同构:
-#   基线警告全局开,-Werror 只给自己写的代码,不传染给第三方(gtest 等)。
-# ============================================================
-
-# ---- gateway_options:自己写的 C++ 代码用这一份 ----
+# gateway_options 是无产物的策略目标。只有项目自有目标显式链接它，既保证统一
+# 警告和 sanitizer 参数，又不会把 -Werror 传染给 FetchContent 的第三方源码。
 add_library(gateway_options INTERFACE)
 target_compile_options(gateway_options INTERFACE
     -Wall -Wextra -Wpedantic
-    # 下面几条是在基线之上补的「工业级」项,均已验证本仓库 0 warning:
-    -Wshadow                # 局部变量遮蔽成员/外层变量(热加载那类代码的高发 bug)
-    -Wnon-virtual-dtor      # 有虚函数却无虚析构(Sink 这类接口类的经典坑)
-    -Wcast-align            # 可能引发未对齐访问的指针转换(ARM 上会真的崩)
-    -Wunused
-    -Woverloaded-virtual
-    -Wconversion            # 隐式窄化:协议代码里 int→uint8_t 全靠它盯着
-    -Wsign-conversion
-    -Wdouble-promotion
-    -Wformat=2
+    -Wshadow                # 防止局部变量意外遮蔽成员或外层变量。
+    -Wnon-virtual-dtor      # 检查多态基类缺少虚析构函数。
+    -Wcast-align            # 检查在 ARM 上可能导致未对齐访问的转换。
+    -Wunused                # 检查未使用的变量、参数和函数。
+    -Woverloaded-virtual    # 防止派生类意外隐藏基类虚函数重载。
+    -Wconversion            # 检查协议字段转换中的隐式窄化。
+    -Wsign-conversion       # 检查有符号与无符号协议长度之间的隐式转换。
+    -Wdouble-promotion      # 检查 float 在格式化和计算中被隐式提升。
+    -Wformat=2              # 对 printf 类调用执行更严格的格式串检查。
 )
 
-# ---- 零警告基线:CI 与 dev preset 打开,交叉编译等场景可关 ----
+# CI/dev 可将所有上述警告提升为错误；目标机临时诊断构建可关闭。
 option(GATEWAY_WARNINGS_AS_ERRORS "把警告当错误(CI 守零警告基线)" OFF)
 if(GATEWAY_WARNINGS_AS_ERRORS)
     target_compile_options(gateway_options INTERFACE -Werror)
 endif()
 
-# ============================================================
-# Sanitizers:通过 preset 打开,不改代码即可换构建形态
-#   ASan  查 use-after-free —— 正是热加载 reset db_/client_ 时最怕的那类 bug
-#   UBSan 查未定义行为 —— 协议解析里的移位/窄化重灾区
-#   TSan  与 ASan 互斥,单独 preset
-# ============================================================
+# GATEWAY_ENABLE_ASAN 同时启用 AddressSanitizer 和 UndefinedBehaviorSanitizer；
+# GATEWAY_ENABLE_TSAN 单独检查数据竞争。两套运行时不能链接进同一产物。
 option(GATEWAY_ENABLE_ASAN "启用 AddressSanitizer + UBSan" OFF)
 option(GATEWAY_ENABLE_TSAN "启用 ThreadSanitizer" OFF)
 
@@ -44,6 +30,7 @@ if(GATEWAY_ENABLE_ASAN AND GATEWAY_ENABLE_TSAN)
 endif()
 
 if(GATEWAY_ENABLE_ASAN)
+    # 编译和链接阶段都必须注入 sanitizer；保留帧指针提高错误栈可读性。
     target_compile_options(gateway_options INTERFACE
         -fsanitize=address,undefined -fno-omit-frame-pointer -g)
     target_link_options(gateway_options INTERFACE -fsanitize=address,undefined)
@@ -51,6 +38,7 @@ if(GATEWAY_ENABLE_ASAN)
 endif()
 
 if(GATEWAY_ENABLE_TSAN)
+    # TSan 使用独立编译/链接参数，通常由 tsan preset 开启。
     target_compile_options(gateway_options INTERFACE
         -fsanitize=thread -fno-omit-frame-pointer -g)
     target_link_options(gateway_options INTERFACE -fsanitize=thread)

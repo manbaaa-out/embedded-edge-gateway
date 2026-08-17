@@ -1,38 +1,38 @@
 [Unit]
+# 元数据和启动顺序：network-online 只保证网络配置完成，连接失败仍由进程重试策略处理。
 Description=Embedded Edge Gateway
 Documentation=https://github.com/manbaaa-out/embedded-edge-gateway
 After=network-online.target
 Wants=network-online.target
 
 [Service]
+# 前台进程由 systemd 直接跟踪；两个 @...@ 路径在 CMake 配置阶段展开。
 Type=simple
 ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/gateway @GATEWAY_CONFIG_FILE@
+# reload 只向主进程发送 SIGHUP；配置是否可热改由 ConfigManager 的字段分类决定。
 ExecReload=/bin/kill -HUP $MAINPID
+# 非零退出时等待三秒重启，正常停止和配置热加载不触发重启。
 Restart=on-failure
 RestartSec=3
 
-# 不以 root 运行。systemd 为本服务动态分配低权限用户；dialout 只用于访问 UART，
-# StateDirectory 则创建并授权 /var/lib/gateway，进程无需持有系统目录写权限。
+# DynamicUser 为每次服务生命周期分配低权限身份；SupplementaryGroups 仅补充串口权限。
+# StateDirectory 创建并授权 /var/lib/gateway，0750 阻止无关本地用户读取传感数据。
 DynamicUser=yes
 SupplementaryGroups=dialout
 StateDirectory=gateway
 StateDirectoryMode=0750
 
-# ---- 日志 ----
-# 进程只往 stderr 写(AsyncLogger 单例的去向),轮转与持久化交给 journald。
-# 这两行是 systemd 的默认值,写出来是为了说明日志归属:改成 File= 或 null 会
-# 直接改变日志落点。`journalctl -u gateway -f` 即可跟随。
-# 注意默认 journald 是 Storage=auto:/var/log/journal 不存在时只留内存,重启即失。
-# 要保住重启前的日志,需 mkdir -p /var/log/journal 或设 Storage=persistent。
+# stdout/stderr 统一进入 journald，并用固定标识支持 `journalctl -t gateway` 查询。
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=gateway
 
-# ---- 安全加固 ----
+# 禁止新增权限，将系统树设为只读，隐藏用户目录，并分配服务私有 /tmp。
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 
 [Install]
+# enable 后随常规多用户启动目标拉起服务。
 WantedBy=multi-user.target

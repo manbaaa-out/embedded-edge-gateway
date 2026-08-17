@@ -1,8 +1,7 @@
-// 串口读写与编解码的粘合。
+// 非阻塞串口链路实现。
 //
-// drainAndParse 里那个 while(true) 是 ET 模式的必需品而非风格:边沿触发只在
-// 「从无到有」那一刻通知一次,不读到 EAGAIN,剩下的字节就烂在内核缓冲区里,
-// 链路静默卡死。
+// 读侧一次事件必须排空内核缓冲区；写侧允许 SerialPort::write() 因 EAGAIN 返回短写，
+// 但只用有限次数的 poll(POLLOUT) 续写，避免主 Reactor 被慢设备无限占用。
 
 #include "gateway/link/NodeLink.h"
 
@@ -19,13 +18,15 @@ namespace gateway {
 
 namespace {
 
-// 短写补发的上界。一帧最多 69 字节而 tty 输出缓冲通常 4KB 起,这条路径几乎不会走到;
-// 真走到了也必须有界 —— 调用方是主 Reactor 线程,最坏停 3×20ms。
-constexpr int kWriteRetry  = 3;
+/** 初次 write 之外允许的续写次数。 */
+constexpr int kWriteRetry = 3;
+/** 每次等待串口可写的最长时间，单位毫秒。 */
 constexpr int kWriteWaitMs = 20;
 
-// 配置中存人类可读的 115200,termios 需要 Bxxxx 宏。转换隔离在链路层,
-// 使配置层不掺入串口实现细节。配置校验已排除 <= 0,default 分支为兜底。
+/**
+ * @param baud 配置中的 bit/s 整数值。
+ * @return 对应 termios speed_t；未列出的值记录告警并返回 B115200。
+ */
 speed_t toBaud(int baud) {
     switch (baud) {
     case 9600:   return B9600;
@@ -47,36 +48,23 @@ NodeLink::NodeLink(const std::string& path, int baud) {
 }
 
 void NodeLink::reopen(const std::string& path, int baud) {
-    // 先把新口开出来,成功了才替换 —— 强异常保证。
-    //
-    // 反过来写(先 port_.reset() 再 make_unique)看着更省一个 fd,但代价是:新路径
-    // 打不开时抛出的那一刻 port_ 已经是空的,而 fd() 就是 port_->get() —— 对空
-    // unique_ptr 解引用。于是调用方即便接住了异常也无路可走:旧链路已经没了,
-    // 新链路没建起来,对象处于既不能用也不能修的中间态。
-    // 现在失败时 port_ 原封不动,旧链路继续收数据,调用方 catch 住就能接着跑。
-    //
-    // 只有 baud 变、path 没变时,这里会短暂同时持有同一个 tty 的两个 fd。Linux 上
-    // 普通 tty 不带 O_EXCL,允许如此;且 termios 是每 tty 而非每 fd 的,新 fd 上的
-    // configure 同时作用于旧 fd —— 而旧 fd 下一行就被丢弃了,无影响。
-    auto fresh = std::make_unique<SerialPort>(path.c_str(), toBaud(baud), /*nonblock=*/true);
+    // 先构造新资源，保证打开或配置失败时仍保留旧串口。
+    auto fresh = std::make_unique<SerialPort>( // 成功前仅由本作用域拥有的新候选串口。
+        path.c_str(), toBaud(baud), /*nonblock=*/true);
     port_ = std::move(fresh);
 
-    // 注意 parser_ 的 FSM 状态【没有】被重置(此处曾有一句注释声称重置了,那是把
-    // port_.reset() 看成了重置解析器 —— 它重置的是 unique_ptr)。后果有限:换设备时
-    // FSM 若停在 READ_PAYLOAD,新链路的头几个字节会被当作旧半截帧的尾巴吃掉,
-    // 但 FSM 的"所有异常路径都回到 WAIT_HDR0"这条不变量保证它在 1-2 帧内自愈。
-    // 要真正修掉得给 protocol/ 加一个"只重置 FSM、不清统计"的接口 ——
-    // edge_parser_init 会把 frames_ok / crc_err 一并清零,而那是监控要用的累计值。
+    // parser_ 保留累计统计和当前 FSM 状态；切换发生在半帧中时，新链路的开头字节
+    // 会先被旧状态消费，直到长度或 CRC 检查使解析器重新同步。
     LOG_INFO("node link reopened: %s @ %d", path.c_str(), baud);
 }
 
 void NodeLink::drainAndParse() {
-    uint8_t buf[256];
+    uint8_t buf[256]; // 单次 read 的栈缓冲区；解析器会在需要时复制 payload 字节。
     while (true) {
-        const ssize_t n = ::read(port_->get(), buf, sizeof(buf));
+        const ssize_t n = ::read(port_->get(), buf, sizeof(buf)); // 本轮实际读取字节数。
         if (n < 0) {
-            if (errno == EINTR)  continue;   // 被信号打断,重试
-            if (errno == EAGAIN) break;      // 已读空,ET 下的正常退出条件
+            if (errno == EINTR)  continue;
+            if (errno == EAGAIN) break;
             LOG_ERROR("serial read error: %s", strerror(errno));
             break;
         }
@@ -84,30 +72,22 @@ void NodeLink::drainAndParse() {
             LOG_WARN("%s", "serial EOF (peer closed?)");
             break;
         }
-        // 批量读入,逐字节驱动 FSM
         parser_.feed(buf, static_cast<std::size_t>(n));
     }
 }
 
 bool NodeLink::send(uint8_t type, const std::vector<uint8_t>& payload) {
-    const auto frame = buildFrame(type, payload);
+    const auto frame = buildFrame(type, payload); // 拥有本次发送完整线上字节的临时帧。
     if (frame.empty()) {
         LOG_ERROR("buildFrame rejected type=0x%02X payload=%zu bytes", type, payload.size());
         return false;
     }
 
-    // 短写要补发,不能只报个警就走。
-    //
-    // SerialPort::write 在 EAGAIN 下返回【已写字节数】,而那些字节【已经上线了】。
-    // 此前这里把「没写完」一律当失败返回,于是线上留下半截帧:节点按 LEN 继续等后续
-    // 字节,等到的是下一帧的帧头,CRC 对不上 → resync,损失 1-2 帧。更糟的是上层据此
-    // 不登记在途表(「等一条未发出的命令的 ACK 没有意义」),可这条命令其实发出去了
-    // 一半 —— 既不会重发也不会上报超时,无声消失,云端只看到一条 WARN。
-    //
-    // 现在改为等可写再续,总等待有上界(kWriteRetry × kWriteWaitMs),不会卡住 Reactor。
-    std::size_t sent = 0;
-    for (int attempt = 0;; ++attempt) {
+    // SerialPort::write 在 EAGAIN 时返回已写长度；等待 POLLOUT 后从断点继续。
+    std::size_t sent = 0; // 已由成功返回的 SerialPort::write() 确认写出的帧前缀长度。
+    for (int attempt = 0;; ++attempt) { // attempt=0 为首次写，之后最多 kWriteRetry 次续写。
         const ssize_t w = port_->write(frame.data() + sent, frame.size() - sent);
+        // w 是本轮确认写出的剩余前缀长度；负值表示 SerialPort 遇到不可恢复错误。
         if (w < 0) {
             LOG_ERROR("serial write failed: type=0x%02X after %zu/%zu bytes: %s",
                       type, sent, frame.size(), strerror(errno));
@@ -117,12 +97,11 @@ bool NodeLink::send(uint8_t type, const std::vector<uint8_t>& payload) {
         if (sent == frame.size()) return true;
 
         if (attempt >= kWriteRetry) break;
-        struct pollfd pfd { port_->get(), POLLOUT, 0 };
-        if (::poll(&pfd, 1, kWriteWaitMs) <= 0) break;   // 超时或出错,不再等
+        struct pollfd pfd { port_->get(), POLLOUT, 0 }; // 本轮等待当前串口恢复可写。
+        if (::poll(&pfd, 1, kWriteWaitMs) <= 0) break;
     }
 
-    // 走到这里说明线上确实留了半截帧。记 ERROR 而非 WARN:它会让节点丢 1-2 帧,
-    // 且这条命令不会被登记、不会重发。
+    // sent > 0 时链路上已留下不完整帧；调用方收到 false 后不会登记该命令。
     LOG_ERROR("serial write incomplete: type=0x%02X %zu/%zu bytes — a partial frame is on the wire",
               type, sent, frame.size());
     return false;

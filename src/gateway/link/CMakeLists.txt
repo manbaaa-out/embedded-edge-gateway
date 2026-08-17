@@ -1,10 +1,6 @@
-# link 层:与 STM32 节点的链路。
-#
-#   NodeLink        串口收发与组帧解帧,持有 fd
-#   CommandTracker  在途命令表,纯逻辑、不持有 fd,可完全单测
-#
-# 两者分开是为了让 CommandTracker 不被 fd 依赖拖累:验证它只需注入假时钟,
-# 而验证 NodeLink 需要 socat 提供虚拟串口。
+# STM32 链路层：NodeLink 管理串口 I/O，CommandTracker 管理无 I/O 的命令时序。
+# 公共头文件暴露 SerialPort/Frame 类型，故 gw_serial 与 gw_protocol 向消费者传播；
+# 编译选项和实现日志只在本静态库内部使用。
 add_library(gw_link STATIC
     NodeLink.cpp
     CommandTracker.cpp

@@ -1,26 +1,35 @@
-# 基于 LLVM 风格微调,尽量贴近本仓库既有写法,避免一次 format 把全仓 diff 掀翻。
-# 与 STM32 节点侧共享的 protocol/ 是纯 C,同一份规则也适用。
+# 文件职责：统一项目自有 C/C++ 源码的自动排版，并让 protocol/ 在网关与 STM32 仓库
+# 使用同一格式。LLVM 作为稳定基线，以下每一项只覆盖本项目明确需要的差异。
+
+# BasedOnStyle 提供未显式列出的默认项；Language 让 C 与 C++ 文件共用 C++ 规则集。
 BasedOnStyle: LLVM
 Language: Cpp
 
+# IndentWidth 定义块缩进空格数；ColumnLimit 是代码换行目标；AccessModifierOffset
+# 把 public/private 标签相对成员少缩进一级。
 IndentWidth: 4
 ColumnLimit: 100
 AccessModifierOffset: -4
 
-# 既有代码是 K&R 风格(左大括号不换行),保持
+# 大括号附着声明行，短函数只允许头文件内联形式单行；仅无 else 的短 if 可单行，
+# case 标签始终单独占行，避免状态机分支被压缩后难以扫描。
 BreakBeforeBraces: Attach
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: WithoutElse
 AllowShortCaseLabelsOnASingleLine: false
 
+# 指针星号靠近类型且不从现有文件猜测风格，确保跨文件输出一致。
 PointerAlignment: Left
 DerivePointerAlignment: false
 
-# 注释里有大量中文,禁止自动折行(按显示宽度折会把中文注释切碎)
+# 中文显示宽度与 clang-format 的列计数不完全一致，禁用自动重排以保留人工段落结构。
 ReflowComments: false
 
+# include 顺序承载模块分组，禁止自动排序；C 风格转换后保留空格；行尾注释按列对齐。
 SortIncludes: false
 SpaceAfterCStyleCast: true
 AlignTrailingComments: true
+
+# 块起始不保留空行；连续空行最多保留两行，兼顾逻辑分段和紧凑度。
 KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 2

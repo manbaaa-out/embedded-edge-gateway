@@ -1,23 +1,17 @@
 #pragma once
 
-// 网关应用对象:持有各层资源、装配事件源、运行主循环,不含业务逻辑本身。
-// 业务分别位于 NodeLink(串口收发与组帧)、CommandTracker(seq 分配与超时重发)、
-// decodeTelemetry(帧 → 记录)、translateCommand(topic → 命令)、
-// TelemetryPipeline(遥测落库)。
-//
-// ---- 进程的线程构成 ----
-// 恰好五条,每条都有明确且互不重叠的职责(用 /proc/<pid>/task 数过):
-//   主 Reactor 线程    epoll 派发:串口收帧、下行发命令、超时重发、信号处理。
-//                      所有共享状态(在途表、串口 fd、epoll 注册表)都只被它碰。
-//   遥测写线程         TelemetryPipeline 内部,独占 SQLite 写连接,批量落库。
-//   mosquitto 网络线程 libmosquitto 的 loop_start 起的,负责真正的 socket 收发。
-//   HTTP 监控线程      独占只读连接,与写连接经 WAL 实现读写并发。
-//   日志 flush 线程    AsyncLogger 单例在第一次 LOG_* 时起,全进程唯一的日志 fd 写者。
-//                      它不归本类创建,但确实在进程里 —— 早先这里写「四条」漏的就是它。
-// 线程之间一律用队列通信,不共享可变状态,因此进程里只剩队列自身那几把锁。
-//
-// 成员声明顺序即析构逆序,不可重排:pipeline_ 必须声明在 client_ 之后,
-// 才能先于它析构 —— 写线程要先 join 掉,后面的资源才可以撤。
+/**
+ * @file GatewayApp.h
+ * @brief 定义网关进程的组合根和各运行组件的生命周期边界。
+ *
+ * GatewayApp 不实现帧协议、命令翻译或持久化算法，而是把这些组件装配成一个进程。
+ * 主线程以 EventLoop 串行处理串口收帧、MQTT 下行唤醒、命令超时和 Unix 信号，
+ * 因而 NodeLink 与 CommandTracker 无需跨线程加锁。MQTT、HTTP 和数据库写线程只通过
+ * MqttClient 的线程安全接口、ThreadSafeQueue 或只读数据库连接与主线程协作。
+ *
+ * 成员的声明顺序同时定义构造顺序和逆序析构顺序。调整成员前必须确认后台线程会在
+ * 它所依赖的连接、队列和回调目标之前停止。
+ */
 
 #include "gateway/cloud/CommandTranslator.h"
 #include "gateway/cloud/MqttClient.h"
@@ -35,76 +29,141 @@
 
 namespace gateway {
 
+/**
+ * @brief 持有进程级资源并驱动网关主事件循环。
+ *
+ * 设计上把所有串口写操作收敛到主线程：MQTT 网络线程只生成 DownCmd 并写 eventfd，
+ * 主线程被唤醒后再组帧和发送。这既避免串口帧交错，也让序列号分配、ACK 销账和重试
+ * 共用同一条时间线。
+ */
 class GatewayApp {
 public:
-    // 屏蔽 SIGHUP / SIGTERM / SIGINT 的默认递送,改由 signalfd 在主循环里取。
-    //
-    // 前置条件:必须早于任何线程的创建。信号掩码按线程生效,新线程继承创建者的掩码;
-    // 若晚于线程创建,HTTP 线程、遥测写线程与 mosquitto 网络线程都不屏蔽这些信号,
-    // 内核会在未屏蔽的线程中任选一个递送,并执行默认动作 —— 三个信号的默认动作都是
-    // 终止进程,于是 SIGHUP 变成"reload 一下网关就死了",SIGTERM 变成"停机时进程被
-    // 就地打死,异步日志缓冲里最后几秒的日志随之消失"。
-    //
-    // 返回 false 表示屏蔽失败,调用方可据此判定热加载与优雅停机不可用(非致命:
-    // 此时行为退回默认动作,与加这套机制之前一致)。
+    /**
+     * @brief 屏蔽由主循环接管的进程信号。
+     *
+     * 必须在线程创建前调用，使后续线程继承同一信号掩码。run() 随后通过 signalfd
+     * 在主线程处理 SIGHUP、SIGTERM 和 SIGINT。
+     *
+     * @return 屏蔽成功时为 true；失败时为 false，此时 signalfd 机制不可依赖。
+     */
     static bool blockManagedSignals();
 
-
-    // 读取 ConfigManager::current() 的启动快照,打开 db / MQTT / 只读连接、
-    // HTTP 线程、遥测写线程与串口。任一失败抛异常,由 main 致命退出交 systemd 重启。
-    // ConfigManager::init 由 main 负责:配置读不出是更早的致命错误。
+    /**
+     * @brief 根据 ConfigManager 的当前快照创建 MQTT、串口、数据库和 HTTP 资源。
+     * @pre ConfigManager::init() 已成功调用。
+     * @throws std::exception 任一启动必需资源创建失败时向进程入口传播异常。
+     */
     GatewayApp();
 
-    // 停掉 HTTP 线程并 join 它,之后才轮到各成员按声明逆序析构。
-    //
-    // 必须 join 而不是 detach:main 返回后会跑静态对象的析构,AsyncLogger 单例
-    // 就在其中。若此时 HTTP 线程还活着并调 LOG_*,那就是往已析构的对象上写。
-    // 换句话说,「优雅停机」和「后台线程 detach」不能共存,必须二选一。
+    /**
+     * @brief 通知 HTTP 服务退出并等待其线程结束，随后由成员析构完成其余清理。
+     */
     ~GatewayApp();
 
-    GatewayApp(const GatewayApp&)            = delete;
-    GatewayApp& operator=(const GatewayApp&) = delete;
+    /** 应用对象独占线程和文件描述符；other 表示禁止复制的源对象。 */
+    GatewayApp(const GatewayApp& /* other */) = delete;
 
-    // 装配四类事件源并运行主循环。收到 SIGTERM / SIGINT 后主循环退出,
-    // 函数返回,进程随即走完析构。返回进程退出码。
+    /** 资源所有权不能复制；other 表示禁止赋值的源对象。 */
+    GatewayApp& operator=(const GatewayApp& /* other */) = delete;
+
+    /**
+     * @brief 注册全部事件源并阻塞运行主事件循环。
+     * @return 0 表示主循环正常退出；1 表示核心下行唤醒通道创建失败。
+     */
     int run();
 
 private:
-    // ---- 事件源装配 ----
-    void setupSerial();      // 串口 Channel(ET)
-    bool setupDownlink();    // eventfd + 下行 Channel(失败致命)
-    void startMqtt();        // 挂下行 handler + 订阅 + loopStart
-    void setupCmdTimer();    // 超时重试 timerfd(失败降级)
-    void setupSignal();      // SIGHUP / SIGTERM / SIGINT signalfd(失败降级)
+    /** @brief 把当前 NodeLink 的串口描述符以边沿触发方式注册到主循环。 */
+    void setupSerial();
 
-    // ---- 各事件源的处理 ----
-    void onFrame(const Frame& f);        // 串口来帧:按 TYPE 分流
-    void onAckFrame(const Frame& f);     // 应答帧:配对销账 + 回 MQTT
-    void onDownlinkWakeup();             // eventfd:取空队列、组帧、发送、登记在途
-    void onCmdTimer();                   // timerfd:推进在途表,重发 / 判死
-    void reloadConfig();                 // SIGHUP:load-then-swap 后按 diff 重建
+    /**
+     * @brief 创建连接 MQTT 网络线程与主线程的 eventfd 通知通道。
+     * @return 通道创建并注册成功时为 true，否则为 false。
+     */
+    bool setupDownlink();
 
+    /**
+     * @brief 为当前 MQTT 客户端安装命令回调、登记订阅并启动网络循环。
+     *
+     * 网络循环启动失败时仅记录错误并返回；该函数不抛出该类运行期错误。
+     */
+    void startMqtt();
+
+    /** @brief 创建周期 timerfd，用于驱动 CommandTracker 的超时重试和失败判定。 */
+    void setupCmdTimer();
+
+    /** @brief 创建 signalfd，把热加载和退出信号纳入主事件循环。 */
+    void setupSignal();
+
+    /**
+     * @brief 按帧类型把串口上行分派给 ACK 处理或遥测处理。
+     * @param f 已通过 CRC 校验的完整协议帧；仅在主线程回调中使用。
+     */
+    void onFrame(const Frame& f);
+
+    /**
+     * @brief 校验 ACK/查询响应、销账对应序列号，并发布业务结果到 MQTT。
+     * @param f 类型为 EDGE_TYPE_ACK 或 EDGE_TYPE_QUERY_RESP 的协议帧。
+     */
+    void onAckFrame(const Frame& f);
+
+    /** @brief 消费 eventfd 计数并排空 MQTT 网络线程提交的下行命令队列。 */
+    void onDownlinkWakeup();
+
+    /** @brief 消费 timerfd 计数，发送到期重试并发布最终超时结果。 */
+    void onCmdTimer();
+
+    /**
+     * @brief 重新解析配置，并按差异独立重建数据库、MQTT 和串口资源。
+     *
+     * 单项重建失败只记录降级状态，不撤销同一次重载中已经成功的其他项目。
+     */
+    void reloadConfig();
+
+    /**
+     * @brief 为 NodeLink 当前持有的串口 fd 创建非拥有型 Channel。
+     * @return 可注册到 EventLoop 的共享 Channel；fd 的关闭权仍属于 SerialPort。
+     */
     std::shared_ptr<channel> makeSerialChannel();
 
-    // 成员顺序即析构逆序,不可重排(见文件头)
-    std::shared_ptr<MqttClient> client_;        // 上行 / 应答 MQTT
-    std::shared_ptr<Database>   roDb_;          // HTTP 只读连接(WAL 读写并发)
-    std::atomic<bool>           http_stop_{false};  // 停机意愿,HTTP 线程每秒轮询一次
-    std::thread                 http_thread_;   // HTTP 监控线程(join,持 roDb_ 副本)
+    /** 当前生效的 MQTT 连接；热加载成功构造新连接后整体替换该对象。 */
+    std::shared_ptr<MqttClient> client_;
 
-    std::unique_ptr<NodeLink>          link_;      // 与 STM32 的串口链路
-    // 遥测落库(内含写线程,独占 SQLite 写连接)。app 层不持有写连接:
-    // 它整个交给了 pipeline_,热加载换库也是投指令而非改指针。
+    /** HTTP 监控线程专用的只读 SQLite 连接所有权。 */
+    std::shared_ptr<Database>   roDb_;
+
+    /** 跨线程停机标志；析构线程写入，HTTP 线程周期读取。 */
+    std::atomic<bool>           http_stop_{false};
+
+    /** 运行监控 HTTP 服务的线程；必须在析构函数体中 join。 */
+    std::thread                 http_thread_;
+
+    /** 主线程独占的 STM32 串口链路，负责收帧、组帧和写串口。 */
+    std::unique_ptr<NodeLink>          link_;
+
+    /** 遥测异步落库管线；optional 允许在数据库创建后再就地启动写线程。 */
     std::optional<TelemetryPipeline>   pipeline_;
-    CommandTracker                     tracker_;   // 在途命令表(仅主线程访问,无锁)
-    ThreadSafeQueue<DownCmd>           cmd_queue_; // mosquitto 线程 push / 主线程 try_pop
 
-    EventLoop                loop_;            // 主 Reactor
-    std::shared_ptr<channel> serial_channel_;  // 串口 Channel(热加载会换)
+    /** 主线程独占的在途命令表，保存序列号、重试次数和发送时刻。 */
+    CommandTracker                     tracker_;
 
-    int evfd_        = -1;   // 下行唤醒(close 由 channel RAII 负责)
-    int cmd_timerfd_ = -1;   // 超时扫描
-    int sfd_         = -1;   // SIGHUP signalfd
+    /** MQTT 网络线程生产、主线程消费的下行命令队列；默认容量为无限。 */
+    ThreadSafeQueue<DownCmd>           cmd_queue_;
+
+    /** 主线程 Reactor，统一派发串口、eventfd、timerfd 和 signalfd。 */
+    EventLoop                loop_;
+
+    /** 当前串口 fd 对应的 Channel；串口热加载时随 fd 一起替换。 */
+    std::shared_ptr<channel> serial_channel_;
+
+    /** MQTT 下行队列的 eventfd；注册后由拥有型 Channel 负责关闭。 */
+    int evfd_        = -1;
+
+    /** 命令超时扫描的 timerfd；注册后由拥有型 Channel 负责关闭。 */
+    int cmd_timerfd_ = -1;
+
+    /** 接收 SIGHUP/SIGTERM/SIGINT 的 signalfd；由拥有型 Channel 负责关闭。 */
+    int sfd_         = -1;
 };
 
 }  // namespace gateway

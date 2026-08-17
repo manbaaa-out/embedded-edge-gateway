@@ -1,7 +1,5 @@
-# node-sim:STM32 传感节点模拟器。
-#
-# 仅依赖 edge_proto,与网关、固件使用同一份组帧解帧代码。
-# 不链接网关的任何 target:模拟器扮演的是对端,复用网关实现会使一致性验证失去意义。
+# node-sim 由单一入口源构建；edge_proto 提供与固件相同的字节协议，gateway_options
+# 让工具源码遵守项目警告基线。它不链接网关业务库，避免同源错误使 e2e 假通过。
 add_executable(node-sim main.cpp)
 target_link_libraries(node-sim PRIVATE
     edge_proto

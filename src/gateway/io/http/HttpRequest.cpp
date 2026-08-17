@@ -1,5 +1,4 @@
-// 四态解析的状态转移。每一态都从 Buffer 里【尽量取】,取不够就原样返回等下次 recv,
-// 绝不假设一次读到了完整结构 —— 与串口收帧 FSM 是同一套纪律。
+/** @file HttpRequest 各解析状态的推进与字段提取实现。 */
 
 #include "gateway/io/http/HttpRequest.h"
 #include <algorithm>
@@ -7,44 +6,35 @@
 namespace gateway {
 
 ParseResult HttpRequest::parse(Buffer* buf) {
-    bool ok = true;
-    bool hasMore = true;
+    bool ok = true;       // 当前请求是否仍可继续解析。
+    bool hasMore = true;  // 本次调用是否还可能从现有缓冲推进状态。
 
     while (hasMore) {
         if (state_ == HttpRequestParseState::ExpectRequestLine) {
-            const char* crlf = std::search(buf->peek(), buf->beginWrite(),
-                                        kCRLF, kCRLF + 2);
+            const char* crlf = std::search(  // 当前请求行的结束位置或缓冲末尾。
+                buf->peek(), buf->beginWrite(), kCRLF, kCRLF + 2);
             if (crlf != buf->beginWrite()) {
                 ok = parseRequestLine(buf->peek(), crlf);
                 if (ok) {
-                    // 指针差是 ptrdiff_t 而 retrieve 收 size_t;crlf 由 std::search 在
-                    // [peek, beginWrite) 内找到,必 >= peek,故差值非负。
                     buf->retrieve(static_cast<size_t>(crlf + 2 - buf->peek()));
                     state_ = HttpRequestParseState::ExpectHeaders;
                 }
                 else {
-                    hasMore = false;   // 请求行非法
+                    hasMore = false;
                 }
             }
             else {
-                hasMore = false;       // 未见 CRLF,半包,等下次可读
+                hasMore = false;
             }
         }
         else if (state_ == HttpRequestParseState::ExpectHeaders) {
-            const char* crlf = std::search(buf->peek(), buf->beginWrite(),
-                                        kCRLF, kCRLF + 2);
+            const char* crlf = std::search(  // 当前头字段行的结束位置或缓冲末尾。
+                buf->peek(), buf->beginWrite(), kCRLF, kCRLF + 2);
             if (crlf != buf->beginWrite()) {
-                // header 段的结束标志是【空行】,判据必须是「本行长度为 0」。
-                //
-                // 此前写的是「本行找不到冒号」—— 空行确实满足它,但一个畸形的
-                // header 行(如 "BadHeaderNoColon")同样满足,于是会被当成段末,
-                // 请求被照常执行。实测过:那样一条请求能拿到 200 与完整页面,
-                // 而它本该是 400。
                 if (crlf == buf->peek()) {
-                    // 空行:header 段结束
-                    long len = contentLength();
+                    long len = contentLength();  // 空行后确定是否还需读取正文。
                     if (len < 0) {
-                        ok = false;                                    // 非法 Content-Length
+                        ok = false;
                         hasMore = false;
                     } else if (len > 0) {
                         state_ = HttpRequestParseState::ExpectBody;
@@ -53,22 +43,23 @@ ParseResult HttpRequest::parse(Buffer* buf) {
                     }
                 }
                 else {
-                    const char* colon = std::find(buf->peek(), crlf, ':');
+                    const char* colon = std::find(  // 字段名与字段值的分隔符。
+                        buf->peek(), crlf, ':');
                     if (colon == crlf) {
-                        ok      = false;    // 非空行却没有冒号 —— 畸形 header,拒绝整条请求
+                        ok      = false;
                         hasMore = false;
                     } else {
                         addHeader(buf->peek(), colon, crlf);
                     }
                 }
-                buf->retrieve(static_cast<size_t>(crlf + 2 - buf->peek()));   // 各分支都消费本行
+                buf->retrieve(static_cast<size_t>(crlf + 2 - buf->peek()));
             }
             else {
-                hasMore = false;   // 半包
+                hasMore = false;
             }
         }
         else if (state_ == HttpRequestParseState::ExpectBody) {
-            long len = contentLength();   // 进入本状态的前提即 len > 0
+            long len = contentLength();  // 进入本状态前已验证为正且未超限。
             if (buf->readableBytes() >= static_cast<size_t>(len)) {
                 body_.assign(buf->peek(), buf->peek() + len);
                 buf->retrieve(static_cast<size_t>(len));
@@ -77,12 +68,11 @@ ParseResult HttpRequest::parse(Buffer* buf) {
                 hasMore = false;
             }
         }
-        else {  // GotAll
+        else {
             hasMore = false;
         }
     }
 
-    // 把 ok / state_ 归约为 ParseResult
     if (!ok) {
         return ParseResult::kError;
     }
@@ -93,12 +83,12 @@ ParseResult HttpRequest::parse(Buffer* buf) {
 }
 
 bool HttpRequest::parseRequestLine(const char* begin, const char* end) {
-    const char* space1 = std::find(begin, end, ' ');
+    const char* space1 = std::find(begin, end, ' ');  // method 后的分隔空格。
     if (space1 == end) return false;
     method_.assign(begin, space1);
 
-    const char* start = space1 + 1;
-    const char* space2 = std::find(start, end, ' ');
+    const char* start = space1 + 1;  // request-target 起点。
+    const char* space2 = std::find(start, end, ' ');  // version 前的分隔空格。
     if (space2 == end) return false;
     path_.assign(start, space2);
 
@@ -107,33 +97,31 @@ bool HttpRequest::parseRequestLine(const char* begin, const char* end) {
 }
 
 void HttpRequest::addHeader(const char* start, const char* colon, const char* end) {
-    std::string key(start, colon);
-    // header 名大小写不敏感(RFC 9110),统一转小写后入表
+    std::string key(start, colon);  // 待规范化的字段名。
+    // 字段名统一转小写，支持大小写不敏感的查找。
+    // c 是字段名中的单个无符号字节，避免负 char 传入 tolower。
     std::transform(key.begin(), key.end(), key.begin(),
                    [](unsigned char c){ return std::tolower(c); });
 
-    const char* valueStart = colon + 1;
+    const char* valueStart = colon + 1;  // 跳过冒号及其后的可选空格。
     while (valueStart < end && *valueStart == ' ') {
         valueStart += 1;
     }
-    std::string value(valueStart, end);
+    std::string value(valueStart, end);  // 不含 CRLF 的字段值。
     headers_[key] = value;
 }
 
 long HttpRequest::contentLength() const {
-    auto it = headers_.find("content-length");
+    auto it = headers_.find("content-length");  // 规范化头表中的长度字段。
     if (it == headers_.end()) {
-        return 0;                      // 无 Content-Length,body 长度视为 0
+        return 0;
     }
-    long v = 0;
+    long v = 0;  // 解析后的正文长度，单位为字节。
     try {
         v = std::stol(it->second);
     } catch (...) {
-        return -1;                     // 非法值,由调用方按错误处理
+        return -1;
     }
-    // 负值与超限一律按非法处理,交调用方走 kError。
-    // 上限必须在这里拦:ExpectBody 的条件是「攒够 len 字节」,而 Buffer 会一路
-    // resize —— 不拦就等于把进程内存交给对端的 Content-Length 头决定。
     if (v < 0 || v > kMaxBodySize) return -1;
     return v;
 }

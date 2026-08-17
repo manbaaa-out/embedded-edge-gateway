@@ -1,22 +1,13 @@
 #pragma once
 
-// 遥测落库:主 Reactor 线程投递,一条专属写线程消费。
-//
-// ---- 为什么不是线程池 ----
-// 这里曾经是「每条记录一个 task 丢进线程池」。那个设计的问题不在线程数,而在
-// 两点:
-//   1. 落库动作本身是串行的 —— N 个 worker 全撞在 Database 的那把 mutex 上,
-//      并行度被锁又压回 1,只多付了锁竞争与上下文切换;
-//   2. 线程池的 submit 收的是 std::function<void()>,一个不透明闭包。池看不见
-//      闭包里在做什么,于是结构上不可能把 N 条记录合并进一个事务 —— 而事务
-//      批处理恰恰是这条路径上最大的那块收益。
-// 换成「有类型的队列 + 单一消费者」后,两个问题一起消失:没有共享就不需要锁,
-// 队列元素有类型,消费者就能一次捞多条合进同一个事务。
-//
-// ---- 线程契约 ----
-// 写连接的所有权完全属于写线程:它是 writerLoop 的参数,活在那条线程的栈上,
-// 别处拿不到。热加载换库不是跨线程改指针,而是往同一条队列里投一条换库指令,
-// 由写线程在自己的时间线上按顺序执行 —— 换库与落库因此天然互斥,不需要锁。
+/**
+ * @file
+ * Reactor 到 SQLite 写线程之间的异步遥测流水线。
+ *
+ * 有界队列保护主事件循环不被磁盘 I/O 阻塞；单一消费者独占写连接，并将当前已积压
+ * 的记录合并为事务。数据库切换与数据批次使用同一条有序队列，从结构上保证换库不会
+ * 与写入并发，也不会让一个批次跨越换库边界。
+ */
 
 #include "gateway/core/concurrent/ThreadSafeQueue.h"
 #include "gateway/pipeline/TelemetryDecoder.h"
@@ -31,63 +22,66 @@
 
 namespace gateway {
 
+/** 管理遥测写队列和唯一数据库写线程。 */
 class TelemetryPipeline {
 public:
-    // 队列上限。按当前负载(单节点 2 秒一帧)这相当于十几分钟的缓冲,
-    // 真的撑满只可能是磁盘写不动了,那时丢新数据比无限堆内存正确。
+    /** 最大待处理任务数；存储持续跟不上时拒绝新数据而非无限增长内存。 */
     static constexpr std::size_t kQueueCapacity = 1024;
 
-    // 单个事务的记录数上限。攒批的收益随批量增长很快见顶,而批越大,
-    // 停机时最后一个事务要写的东西越多。取一个够用又不至于拖长停机的值。
+    /** 机会式组批的刷写触发阈值；单个 Batch 自身较大时事务可超过该值。 */
     static constexpr std::size_t kMaxRowsPerTxn = 256;
 
-    // db 的所有权就此交给写线程,调用方不应再调用它的任何方法。
+    /**
+     * 启动写线程并将连接交给该线程独占使用。
+     * @param db 已完成初始化的可写数据库连接；不得为空。
+     * @pre 调用方不再通过其他 shared_ptr 并发访问同一个 Database 对象。
+     */
     explicit TelemetryPipeline(std::shared_ptr<Database> db);
 
-    // 关队列并 join 写线程。ThreadSafeQueue::pop 在 shutdown 后仍会先把队列里
-    // 剩下的取空才返回 nullopt,故在飞的记录不会因为停机而丢。
+    /** 关闭队列并等待写线程按顺序排空已经接收的任务。 */
     ~TelemetryPipeline();
 
-    TelemetryPipeline(const TelemetryPipeline&)            = delete;
-    TelemetryPipeline& operator=(const TelemetryPipeline&) = delete;
+    TelemetryPipeline(const TelemetryPipeline& /* other */) = delete;  ///< 写线程不可复制。
+    TelemetryPipeline& operator=(const TelemetryPipeline& /* other */) = delete;  ///< 队列不可复制。
 
-    // 主 Reactor 线程调用。返回 false 表示队列已满、本批被丢弃。
-    //
-    // 用 try_push 而非 push:生产者是主 Reactor 线程,阻塞它会让串口收帧、
-    // ACK 配对、超时重发、SIGTERM 一起停摆。丢一条传感器读数是可接受的,
-    // Reactor 停住不是。
+    /**
+     * 将同一帧产生的读数作为一个任务非阻塞投递。
+     * @param readings 待写入的业务读数；空集合视为成功的无操作。
+     * @param ts 采集时间，Unix 秒。
+     * @return true 表示任务已入队或无需写入；false 表示队列已满或关闭。
+     */
     bool submit(const std::vector<Reading>& readings, long ts);
 
-    // 换库指令的最长等待。调用方是主 Reactor 线程,不能无限期等。
+    /** 换库控制任务等待队列空间时传给 wait_for 的时限参数。 */
     static constexpr std::chrono::milliseconds kSwapTimeout{200};
 
-    // SIGHUP 改了 db_path 时调用,把新连接交给写线程。返回 false 表示没投进去。
-    //
-    // 换库指令与遥测记录不同,它不可丢:丢了写线程会一直往旧库写,而旧库正是本次
-    // 热加载要换掉的东西。所以不能用 try_push。
-    //
-    // 但也不能用无限期的阻塞 push —— 调用方跑在主 Reactor 线程上,队列满时它会
-    // 连同串口收帧、ACK 配对、超时重发、SIGTERM 一起停摆;而队列会满只可能是磁盘
-    // 写不动了,那恰恰也是运维最可能发 SIGHUP 去改 db_path 的时刻。
-    // 折中是限时等待:最坏这次换库不生效并记 ERROR,主循环最多停 200ms。
+    /**
+     * 将新数据库连接作为有序控制任务交给写线程。
+     * @param db 新的可写连接；任务执行后由写线程独占使用。
+     * @return true 仅表示入队成功，不表示切换已经执行完毕。
+     * @pre 入队成功后，调用方不再并发访问同一个 Database 对象。
+     */
     bool swapDatabase(std::shared_ptr<Database> db);
 
 private:
-    // 一批待落库的记录。在 Reactor 线程就转成 DataRow,使写线程只依赖 storage 层。
+    /** 一次 submit 产生的数据库行集合。 */
     struct Batch {
-        std::vector<DataRow> rows;
+        std::vector<DataRow> rows;  ///< 保持原读数顺序的待写行。
     };
-    // 换库指令。走队列而不是直接改成员,换库便自动排进写线程的时间线。
+    /** 排在数据批次之间的数据库切换控制任务。 */
     struct SwapDb {
-        std::shared_ptr<Database> db;
+        std::shared_ptr<Database> db;  ///< 切换完成后由写线程持有的新连接。
     };
-    using Job = std::variant<Batch, SwapDb>;
+    using Job = std::variant<Batch, SwapDb>;  ///< 队列中可出现的数据任务与控制任务。
 
-    // db 按值传入并只存在于本函数的栈上 —— 这就是「写线程独占连接」的实现方式。
+    /**
+     * 写线程入口，按队列顺序机会式组批。
+     * @param db 当前可写连接，仅在写线程栈上替换和使用。
+     */
     void writerLoop(std::shared_ptr<Database> db);
 
-    ThreadSafeQueue<Job> queue_{kQueueCapacity};
-    std::thread          writer_;   // 最后声明:构造完成后才起线程
+    ThreadSafeQueue<Job> queue_{kQueueCapacity};  ///< Reactor 与写线程之间的有界任务队列。
+    std::thread writer_;                          ///< 唯一数据库写线程。
 };
 
 }  // namespace gateway

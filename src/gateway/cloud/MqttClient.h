@@ -1,14 +1,13 @@
 #pragma once
 
-// libmosquitto 的薄封装:连接、订阅、发布、自动重连。
-//
-// 本类不碰串口,这是刻意的:命令【产生】在 mosquitto 线程,却必须【发出】在主线程。
-// 中间那一跳(队列 + eventfd)不是性能优化,而是「串口只有一个写者」这条纪律的
-// 实现代价 —— 正因守住了它,SerialPort 与 CommandTracker 内部一把锁都不需要。
-//
-// 本类自己的锁只剩一把静态的 lib_mtx_,保护 mosquitto_lib_init/cleanup 这对全局
-// 初始化的引用计数。句柄本身不在此列:libmosquitto 2.0 自身线程安全,再包一层锁
-// 不但白加,还会与「on_connect 在库内部锁下回调进来」构成反向锁序。
+/**
+ * @file
+ * libmosquitto 的生命周期与消息接口封装。
+ *
+ * 对象分为配置期和运行期：消息回调与订阅必须在 loopStart() 前登记，网络线程
+ * 启动后只读这些配置。publish() 依赖 libmosquitto 自身的线程安全能力，可从业务
+ * 线程调用；进程级初始化则由本类统一引用计数。
+ */
 
 #include <mosquitto.h>
 #include <functional>
@@ -22,27 +21,26 @@
 
 namespace gateway {
 
-// libmosquitto 的 C++ 薄封装。
-//
-// ---- 线程契约 ----
-// 本类分两个阶段,阶段边界是 loopStart():
-//
-//   配置期(构造 → loopStart 之前):只允许构造线程访问。setMessageHandler /
-//   subscribe 在此期间写 handler_ 与 subs_,此时尚无网络线程,无并发。
-//
-//   运行期(loopStart 之后):handler_ 与 subs_ 转为只读,由 mosquitto 网络线程
-//   在收到消息 / 每次 CONNACK 时读取。std::thread 的创建对新线程构成 happens-before,
-//   因此读侧不需要任何同步 —— 前提是运行期不再有人写。这个前提由 started_ 检查兜住,
-//   越界调用直接抛,把契约从注释变成强制。
-//
-//   publish() 是唯一允许跨线程并发调用的成员,且本类不为它加锁,理由见函数上方。
-//
-// 于是本类只剩一把锁:静态的 lib_mtx_,保护 libmosquitto 的进程级 init/cleanup。
+/** 一个 MQTT 连接及其后台网络线程的独占 RAII 对象。 */
 class MqttClient {
 public:
+    /**
+     * 收到应用消息时的回调。
+     * @param topic broker 投递的完整主题。
+     * @param payload 保留原始长度的消息体，可包含 NUL 字节。
+     */
     using MessageHandler = std::function<void(const std::string& topic,
                                               const std::string& payload)>;
 
+    /**
+     * 创建 clean-session 客户端并同步建立 TCP/MQTT 连接，尚不启动网络线程。
+     *
+     * @param id MQTT Client ID；同一 broker 上应保持唯一。
+     * @param host broker 主机名或地址。
+     * @param port broker TCP 端口。
+     * @param keepalive MQTT 空闲探活间隔，单位为秒，与业务遥测周期无关。
+     * @throws std::runtime_error 客户端创建或首次连接失败。
+     */
     MqttClient(const std::string& id,
                const std::string& host, int port, int keepalive = 60) {
         libInit();
@@ -52,97 +50,83 @@ public:
             throw std::runtime_error("mosquitto_new failed");
         }
         mosquitto_message_callback_set(mosq_, &MqttClient::onMessageTrampoline);
-        // 每次连接建立(含 loop_start 线程的自动重连)都要重挂订阅,见 onConnectTrampoline
         mosquitto_connect_callback_set(mosq_, &MqttClient::onConnectTrampoline);
 
-        int rc = mosquitto_connect(mosq_, host.c_str(), port, keepalive);
+        int rc = mosquitto_connect(mosq_, host.c_str(), port, keepalive);  // 首连结果码。
         if (rc != MOSQ_ERR_SUCCESS) {
-            std::string msg = mosquitto_strerror(rc);
+            std::string msg = mosquitto_strerror(rc);  // 析构句柄前保存错误文本。
             mosquitto_destroy(mosq_);
             libCleanup();
             throw std::runtime_error("mosquitto_connect failed: " + msg);
         }
     }
 
-    // 停网络线程的顺序不能反:先 disconnect 把状态置为断开,网络线程据此自行退出,
-    // 再 loop_stop(false) 等它 join 完。mosquitto_loop_stop 的文档写明,force=false
-    // 要求先调过 disconnect。
-    //
-    // 不用 force=true:那是 pthread_cancel。网络线程随时可能停在 libmosquitto 的
-    // 内部锁里,被砍掉后那把锁再也不会解开,紧接着的 mosquitto_destroy 会去
-    // pthread_mutex_destroy 一把仍处于锁定状态的锁。
-    //
-    // join 完成后,onMessageTrampoline / onConnectTrampoline 确定不再执行 —— 下行
-    // handler 因此可以安全地捕获裸指针,见 GatewayApp::startMqtt。
+    /** 先请求断开，再等待网络线程退出，确保销毁句柄前不再进入回调。 */
     ~MqttClient() noexcept {
         if (mosq_) {
             mosquitto_disconnect(mosq_);
-            mosquitto_loop_stop(mosq_, false);   // 未起过网络线程时返回 INVAL,无害
+            mosquitto_loop_stop(mosq_, false);
             mosquitto_destroy(mosq_);
         }
         libCleanup();
     }
 
-    MqttClient(const MqttClient&)            = delete;
-    MqttClient& operator=(const MqttClient&) = delete;
+    MqttClient(const MqttClient& /* other */) = delete;  ///< 不从其他实例复制连接句柄。
+    MqttClient& operator=(const MqttClient& /* other */) = delete;  ///< 不接管副本来源。
 
-    // 配置期接口,见类头「线程契约」。
+    /**
+     * 登记运行期消息回调。
+     * @param h 网络线程收到消息后调用的处理器；可为空。
+     * @throws std::logic_error 网络线程已经启动。
+     */
     void setMessageHandler(MessageHandler h) {
         requireNotStarted("setMessageHandler");
         handler_ = std::move(h);
     }
 
-    // 登记一条订阅。配置期接口,【只记不发】。
-    //
-    // 记住这一步不是多余的:客户端以 clean_session = true 连接,broker 不保存会话,
-    // 所以每次连接都必须重新提交订阅。loop_start 起的网络线程在断线后会自动重连 ——
-    // 连接确实恢复了,发布也照常成功,唯独订阅没了,下行命令从此静默收不到,
-    // 直到进程重启。这个故障没有任何报错,只表现为「命令发出去没反应」。
-    // 因此订阅列表由本类持有,并在每次 CONNACK 后由 onConnectTrampoline 重放。
-    //
-    // 此处不再立刻调 mosquitto_subscribe,两个理由:
-    //   一、多余。CONNACK 的重放覆盖【所有】连接,首连也不例外 —— 原先的写法会让
-    //       首次连接发出两次 SUBSCRIBE(幂等,无害,但制造了「订阅在两处发生」的错觉)。
-    //   二、危险。原先它在 rc != SUCCESS 时抛异常,而调用点 GatewayApp::startMqtt 的
-    //       顺序是 setMessageHandler → subscribe → loopStart:一抛,loopStart 就被跳过,
-    //       于是留下一个「连上了 broker 却没有网络线程」的客户端 —— 下行永远收不到,
-    //       publish 只是把报文塞进库的发送队列再也发不出去,却还返回 MOSQ_ERR_SUCCESS。
-    //       而热加载那侧只记一句 "may be degraded" 就继续跑。只记不发之后本函数不会
-    //       失败,loopStart 必然执行,这条静默死亡的路径随之消失。
+    /**
+     * 在配置期登记订阅，不立即发送 SUBSCRIBE。
+     *
+     * 首连和自动重连成功后由连接回调统一重放列表。当前客户端使用 clean session，
+     * 因此同一 broker 的每次重连都需重放；热加载到新 broker 时，新客户端也会沿
+     * 相同流程提交自己的列表。
+     *
+     * @param topic 订阅主题或通配过滤器。
+     * @param qos 请求的订阅 QoS，默认 1。
+     * @throws std::logic_error 网络线程已经启动。
+     */
     void subscribe(const std::string& topic, int qos = 1) {
         requireNotStarted("subscribe");
         subs_.emplace_back(topic, qos);
     }
 
-    // 唯一允许跨线程并发调用的成员:主线程(遥测上行、命令应答与超时判死)与
-    // mosquitto 网络线程(下行命令的拒收原因)都会调它。
-    //
-    // 不加本类的锁,两条理由叠起来:
-    //   一、加了白加。libmosquitto 2.0 自身线程安全(mosquitto.h 的 "Topic: Threads",
-    //       唯一例外是 lib_init),而 loopStart 用的 mosquitto_loop_start 已自动置上
-    //       库切换多线程行为所需的 threaded 标志。句柄的内部状态人家护住了。
-    //   二、加了危险。onConnectTrampoline 是库在自己的内部锁下回调进来的,它若再抢
-    //       本类的锁、而 publish 持本类的锁去调库,两条路径就是反向锁序 —— ABBA 的
-    //       形状。是否真成环取决于库内部用了哪几把锁,不该让正确性依赖看不见的细节。
-    //
-    // 附带好处:失败分支的日志不落在临界区里。broker 断开时每条 publish 都会失败,
-    // 带锁就会让多条线程排队记同一条日志,恰在最需要吞吐时自我放大。
+    /**
+     * 将消息交给 libmosquitto 的发送队列。
+     *
+     * libmosquitto 负责运行期句柄同步，本层不再叠加互斥锁。该接口不等待 QoS
+     * 握手，也不向调用方返回投递状态；立即失败只记录日志。
+     *
+     * @param topic 发布主题。
+     * @param payload 原始消息体。
+     * @param qos 发布 QoS，默认 0。
+     * @param retain 是否要求 broker 保留最后一条消息。
+     */
     void publish(const std::string& topic, const std::string& payload,
                  int qos = 0, bool retain = false) {
-        int rc = mosquitto_publish(mosq_, nullptr, topic.c_str(),
-                                   static_cast<int>(payload.size()),
-                                   payload.data(), qos, retain);
+        int rc = mosquitto_publish(  // 仅表示消息是否成功交给客户端库。
+            mosq_, nullptr, topic.c_str(), static_cast<int>(payload.size()),
+            payload.data(), qos, retain);
         if (rc != MOSQ_ERR_SUCCESS)
             LOG_WARN("mqtt publish failed: %s", mosquitto_strerror(rc));
     }
 
-    // 起网络线程,并把本对象推进运行期。此后配置期接口一律拒绝。
-    //
-    // 不抛异常:这是链路上最后一步,失败了也要让调用方拿到一个状态明确的对象。
-    // 但返回值必须看 —— 没有网络线程的客户端是【静默】失效的,publish 照样返回成功。
+    /**
+     * 启动网络线程并永久结束配置阶段。
+     * @return true 表示线程已启动；false 表示上下行均不可用。
+     */
     bool loopStart() {
         started_ = true;
-        const int rc = mosquitto_loop_start(mosq_);
+        const int rc = mosquitto_loop_start(mosq_);  // 后台循环启动结果。
         if (rc != MOSQ_ERR_SUCCESS) {
             LOG_ERROR("mosquitto_loop_start failed: %s — 上行与下行均不可用",
                       mosquitto_strerror(rc));
@@ -152,74 +136,74 @@ public:
     }
 
 private:
+    /**
+     * 强制配置期调用约束。
+     * @param who 用于异常文本的成员函数名。
+     * @throws std::logic_error 对象已进入运行期。
+     */
     void requireNotStarted(const char* who) const {
-        // 运行期再改 handler_ / subs_ 就是与网络线程的读并发,而读侧按契约是不加锁的。
-        // 这不是运行时故障而是用法错误,故抛 logic_error 而非 runtime_error。
         if (started_)
             throw std::logic_error(std::string(who) + "() called after loopStart()");
     }
 
-    // 每次连接建立后由 mosquitto 网络线程回调:首连一次,之后每次自动重连各一次。
-    // rc != 0 表示 broker 拒绝了连接(认证失败等),此时不必重放订阅。
-    //
-    // 直接遍历 subs_ 而不加锁:它在 loopStart() 之前写完,此后只读(见类头「线程契约」)。
+    /**
+     * CONNACK 回调：连接成功后重放全部订阅，拒绝连接时仅记录错误。
+     * @param mosq 触发回调的 libmosquitto 句柄。
+     * @param obj 创建句柄时登记的 MqttClient 指针。
+     * @param rc broker 返回的连接结果码，0 表示成功。
+     */
     static void onConnectTrampoline(struct mosquitto* mosq, void* obj, int rc) {
-        auto* self = static_cast<MqttClient*>(obj);
+        auto* self = static_cast<MqttClient*>(obj);  // 恢复 C 回调对应的 C++ 对象。
         if (rc != 0) {
             LOG_ERROR("mqtt connect refused: %s", mosquitto_connack_string(rc));
             return;
         }
-        for (const auto& s : self->subs_) {
-            int r = mosquitto_subscribe(mosq, nullptr, s.first.c_str(), s.second);
+        for (const auto& s : self->subs_) {  // s=(主题过滤器, 请求 QoS)。
+            int r = mosquitto_subscribe(  // 订阅请求进入客户端发送队列的结果。
+                mosq, nullptr, s.first.c_str(), s.second);
             if (r != MOSQ_ERR_SUCCESS)
                 LOG_ERROR("mqtt re-subscribe '%s' failed: %s",
                           s.first.c_str(), mosquitto_strerror(r));
         }
     }
 
-    static void onMessageTrampoline(struct mosquitto*, void* obj,
+    /**
+     * 应用消息回调：复制库持有的数据后转交业务处理器。
+     * @param mosq 触发回调的句柄；本实现无需使用，因为 obj 已定位所属对象。
+     * @param obj 创建句柄时登记的 MqttClient 指针。
+     * @param msg 仅在本次回调期间有效的消息对象。
+     */
+    static void onMessageTrampoline(struct mosquitto* /* mosq */, void* obj,
                                     const struct mosquitto_message* msg) {
-        auto* self = static_cast<MqttClient*>(obj);
+        auto* self = static_cast<MqttClient*>(obj);  // 恢复回调所属对象。
         if (!self->handler_) return;
-        std::string topic(msg->topic ? msg->topic : "");
-        // libmosquitto 的 payloadlen 是 int。虽不预期为负,但类型允许,
-        // 而负数转 size_t 会得到巨大值并导致 std::string 构造越界,故在此拦一道。
+        std::string topic(msg->topic ? msg->topic : "");  // 拷贝库持有的主题。
         const size_t payload_len =
-            (msg->payloadlen > 0) ? static_cast<size_t>(msg->payloadlen) : 0u;
-        std::string payload(static_cast<const char*>(msg->payload), payload_len);
+            (msg->payloadlen > 0) ? static_cast<size_t>(msg->payloadlen) : 0u;  // 防止负值扩展。
+        std::string payload(  // 按显式长度拷贝，保留消息体中的 NUL。
+            static_cast<const char*>(msg->payload), payload_len);
         self->handler_(topic, payload);
     }
 
-    // ---- libmosquitto 的进程级 init/cleanup ----
-    //
-    // 真正吃劲的是计数器,不是那把锁。热加载换 broker 走「先建新的,建成功了再换」
-    // (见 GatewayApp::reloadConfig),新旧实例必有一段共存期 —— 旧实例析构时若无条件
-    // 调 mosquitto_lib_cleanup,就会把新实例脚下的库全局状态拆掉。计数让 cleanup
-    // 只在最后一个实例消失时才真正执行。
-    //
-    // 锁是给约束本身上的保险。mosquitto_lib_init 的文档明说它不线程安全,而本类从未
-    // 在接口上承诺「实例只能在同一条线程上建与析构」。当前唯一的持有者是 GatewayApp,
-    // 构造与析构都落在主线程,这把锁一次也竞争不到 —— 但那是调用方的现状而非本类的
-    // 契约,不该让正确性依赖它。代价是每次构造/析构各一次无竞争加锁。
+    /** 增加进程级使用计数；首个实例调用 libmosquitto 全局初始化。 */
     static void libInit() {
-        std::lock_guard<std::mutex> lock(lib_mtx_);
+        std::lock_guard<std::mutex> lock(lib_mtx_);  // 串行化非线程安全的全局初始化。
         if (lib_refcount_++ == 0) mosquitto_lib_init();
     }
+    /** 释放一次使用权；最后一个实例执行全局清理。 */
     static void libCleanup() noexcept {
-        std::lock_guard<std::mutex> lock(lib_mtx_);
+        std::lock_guard<std::mutex> lock(lib_mtx_);  // 与构造及其他析构互斥。
         if (--lib_refcount_ == 0) mosquitto_lib_cleanup();
     }
 
-    inline static std::mutex lib_mtx_;
-    inline static int        lib_refcount_ = 0;
+    inline static std::mutex lib_mtx_;           ///< 保护进程级引用计数与初始化/清理。
+    inline static int        lib_refcount_ = 0;  ///< 当前存活的 MqttClient 数量。
 
-    struct mosquitto* mosq_    = nullptr;
-    bool              started_ = false;   // 仅构造线程读写,见 requireNotStarted
+    struct mosquitto* mosq_ = nullptr;  ///< 本对象独占的 libmosquitto 客户端句柄。
+    bool started_ = false;              ///< 是否已经结束配置期并尝试启动网络线程。
 
-    // 以下两项:配置期由构造线程写,运行期由 mosquitto 网络线程只读。
-    // 建线程提供 happens-before,故无锁。
-    MessageHandler                           handler_;
-    std::vector<std::pair<std::string, int>> subs_;   // 已订阅的 topic + qos,供重连重放
+    MessageHandler handler_;  ///< 配置期写入，网络线程启动后只读。
+    std::vector<std::pair<std::string, int>> subs_;  ///< 待在每次连接后重放的订阅。
 };
 
 }  // namespace gateway

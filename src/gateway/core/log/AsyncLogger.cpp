@@ -1,10 +1,8 @@
-// 双缓冲的两侧:append 跑在任意业务线程,flushThread 独占后端。
+// 异步日志缓冲区交换与输出实现。
 //
-// 全文围绕一句话:持锁的时间只够交换指针,真正的 write 发生在锁外。
-// 由此派生出三条不变量,改动时先确认它们还成立 ——
-//   一、一次 append = 一整行,行不跨缓冲、不跨 write,故多线程不交错;
-//   二、失败时不留半毁状态,队列到顶宁可丢日志也不丢进程;
-//   三、只有 flushThread 写 fd,全进程唯一写者。
+// 前端线程只在 mtx_ 临界区内修改 currentBuffer_、nextBuffer_ 和待写队列；后台线程
+// 把所有权交换到 localBuffers 后立即解锁，再执行可能阻塞的 write。输出 fd 只有后台
+// 线程访问，析构通过 running_ 和 join 建立最后一次排空与对象销毁之间的顺序。
 
 #include "gateway/core/log/AsyncLogger.h"
 
@@ -19,46 +17,52 @@
 
 namespace gateway {
 
+    /**
+     * @brief 重试 EINTR 和短写，直到写满或发生不可恢复错误。
+     * @param fd 借用的输出描述符，本函数不关闭。
+     * @param buf 指向至少 n 个可读字节。
+     * @param n 请求写入的字节数。
+     * @return 成功时为 n，发生不可恢复 write 错误时为 -1。
+     * @pre n 不大于 ssize_t 的可表示上限。
+     * @pre 对该 fd 的非零长度 write 要么取得正进展，要么返回错误；返回 0 时本循环
+     *      当前不会退出。
+     */
     static ssize_t safe_write(int fd, const void* buf, size_t n) {
-        size_t total = 0;                       // 与写入长度同为无符号,免去来回强转
-        const char* p = static_cast<const char*>(buf);
+        size_t total = 0; // 已成功交给内核的前缀字节数。
+        const char* p = static_cast<const char*>(buf); // 用于字节偏移的只读输入视图。
         while(total < n) {
-            ssize_t n_write = write(fd, p + total, n - total);
+            ssize_t n_write = write(fd, p + total, n - total); // 本轮系统调用写入量。
             if (n_write < 0) {
                 if( errno == EINTR) continue;
                 return -1;
             }
-            total += static_cast<size_t>(n_write);   // n_write >= 0
+            total += static_cast<size_t>(n_write);
         }
 
         return static_cast<ssize_t>(total);
     }
 
-    // 把"丢了多少块"以一行日志的形式写进日志流本身。
-    // 刻意不走 fprintf(stderr):既为了和其余日志同序,也因为调用它的两处都
-    // 已经确认 fd 可写。格式对齐 Logger::log 的前缀,读起来和普通日志一致。
+    /**
+     * @param fd 当前日志输出描述符，借用且不关闭。
+     * @param dropped 待报告的丢弃缓冲块数量；0 时无操作。
+     */
     static void report_dropped(int fd, size_t dropped) {
         if (dropped == 0) return;
 
-        char note[128];
+        char note[128]; // 固定大小的内部诊断行，不经过 AsyncLogger::append()。
         int n = snprintf(note, sizeof(note),
                          "[WARN ] AsyncLogger 待写队列溢出,丢弃 %zu 块缓冲\n", dropped);
+        // n 是完整诊断所需字符数；负值表示格式化失败。
         if (n <= 0) return;
 
-        size_t len = static_cast<size_t>(n);
-        if (len >= sizeof(note)) len = sizeof(note) - 1;   // snprintf 返回「本应写入」
+        size_t len = static_cast<size_t>(n); // note 中实际提交给 safe_write 的字节数。
+        if (len >= sizeof(note)) len = sizeof(note) - 1;
         safe_write(fd, note, len);
     }
 
-    // 进程单例写 stderr,不写文件。两个理由:
-    // 一是全进程只剩一个日志出口 —— 直接 fprintf(stderr) 的那几处已改走 LOG_*,
-    //   同一次故障的线索不会再分散在文件与 journal 两个地方;
-    // 二是原先的 /tmp/gateway.log 在多数发行版上是 tmpfs,重启即失,
-    //   而"排查一次开机后的故障"恰恰是最需要日志的场景。
-    // 交给 journald 之后,轮转、持久化(Storage=persistent)、按时间/单元过滤
-    // 都是它的既有能力,进程侧不必自己实现。
+    // 进程单例写 stderr，由服务管理器负责收集和持久化。
     AsyncLogger& AsyncLogger::instance() {
-        static AsyncLogger inst("", 3);
+        static AsyncLogger inst("", 3); // 首次使用时构造，进程静态析构阶段停止。
         return inst;
     }
 
@@ -68,7 +72,7 @@ namespace gateway {
         currentBuffer_->reserve(kBufferSize);
         nextBuffer_->reserve(kBufferSize);
 
-        // 按硬上限一次到位,免得溢出前夕还在锁内做 vector 扩容
+        // 避免高负载下在锁内扩容待写队列。
         bufferToWrite_.reserve(kMaxQueuedBuffers);
 
         thread_ = std::thread([this](){flushThread();});
@@ -81,37 +85,25 @@ namespace gateway {
         if (thread_.joinable()) thread_.join();
     }
 
-    // 本文件内的报错一概不走 LOG_*:LOG_* 的终点就是本类,日志系统自身的故障
-    // 若再交给它上报,轻则递归,重则在持锁路径上自我阻塞。这是唯一容许绕开
-    // 统一日志通道的地方。绕开之后有两个出口,按"此刻 fd 还能不能写"来选:
-    //   fprintf(stderr) —— 用于 fd 尚未打开或正可疑的时候(截断、open/write 失败);
-    //   safe_write(fd)  —— 见 report_dropped,用于已确认可写、且希望与其余日志同序的时候。
+    // 后端自身的诊断必须绕过 LOG_*，否则会递归回到本对象。
     void AsyncLogger::append(const char* msg, size_t len) {
         if (len > kMaxLogLine) {
             fprintf(stderr, "AsyncLogger: 日志信息将被截断\n");
             len = kMaxLogLine;
         }
 
-        std::lock_guard<std::mutex> lock(mtx_);
+        std::lock_guard<std::mutex> lock(mtx_); // 保护容量判断、裁剪和缓冲区交换。
 
         if (len + currentBuffer_->size() < kBufferSize) {
             currentBuffer_->append(msg, len);
             return;
         }
 
-        // 走到这里是要换页了。换页前先看队列有没有到顶 —— 到顶说明后端根本
-        // 沉不下去,再往里塞只是把 OOM 提前。此时只能在"丢日志"和"丢进程"
-        // 之间选一个,网关上选前者:丢掉的量有 dropped_ 可查,而被 OOM killer
-        // 收掉的进程什么都不会留下。
-        //
-        // 计数交给 flushThread 补记,这里不就地 fprintf(stderr):此刻 stderr
-        // 十有八九正是堵住的那个 fd,持着 mtx_ 去写它会把所有前端线程连同
-        // flushThread 一起钉死 —— 那就从丢日志变成丢进程了。
+        // 后端落后时丢弃队尾缓冲区并延后报告，锁内不执行任何输出操作。
         if (bufferToWrite_.size() >= kMaxQueuedBuffers) {
             dropped_ += bufferToWrite_.size() - kKeepOnOverflow;
 
-            // 顺手从将弃的块里补上 nextBuffer_,免得紧接着的换页还要 malloc。
-            // 被移走的那块留在尾部,下面一并 erase 掉。
+            // 优先回收一个待丢弃的块作为前端备用缓冲区。
             if (!nextBuffer_) {
                 nextBuffer_ = std::move(bufferToWrite_.back());
                 nextBuffer_->clear();
@@ -137,12 +129,12 @@ namespace gateway {
     }
 
     void AsyncLogger::flushThread() {
-        // 空路径 = 写 stderr。此时 fd 是借来的,不能 close:关掉 fd 2 之后
-        // 后面所有诊断输出(含本函数自己的报错)都会静默消失。
-        const bool to_stderr = filepath_.empty();
+        // stderr 的 fd 由进程环境持有，本类只关闭自行打开的文件。
+        const bool to_stderr = filepath_.empty(); // 区分借用 fd 与本类拥有的文件 fd。
 
         int fd = to_stderr ? STDERR_FILENO
                            : open(filepath_.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+        // fd 只在本线程使用；非 stderr 路径由本函数在退出前关闭。
         if (fd < 0) {
             fprintf(stderr, "AsyncLogger: open '%s' failed: %s\n",
                    filepath_.c_str(), strerror(errno));
@@ -150,17 +142,17 @@ namespace gateway {
             return;
         }
 
-        // 预分配备用 buffer,用于在交换出当前 buffer 后立即补位
-        BufferPtr newCurrent = std::make_unique<Buffer>();
-        BufferPtr newNext    = std::make_unique<Buffer>();
+        // 预分配两个缓冲区，使常规交换路径无需分配内存。
+        BufferPtr newCurrent = std::make_unique<Buffer>(); // 交换给前端的首个空块。
+        BufferPtr newNext    = std::make_unique<Buffer>(); // 交换给前端的备用空块。
         newCurrent->reserve(kBufferSize);
         newNext->reserve(kBufferSize);
 
-        std::vector<BufferPtr> localBuffers;
+        std::vector<BufferPtr> localBuffers; // 后台线程在锁外独占的本轮待写块。
         localBuffers.reserve(kMaxQueuedBuffers);
 
         while(running_.load()) {
-            std::unique_lock<std::mutex> lock(mtx_);
+            std::unique_lock<std::mutex> lock(mtx_); // wait_for 和指针交换所需的锁。
             cv_.wait_for(lock, std::chrono::seconds(flush_interval_sec_), [this](){
                 return !bufferToWrite_.empty() || !running_.load();
             });
@@ -178,22 +170,17 @@ namespace gateway {
                 continue;
             }
 
-            // 只在确定要写的这一轮才取走计数。放在上面那个 continue 之前的话,
-            // 遇到空转的一轮就会把计数清掉却没人补记。
-            const size_t dropped = dropped_;
+            // 与待写缓冲区一起取走丢弃计数，确保报告不会先于对应缺口。
+            const size_t dropped = dropped_; // 与本批日志对应的溢出块数快照。
             dropped_ = 0;
 
             localBuffers.swap(bufferToWrite_);
             lock.unlock();
 
-            // append 溢出丢弃时只记了个数,报告推迟到这里:那一刻 fd 多半正堵着,
-            // 而此刻我们即将往它写东西,写得进去本身就说明后端已经缓过来了。
-            // 走 fd 而不是 fprintf(stderr),是为了让这行落在日志流里断口所在的
-            // 位置 —— 读日志的人需要知道那段空白是丢了,不是没发生。
             report_dropped(fd, dropped);
 
-            for (const auto& buf:localBuffers) {
-                ssize_t r = safe_write(fd, buf->data(), buf->size());
+            for (const auto& buf:localBuffers) { // buf 是本轮按队列顺序写出的独占块。
+                ssize_t r = safe_write(fd, buf->data(), buf->size()); // 本块写入结果。
                 if (r < 0) {
                     fprintf(stderr, "AsyncLogger: write failed: %s\n", strerror(errno));
                 }
@@ -217,9 +204,9 @@ namespace gateway {
 
         }
 
-        size_t dropped_at_exit = 0;
+        size_t dropped_at_exit = 0; // 主循环停止后尚未报告的溢出块数。
         {
-            std::lock_guard<std::mutex> lock(mtx_);
+            std::lock_guard<std::mutex> lock(mtx_); // 原子取得最终前端缓冲和待写队列。
             if (currentBuffer_ && !currentBuffer_->empty()) {
                 bufferToWrite_.push_back(std::move(currentBuffer_));
             }
@@ -228,11 +215,11 @@ namespace gateway {
             dropped_ = 0;
         }
 
-        // 收尾同样要补记:最后一轮循环之后发生的丢弃,不补在这里就永远没人报了
+        // 析构前排空剩余日志并补报最后一次溢出。
         report_dropped(fd, dropped_at_exit);
 
-        for (const auto& buf: localBuffers) {
-            ssize_t r = safe_write(fd, buf->data(), buf->size());
+        for (const auto& buf: localBuffers) { // buf 是析构前必须写出的剩余块。
+            ssize_t r = safe_write(fd, buf->data(), buf->size()); // 最终块写入结果。
             if (r < 0) {
                 fprintf(stderr, "AsyncLogger: write failed: %s\n", strerror(errno));
             }

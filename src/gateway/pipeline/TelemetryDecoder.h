@@ -1,9 +1,12 @@
 #pragma once
 
-// 业务解码:一帧上行数据 → 若干条 (设备名, 数值) 记录。
-//
-// 纯函数,不访问任何外部资源。新增一种传感器只需增加一个 case 与一条测试,
-// 无需改动装配代码。
+/**
+ * @file
+ * 协议帧到业务遥测读数的纯转换接口。
+ *
+ * 协议层只保证帧结构，本层解释传感器定标、状态位和逻辑设备名称。一帧可扇出为
+ * 多条 Reading，后续存储与上云路径因此无需了解具体传感器帧格式。
+ */
 
 #include "gateway/protocol/FrameCodec.h"
 
@@ -12,20 +15,20 @@
 
 namespace gateway {
 
-// 一条待落库 / 待上云的记录。device 为逻辑设备名,温湿度帧会拆成两条。
+/** 一条可独立落库和发布的逻辑设备读数。 */
 struct Reading {
-    std::string device;
-    double      value;
+    std::string device;  ///< 稳定的逻辑设备标识，也是数据库与 MQTT 路径中的名称。
+    double      value;   ///< 已按协议定标还原的数值；状态量使用 0.0/1.0。
 };
 
-// 解码一帧上行数据帧。
-//
-// 以下三种情形返回空 vector,均非错误,调用方无需区分:
-//   - 心跳帧(0x03):不落库
-//   - payload 长度不足:按 edge_min_payload_len 校验后记警告并丢弃
-//   - 未知 TYPE:记警告并丢弃。TYPE 字典的合法性属业务层职责,协议层不校验
-//
-// 前置条件:应答帧(0x05 / 0x06)属命令链路,应由调用方先行分流,不应传入本函数。
+/**
+ * 解码一帧遥测数据。
+ *
+ * @param frame 已通过帧校验的协议帧。
+ * @return 解出的零到多条读数。心跳、载荷长度错误和非遥测类型返回空集合。
+ *
+ * 命令应答应由调用方预先分流；若误传入，本函数会记录警告并返回空集合。
+ */
 std::vector<Reading> decodeTelemetry(const Frame& frame);
 
 }  // namespace gateway

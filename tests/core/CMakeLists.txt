@@ -1,11 +1,11 @@
-# core 层测试:配置解析与热加载
+# config_test 链接 gw_config，覆盖配置解析、统一校验与热加载差异检测。
 gateway_add_test(config_test
     SOURCES ConfigTest.cpp
     LIBS    gw_config
     LABELS  "unit;core"
 )
 
-# 遥测数值的文本格式。formatValue 是 header-only 纯函数,只需协议头取定标常数。
+# number_test 验证 header-only 格式函数，并链接 edge_proto 取得定标常量。
 gateway_add_test(number_test
     SOURCES NumberTest.cpp
     LIBS    gw_format edge_proto

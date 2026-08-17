@@ -1,12 +1,10 @@
 #pragma once
 
-// 异步日志后端:双缓冲 + 一条 flush 线程。形状取自 muduo,尺寸按本机场景重定。
+// 异步日志后端。
 //
-// 它要解决的不是「比 journald 快」,而是【别让 Reactor 线程阻塞在 I/O 上】。
-// 就算终点是 stderr,同步 write() 到 journald 的 socket 一样会阻塞,而 journald
-// 变慢恰恰发生在故障风暴时 —— 于是「越卡越写、越写越卡」的正反馈成立。
-// 这个问题 journald 替不了我们解决,因为阻塞发生在 socket 的【我们这一侧】。
-// 本类把前端代价压成一次锁内 memcpy,仅此而已。
+// 多个调用线程只在短临界区内把完整日志行复制到 currentBuffer_；后台线程批量交换
+// 待写缓冲区，并在锁外独占输出 fd。待写队列设有裁剪阈值，后端长期阻塞时保留最早
+// 的诊断块、丢弃其余积压并补记丢弃数量，以有界内存换取业务线程可继续运行。
 
 #include <string>
 #include <vector>
@@ -18,67 +16,74 @@
 
 namespace gateway {
 
+/** 线程安全的缓冲日志写入器；拥有一个后台线程以及可选的输出文件 fd。 */
 class AsyncLogger {
 
 public:
-    // filepath 为空表示写 stderr(fd 2),这也是进程单例走的路径:
-    // 交由 systemd/journald 负责轮转与持久化,进程自己不管文件生命周期。
-    // 传入非空路径则打开该文件追加写,供单测与非 systemd 部署使用。
+    /**
+     * @brief 创建日志后端并立即启动 flush 线程。
+     * @param filepath 空字符串表示借用 stderr；非空则以追加模式打开该文件。
+     * @param flush_intercal_sec 未填满缓冲区时的最大刷新间隔，单位秒，必须大于 0。
+     *
+     * 文件由后台线程打开；打开失败会直接写 stderr，随后线程退出。
+     */
     explicit AsyncLogger(const std::string& filepath, int flush_intercal_sec = 3);
 
+    /**
+     * 通知后台线程停止并等待退出。输出文件打开成功时，线程会在退出前
+     * 尝试写完当前队列，再关闭本类拥有的 fd；打开或 write 失败无重试保证。
+     * 调用方必须先保证不再有 append() 与析构并发。
+     */
     ~AsyncLogger();
 
+    /** @return 写 stderr、刷新间隔为 3 秒的进程级单例。 */
     static AsyncLogger& instance();
 
+    /** @param other 不会被读取；线程、互斥量和缓冲区均不可复制。 */
     AsyncLogger(const AsyncLogger&) = delete;
+    /** @param other 不会被读取；禁止覆盖本实例的后台线程和输出状态。 */
     AsyncLogger& operator=(const AsyncLogger&) = delete;
 
+    /**
+     * @brief 追加一条已格式化消息。
+     * @param msg 非空输入指针，指向至少 len 个有效字节；内容不要求以 NUL 结尾。
+     * @param len 消息字节数；大于 kMaxLogLine 时会截断并直接向 stderr 报告。
+     *
+     * 该函数可由多个业务线程并发调用。消息整体写入同一缓冲区，不会跨块拆分。
+     * 换块时的内存分配失败会向调用方传播。
+     */
     void append(const char* msg, size_t len);
 
 private:
-    using Buffer = std::string;
-    using BufferPtr = std::unique_ptr<Buffer>;
+    using Buffer = std::string;             /**< 按字节保存多条完整日志行的连续缓冲区。 */
+    using BufferPtr = std::unique_ptr<Buffer>; /**< 缓冲区的独占所有权，用于低成本交换。 */
 
-    // 单条日志上限,与 Logger::log 的栈缓冲同宽:那里格式化完的整行(含结尾
-    // 换行)最长就是 1024 字节,超出者在进 append 之前已被截断。此处独立成常量,
-    // 是为了不再和 kBufferSize 绑在一起 —— 二者约束的是完全不同的东西。
+    /** 单次 append 接受的最大字节数，与 Logger 的行缓冲区大小一致。 */
     static constexpr size_t kMaxLogLine = 1024;
 
-    // 单块缓冲大小。取 64KB 而非更大,有两层考虑:
-    // 一是它决定"攒够多少字节才换页并唤醒后台线程"。稳态下换页几乎不发生,
-    //   落盘全靠 flush_interval_sec_ 的超时;但日志风暴时它就是唯一的及时触发者,
-    //   块越大,进程被 SIGKILL 或掉电打死时压在内存里没写出去的就越多,
-    //   而那恰好是最需要日志的时刻。
-    // 二是停在 glibc 默认 mmap 阈值(128KB)以下。flushThread 每轮只回收两块,
-    //   其余在 localBuffers 析构时归还、下轮重新分配;留在阈值内这些分配走堆,
-    //   越过去就变成一对 mmap/munmap 系统调用。
+    /** 聚合块容量上限；一行不会跨块，块满后立即唤醒后台线程。 */
     static constexpr size_t kBufferSize = 64 * 1024;
 
-    // 待写队列的硬上限,乘上 kBufferSize 就是日志占用内存的天花板(4MB)。
-    // 没有它时 bufferToWrite_ 可以无限涨:后端一旦沉不下去(journald 卡住、
-    // 磁盘满、写 fd 阻塞),前端仍在 append,最后由 OOM killer 收场。
+    /** 前端检测并裁剪积压的阈值；后台交换当前块时可能短暂多出一块。 */
     static constexpr size_t kMaxQueuedBuffers = 64;
 
-    // 溢出时保留最早的几块。一次故障风暴的根因几乎总在最前面那几行,
-    // 尾部多是同一原因的重复刷屏,所以丢尾不丢头。
+    /** 触发溢出裁剪时保留的最早缓冲块数量。 */
     static constexpr size_t kKeepOnOverflow = 2;
 
-    std::mutex mtx_;
-    std::condition_variable cv_;
-    BufferPtr currentBuffer_;
-    BufferPtr nextBuffer_;
-    std::vector<BufferPtr> bufferToWrite_;
+    std::mutex mtx_;                    /**< 保护前端缓冲、待写队列和 dropped_。 */
+    std::condition_variable cv_;        /**< 块就绪或析构时唤醒后台线程。 */
+    BufferPtr currentBuffer_;           /**< 前端当前追加的缓冲块。 */
+    BufferPtr nextBuffer_;              /**< 前端换块时优先复用的空闲块，可暂时为空。 */
+    std::vector<BufferPtr> bufferToWrite_; /**< 等待后台线程取走的完整或待刷新块。 */
 
-    // 溢出丢弃的缓冲块数,mtx_ 保护。由 append 累加,flushThread 取走并清零后
-    // 补记一行到日志流里 —— 丢了多少必须留下痕迹,否则读日志的人只会看到
-    // 一段莫名其妙的空白。
-    size_t dropped_ = 0;
+    size_t dropped_ = 0; /**< 尚未向输出报告的溢出丢弃块数，由 mtx_ 保护。 */
 
-    std::thread thread_;
-    std::string filepath_;
-    int flush_interval_sec_;
-    std::atomic<bool> running_;
+    std::thread thread_;           /**< 构造时启动、析构时 join 的唯一输出线程。 */
+    std::string filepath_;         /**< 空表示 stderr，否则为后台线程打开的文件路径。 */
+    int flush_interval_sec_;       /**< 定时刷新间隔，单位秒。 */
+    std::atomic<bool> running_;    /**< true 时循环刷新；false 触发最后一次排空。 */
 
+    /** 后台线程入口：交换待写块、执行 write，并在退出前排空剩余数据。 */
     void flushThread();
 
 };

@@ -1,10 +1,11 @@
 #include "edge_proto/edge_crc16.h"
 
-/* CRC16-MODBUS 查找表(256 项 × 2B = 512B)。
- * 每字节一次查表 + 一次异或,替代 8 次移位判断;512 字节常量放 Flash,
- * 对 STM32F103 的 64KB 可接受。
- *
- * 排成 8 列 32 行以便按索引定位;clang-format 会揉成不规则长行,故关闭格式化。 */
+/*
+ * CRC-16/MODBUS 的共享实现。查表法用 512 字节只读空间换取固定的逐字节成本，
+ * 不引入堆、平台 API 或可变全局状态，因此同一源文件可直接编入 MCU 固件。
+ */
+
+/* 下标为“当前 CRC 低字节 XOR 输入字节”，值为该字节对应的 8 轮多项式结果。 */
 /* clang-format off */
 static const uint16_t kCrc16Table[256] = {
     0x0000, 0xC0C1, 0xC181, 0x0140, 0xC301, 0x03C0, 0x0280, 0xC241,
@@ -43,12 +44,13 @@ static const uint16_t kCrc16Table[256] = {
 /* clang-format on */
 
 uint16_t edge_crc16_update(uint16_t crc, uint8_t byte) {
+    /* 右移保留上一状态高字节，查表项完成低字节的八轮反射运算。 */
     return (uint16_t) ((crc >> 8) ^ kCrc16Table[(crc ^ byte) & 0xFFu]);
 }
 
 uint16_t edge_crc16(const uint8_t* data, size_t len) {
-    uint16_t crc = EDGE_CRC16_INIT;
-    for (size_t i = 0; i < len; ++i) {
+    uint16_t crc = EDGE_CRC16_INIT; /* 已处理 data[0..i) 后的累计状态。 */
+    for (size_t i = 0; i < len; ++i) { /* i 是当前输入字节的线序下标。 */
         crc = edge_crc16_update(crc, data[i]);
     }
     return crc;

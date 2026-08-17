@@ -1,9 +1,4 @@
-// termios 的逐位配置。这里每一个标志位都是「关掉某个终端行为」——
-// 内核默认把串口当交互终端(回显、行缓冲、把 \r 转成 \n、Ctrl-C 当信号),
-// 而我们要的是一条透明的字节管道,任何一位没关干净都会悄悄改写协议帧。
-//
-// 短写循环见 write():write 返回值小于请求长度是【合法】的,不是错误。
-// 这个形状与 AsyncLogger::safe_write 同构。
+/** @file SerialPort 的系统调用和 8N1 原始模式配置实现。 */
 
 #include "gateway/io/serial/SerialPort.h"
 #include "gateway/core/log/Logger.h"
@@ -18,20 +13,22 @@
 namespace gateway {
 
 namespace {
-// termios 的 c_?flag 为无符号 tcflag_t,而 ICANON / CSIZE 等宏是 int:
-// ~ICANON 得到负 int,直接 &= 到无符号字段构成符号转换。
-// 在此集中处理取反与转换,避免下方散落 static_cast。
+/**
+ * 在无符号的 tcflag_t 域内完成掩码取反。
+ * @param bits 需要清除的 termios 标志组合。
+ * @return 可直接与 tcflag_t 字段进行按位与的保留掩码。
+ */
 constexpr tcflag_t clearMask(unsigned int bits) noexcept {
     return static_cast<tcflag_t>(~bits);
 }
 }  // namespace
 
 SerialPort::SerialPort(const char* path, speed_t baud, bool nonblock) {
-    int flags = O_RDWR | O_NOCTTY;
+    int flags = O_RDWR | O_NOCTTY;  // 打开模式：读写且不取得控制终端。
     if (nonblock) flags |= O_NONBLOCK;
     fd_ = open(path, flags);
     if (fd_ == -1) {
-        int saved = errno;
+        int saved = errno;  // 构造异常文本前保留 open 的错误码。
         throw std::runtime_error(std::string("open '") + path + "' failed: " + strerror(saved));
     }
 
@@ -72,39 +69,40 @@ int SerialPort::get() const noexcept {
 }
 
 ssize_t SerialPort::write(const uint8_t* data, size_t len) noexcept {
-    size_t total = 0;
-    const uint8_t* p = data;
+    size_t total = 0;         // 本次调用已经成功写出的字节数。
+    const uint8_t* p = data;  // 保持不变的输入缓冲区起点。
     while (total < len) {
-        ssize_t n = ::write(fd_, p + total, len - total);   // ::write 限定全局作用域,避免递归
+        ssize_t n = ::write(fd_, p + total, len - total);  // 本轮系统调用结果。
         if (n > 0) {
-            total += static_cast<size_t>(n);   // 短写:累加后继续写剩余部分(n > 0)
+            total += static_cast<size_t>(n);
         }
         else if (n < 0 && errno == EINTR) {
-            continue;                       // 被信号打断,重试
+            continue;
         }
         else if (n < 0 && errno == EAGAIN) {
-            break;                          // 缓冲满,返回已写字节数(部分写)
+            break;
         }
         else {
             return -1;
         }
     }
-    return (ssize_t)total;                  // total == len 为全写完,否则为 EAGAIN 下的部分写
+    // 非阻塞模式遇到 EAGAIN 时返回已经写出的字节数。
+    return (ssize_t)total;
 }
 
 void SerialPort::configure(speed_t baud) {
-    struct termios tio;
+    struct termios tio;  // 从设备现有属性出发，逐项改为透明的 8N1 模式。
     if (tcgetattr(fd_, &tio) == -1) {
-        int saved = errno;
+        int saved = errno;  // 异常构造前保存 tcgetattr 的错误。
         throw std::runtime_error(std::string("tcgetattr failed: ") + strerror(saved));
     }
 
     tio.c_cflag &= clearMask(CSIZE);
     tio.c_cflag |= CS8;
-    tio.c_cflag &= clearMask(CSTOPB);    // 1 停止位
-    tio.c_cflag &= clearMask(PARENB);    // 无校验
-    tio.c_cflag |= CREAD | CLOCAL;       // 开接收 + 忽略 modem
-    tio.c_cflag &= clearMask(CRTSCTS);   // 关硬件流控
+    tio.c_cflag &= clearMask(CSTOPB);
+    tio.c_cflag &= clearMask(PARENB);
+    tio.c_cflag |= CREAD | CLOCAL;
+    tio.c_cflag &= clearMask(CRTSCTS);
 
     tio.c_iflag &= clearMask(IGNBRK | BRKINT | PARMRK | ISTRIP
                            | INLCR | IGNCR | ICRNL
@@ -119,14 +117,14 @@ void SerialPort::configure(speed_t baud) {
     tio.c_cc[VTIME] = 0;
 
     if (cfsetispeed(&tio, baud) == -1 || cfsetospeed(&tio, baud) == -1) {
-        int saved = errno;
+        int saved = errno;  // 两个速度设置共享同一失败处理。
         throw std::runtime_error(std::string("cfset?speed failed: ") + strerror(saved));
     }
 
     if (tcsetattr(fd_, TCSANOW, &tio) == -1) {
-        int saved = errno;
+        int saved = errno;  // 异常文本构造前保留 tcsetattr 错误。
         throw std::runtime_error(std::string("tcsetattr failed: ") + strerror(saved));
     }
 }
 
-} // namespace gateway
+}  // namespace gateway

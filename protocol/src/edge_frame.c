@@ -1,63 +1,64 @@
 #include "edge_proto/edge_frame.h"
 #include "edge_proto/edge_crc16.h"
 
-/* 组帧:AA 55 | LEN | TYPE | payload | CRC_LO CRC_HI
- * CRC 覆盖 LEN..payload,按小端写入帧尾。帧头是固定值,其损坏由 FSM 在头部阶段
- * 丢弃,故不进 CRC;CRC 字段本身也不参与累加。 */
+/*
+ * 共享帧实现保持两个方向对称：编码器按线序构造字节，解析器用相同顺序累计 CRC。
+ * 状态机只判断物理帧是否完整，不判断 TYPE 是否适用于当前设备或 payload 业务内容。
+ */
+
+/* CRC 覆盖 LEN、TYPE 和 payload；帧头不参与计算，帧尾按 CRC 低字节在前写入。 */
 uint8_t edge_frame_encode(uint8_t type, const uint8_t* payload, uint8_t payload_len, uint8_t* out) {
     if (out == NULL) {
         return 0;
     }
     if (payload_len > EDGE_PAYLOAD_MAX) {
-        return 0; /* 超过 LEN 上限,组不出合法帧 */
+        return 0;
     }
     if (payload == NULL && payload_len != 0u) {
-        return 0; /* payload 为 NULL 时长度必须为 0 */
+        return 0;
     }
 
-    uint8_t n = 0;
-    uint16_t crc = EDGE_CRC16_INIT;
+    uint8_t n = 0;                    /* out 中下一个写入位置，也是最终帧长。 */
+    uint16_t crc = EDGE_CRC16_INIT;   /* 从 LEN 开始累计的发送侧 CRC。 */
 
-    out[n++] = (uint8_t) EDGE_HDR0; /* 帧头不进 CRC */
+    out[n++] = (uint8_t) EDGE_HDR0;
     out[n++] = (uint8_t) EDGE_HDR1;
 
-    const uint8_t len = (uint8_t) (1u + payload_len); /* LEN 含 TYPE 一字节 */
+    const uint8_t len = (uint8_t) (1u + payload_len); /* TYPE 一字节加 payload 长度。 */
     out[n++] = len;
     crc = edge_crc16_update(crc, len);
 
     out[n++] = type;
     crc = edge_crc16_update(crc, type);
 
-    for (uint8_t i = 0; i < payload_len; ++i) {
+    for (uint8_t i = 0; i < payload_len; ++i) { /* i 为 payload 的线序下标。 */
         out[n++] = payload[i];
         crc = edge_crc16_update(crc, payload[i]);
     }
 
-    out[n++] = (uint8_t) (crc & 0xFFu); /* CRC_LO 在前(小端) */
-    out[n++] = (uint8_t) (crc >> 8);    /* CRC_HI */
+    out[n++] = (uint8_t) (crc & 0xFFu);
+    out[n++] = (uint8_t) (crc >> 8);
 
     return n;
 }
 
-/* 收帧 FSM。
- * 不变量:任何错误路径都汇聚到同一个安全起点 WAIT_HDR0,最坏代价是丢 1 帧,
- * 下一帧照常解析,FSM 不会卡死。 */
-
-/* 回到起点并记一次 resync */
+/** @param p 非空解析器；将其切回帧头搜索状态并累计一次显式重同步。 */
 static void edge_parser_resync(edge_parser_t* p) {
     p->state = EDGE_ST_WAIT_HDR0;
     p->stats.resync++;
 }
 
+/** @param p 已收齐 CRC 的非空解析器；校验成功则同步交付，否则丢弃当前帧。 */
 static void edge_parser_deliver(edge_parser_t* p) {
-    const uint16_t received = (uint16_t) (((uint16_t) p->crc_hi << 8) | p->crc_lo);
+    const uint16_t received =
+        (uint16_t) (((uint16_t) p->crc_hi << 8) | p->crc_lo); /* 线上 CRC 合并值。 */
 
     if (received == p->crc) {
         p->stats.frames_ok++;
         if (p->on_frame != NULL) {
             p->on_frame(p->type, p->payload, (uint8_t) (p->len - 1u), p->user);
         }
-        p->state = EDGE_ST_WAIT_HDR0; /* 正常路径不算 resync */
+        p->state = EDGE_ST_WAIT_HDR0;
     } else {
         p->stats.crc_err++;
         edge_parser_resync(p);
@@ -91,7 +92,7 @@ void edge_parser_feed(edge_parser_t* p, uint8_t byte) {
 
     switch (p->state) {
     case EDGE_ST_WAIT_HDR0:
-        /* 非 0xAA 静默丢弃并留在本态:噪声中找帧头是常态,不计为错误 */
+        /* 搜索帧头时丢弃普通噪声；这属于正常扫描，不增加错误统计。 */
         if (byte == EDGE_HDR0) {
             p->state = EDGE_ST_WAIT_HDR1;
         }
@@ -99,18 +100,17 @@ void edge_parser_feed(edge_parser_t* p, uint8_t byte) {
 
     case EDGE_ST_WAIT_HDR1:
         if (byte == EDGE_HDR1) {
-            p->crc = EDGE_CRC16_INIT; /* 帧头不进 CRC,从 LEN 开始累加 */
+            p->crc = EDGE_CRC16_INIT;
             p->state = EDGE_ST_WAIT_LEN;
         } else if (byte == EDGE_HDR0) {
-            /* 自环:AA AA 55 中后一个 AA 才是真帧头,留在本态 */
+            /* 保留最后一个 0xAA，使 AA AA 55 能从第二个字节开始匹配。 */
         } else {
             p->state = EDGE_ST_WAIT_HDR0;
         }
         break;
 
     case EDGE_ST_WAIT_LEN:
-        /* §5.3:LEN 一到手立刻查范围。放过一个坏 LEN 会让 FSM 按错误长度吞掉
-         * 后续若干帧,当场丢弃则只丢 1 帧。 */
+        /* 在后续任何定长缓冲区写入前验证 LEN。 */
         if (byte < EDGE_LEN_MIN || byte > EDGE_LEN_MAX) {
             p->stats.len_err++;
             edge_parser_resync(p);
@@ -122,8 +122,7 @@ void edge_parser_feed(edge_parser_t* p, uint8_t byte) {
         break;
 
     case EDGE_ST_WAIT_TYPE:
-        /* 本层不校验 TYPE 是否在字典中,只保证帧的物理结构合法;
-         * TYPE 与方向的合法性交由上层业务判断,使业务迭代不牵动协议层。 */
+        /* 解析器只验证帧结构；TYPE 和方向由业务层判断。 */
         p->type = byte;
         p->crc = edge_crc16_update(p->crc, byte);
         p->received = 0;
@@ -131,8 +130,7 @@ void edge_parser_feed(edge_parser_t* p, uint8_t byte) {
         break;
 
     case EDGE_ST_READ_PAYLOAD:
-        /* p->len 已在 WAIT_LEN 校验过 ≤ EDGE_LEN_MAX,故 received 最大到
-         * len-1 = 63 = EDGE_PAYLOAD_MAX,此处写入不会越界。 */
+        /* received 在写入后递增；LEN 上限保证最大有效下标为 EDGE_PAYLOAD_MAX - 1。 */
         p->payload[p->received] = byte;
         p->received++;
         p->crc = edge_crc16_update(p->crc, byte);
@@ -142,20 +140,19 @@ void edge_parser_feed(edge_parser_t* p, uint8_t byte) {
         break;
 
     case EDGE_ST_WAIT_CRC_LO:
-        p->crc_lo = byte; /* CRC 字段本身不进 CRC 累加 */
+        p->crc_lo = byte;
         p->state = EDGE_ST_WAIT_CRC_HI;
         break;
 
     case EDGE_ST_WAIT_CRC_HI:
         p->crc_hi = byte;
         p->state = EDGE_ST_DELIVER;
-        edge_parser_deliver(p); /* 交付后立即回起点,DELIVER 不跨 feed 停留 */
+        edge_parser_deliver(p);
         break;
 
     case EDGE_ST_DELIVER:
     default:
-        /* DELIVER 是瞬态,正常不会带着它进下一次 feed;到此说明状态被外部破坏,
-         * 回起点比继续解析安全。 */
+        /* DELIVER 不应跨调用保留；未知状态同样按损坏状态恢复。 */
         edge_parser_resync(p);
         break;
     }
@@ -165,7 +162,7 @@ void edge_parser_feed_buf(edge_parser_t* p, const uint8_t* buf, size_t n) {
     if (p == NULL || buf == NULL) {
         return;
     }
-    for (size_t i = 0; i < n; ++i) {
+    for (size_t i = 0; i < n; ++i) { /* i 为本批输入的线序下标。 */
         edge_parser_feed(p, buf[i]);
     }
 }

@@ -1,9 +1,12 @@
 #pragma once
 
-// MQTT 下行命令翻译:topic + payload → 一条待发的协议命令。
-//
-// 纯函数,不访问 broker 与队列。翻译失败以带原因的返回值表达而非静默丢弃,
-// 使调用方能把拒绝原因回给运维。
+/**
+ * @file
+ * MQTT 下行消息到设备协议命令的纯翻译层。
+ *
+ * 本层只解释 topic 和 payload，不访问 broker、串口或队列。调用方因此可以先完成
+ * 语义校验，再决定如何排队和回送拒绝原因。
+ */
 
 #include "edge_proto/edge_proto.h"
 
@@ -13,20 +16,26 @@
 
 namespace gateway {
 
-// 一条待下发的命令。arg 不含 seq:seq 由 CommandTracker 在发送时分配。
+/** 待下发的设备命令；序列号由链路层在实际发送时补充。 */
 struct DownCmd {
-    uint8_t              type;
-    std::vector<uint8_t> arg;
+    uint8_t              type;  ///< edge_proto 定义的命令类型。
+    std::vector<uint8_t> arg;   ///< 不含序列号的协议参数字节。
 };
 
+/** 一次翻译的结果，同时表达成功命令或可回传的拒绝原因。 */
 struct TranslateResult {
-    bool        ok = false;
-    DownCmd     cmd{};
-    std::string error;   // ok == false 时给出原因,可原样回给运维
+    bool        ok = false;  ///< true 表示 cmd 可下发。
+    DownCmd     cmd{};       ///< ok 为 true 时有效。
+    std::string error;       ///< ok 为 false 时说明拒绝原因。
 };
 
-// 翻译一条下行命令。topic 形如 gateway/cmd/<命令名>,取最后一段作为命令名。
-// 命令名到 TYPE 的映射以本文件的实现为准。
+/**
+ * 以 topic 的最后一段识别命令名，并校验 payload。
+ *
+ * @param topic 完整 MQTT 主题，例如 gateway/cmd/set_period。
+ * @param payload 命令参数原文；无参命令忽略该值。
+ * @return 成功时携带协议类型和参数，失败时携带面向调用方的错误说明。
+ */
 TranslateResult translateCommand(const std::string& topic, const std::string& payload);
 
 }  // namespace gateway

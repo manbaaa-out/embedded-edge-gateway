@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# 在树莓派目标机上完成生产安装。需要 root；可重复执行。
+# 在树莓派上安装或升级网关；脚本需要 root 权限并支持重复执行。
 #
-#   sudo ./scripts/install_rpi.sh
-#   sudo ./scripts/install_rpi.sh --serial /dev/ttyUSB0
-#   sudo ./scripts/install_rpi.sh --build-dir build/release
+# 用法：sudo ./scripts/install_rpi.sh [--build-dir <目录>] [--serial <设备>] [--db <路径>]
+# 示例：sudo ./scripts/install_rpi.sh --serial /dev/ttyUSB0
+#       sudo ./scripts/install_rpi.sh --build-dir build/release --db /var/lib/gateway/gateway.db
 set -euo pipefail
 
-BUILD_DIR="build/release"
-SERIAL_DEV="/dev/serial0"
-DB_PATH="/var/lib/gateway/gateway.db"
+BUILD_DIR="build/release"                 # 已完成构建且包含 gateway 的目录。
+SERIAL_DEV="/dev/serial0"                 # 服务配置使用的目标机串口。
+DB_PATH="/var/lib/gateway/gateway.db"     # DynamicUser 可写状态目录中的数据库路径。
 
+# usage 直接复用文件头的调用说明，避免另维护一份帮助文本。
 usage() {
   sed -n '2,7p' "$0"
 }
@@ -43,35 +44,38 @@ if [[ ! "$DB_PATH" =~ ^/var/lib/gateway(/.*)?$ ]]; then
   exit 2
 fi
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"  # 与 sudo 调用目录无关的仓库根路径。
 cd "$REPO_ROOT"
 
-GATEWAY_BIN="$BUILD_DIR/gateway"
-UNIT_TEMPLATE="deploy/gateway.service.in"
-CONFIG_TEMPLATE="deploy/gateway.conf"
-JOURNALD_TEMPLATE="deploy/journald-persistent.conf"
+GATEWAY_BIN="$BUILD_DIR/gateway"                         # 要安装的目标架构可执行文件。
+UNIT_TEMPLATE="deploy/gateway.service.in"                # systemd unit 的唯一源模板。
+CONFIG_TEMPLATE="deploy/gateway.conf"                    # 首次安装使用的配置样例。
+JOURNALD_TEMPLATE="deploy/journald-persistent.conf"      # 网关日志持久化和轮转策略。
 for path in "$GATEWAY_BIN" "$UNIT_TEMPLATE" "$CONFIG_TEMPLATE" "$JOURNALD_TEMPLATE"; do
   [[ -e "$path" ]] || { printf '缺少 %s，请先完成 release 构建。\n' "$path" >&2; exit 1; }
 done
 [[ -x "$GATEWAY_BIN" ]] || { printf '%s 不可执行。\n' "$GATEWAY_BIN" >&2; exit 1; }
 
+# TMP_FILES 登记所有 mktemp 结果，让任意退出路径都能通过 trap 清理。
 TMP_FILES=()
 cleanup() {
+  # TMP_FILES 中每项均由本脚本 mktemp 创建；-- 防止异常文件名被解释为选项。
   if [[ ${#TMP_FILES[@]} -gt 0 ]]; then rm -f -- "${TMP_FILES[@]}"; fi
 }
 trap cleanup EXIT
 
-UNIT_TMP="$(mktemp)"
-CONFIG_TMP="$(mktemp)"
+UNIT_TMP="$(mktemp)"    # 替换生产路径后的 unit 临时文件。
+CONFIG_TMP="$(mktemp)"  # 合并命令行覆盖后的配置临时文件。
 TMP_FILES+=("$UNIT_TMP" "$CONFIG_TMP")
 
-# CMake 和本脚本共用同一份 unit 模板。本脚本的生产路径固定为 /usr/local + /etc。
+# 将 CMake 模板中的可配置路径替换为生产安装位置。
 sed -e 's|@CMAKE_INSTALL_FULL_BINDIR@|/usr/local/bin|g' \
     -e 's|@GATEWAY_CONFIG_FILE@|/etc/gateway.conf|g' \
     "$UNIT_TEMPLATE" > "$UNIT_TMP"
 
-# 首次安装采用仓库样例；升级时保留用户的其余配置，只规范串口与持久化数据库路径。
-CONFIG_SOURCE="$CONFIG_TEMPLATE"
+# 升级时以现有配置为输入并保留其他键；串口和数据库始终由本次参数值覆盖，
+# 未显式传参时分别使用脚本顶部的生产默认值。
+CONFIG_SOURCE="$CONFIG_TEMPLATE"  # 首装读模板；升级时切换为现存用户配置。
 [[ -f /etc/gateway.conf ]] && CONFIG_SOURCE=/etc/gateway.conf
 awk -v serial="$SERIAL_DEV" -v db="$DB_PATH" '
   BEGIN { serial_seen = 0; db_seen = 0 }
@@ -93,8 +97,7 @@ install -m 0644 "$CONFIG_TMP" /etc/gateway.conf
 install -m 0644 "$UNIT_TMP" /etc/systemd/system/gateway.service
 install -d -m 0750 /var/lib/gateway
 
-# Debian/Raspberry Pi OS 可能通过 vendor drop-in 强制 Storage=volatile。
-# 更晚加载的本项目 drop-in 覆盖它，并为持久 journal 创建标准目录。
+# 以较晚加载的 drop-in 开启持久日志，并按系统现有组设置 journal 目录权限。
 install -d -m 0755 /etc/systemd/journald.conf.d
 install -m 0644 "$JOURNALD_TEMPLATE" \
   /etc/systemd/journald.conf.d/90-gateway-persistent.conf
@@ -106,20 +109,20 @@ fi
 systemctl restart systemd-journald
 journalctl --flush
 
-NEEDS_REBOOT=0
+NEEDS_REBOOT=0  # 板载 UART 的控制台或硬件状态发生变化时置 1。
 if [[ "$SERIAL_DEV" == /dev/serial0 ]]; then
   command -v raspi-config >/dev/null 2>&1 || {
     printf '%s\n' '找不到 raspi-config，无法安全配置板载 UART。' >&2
     exit 1
   }
 
-  # 1 表示关闭串口登录控制台，0 表示启用 UART 硬件（raspi-config 的约定）。
+  # raspi-config 以 1 关闭串口控制台，以 0 启用 UART 硬件。
   [[ "$(raspi-config nonint get_serial_cons)" -ne 0 ]] || NEEDS_REBOOT=1
   [[ "$(raspi-config nonint get_serial_hw)" -eq 0 ]] || NEEDS_REBOOT=1
   raspi-config nonint do_serial_cons 1
   raspi-config nonint do_serial_hw 0
 
-  # 当前启动周期里先停止 agetty；boot 参数的 console=serial0 要到重启后才真正消失。
+  # 立即停止串口终端；内核启动参数的变化需重启后生效。
   systemctl stop serial-getty@serial0.service serial-getty@ttyS0.service 2>/dev/null || true
 fi
 
