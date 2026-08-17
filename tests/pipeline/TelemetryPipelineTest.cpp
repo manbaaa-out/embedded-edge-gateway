@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -95,13 +96,20 @@ TEST(TelemetryPipeline, OpportunisticBatchingPreservesEveryRow) {
 TEST(TelemetryPipeline, SwapDatabaseSplitsRowsAtTheSwapBoundary) {
     DbFile before("swap_old"); // swapDatabase 命令之前的目标库。
     DbFile after("swap_new");  // swapDatabase 命令之后的目标库。
+    // 回调由写线程在旧批次落库并替换连接后填写，作用域结束 join 后再读取。
+    std::atomic<bool> callback_ran{false};
+    std::atomic<long> old_rows_seen_by_callback{-1};
     {
         TelemetryPipeline p(std::make_shared<Database>(before.path)); // 初始写向旧库。
         for (int i = 0; i < 20; ++i) {
             ASSERT_TRUE(p.submit(readings({{"temperature", double(i)}}), 3000 + i));
         }
 
-        p.swapDatabase(std::make_shared<Database>(after.path));
+        ASSERT_TRUE(p.swapDatabase(std::make_shared<Database>(after.path), [&] {
+            // 切换通知必须观察到边界前的全部旧库记录，不能早于旧批次刷写。
+            old_rows_seen_by_callback.store(countRows(before.path));
+            callback_ran.store(true);
+        }));
 
         for (int i = 0; i < 7; ++i) {
             ASSERT_TRUE(p.submit(readings({{"humidity", double(i)}}), 4000 + i));
@@ -110,6 +118,9 @@ TEST(TelemetryPipeline, SwapDatabaseSplitsRowsAtTheSwapBoundary) {
 
     EXPECT_EQ(countRows(before.path), 20) << "换库之前的记录必须留在旧库";
     EXPECT_EQ(countRows(after.path), 7) << "换库之后的记录必须写进新库";
+    EXPECT_TRUE(callback_ran.load()) << "成功入队的切换必须发布生效通知";
+    EXPECT_EQ(old_rows_seen_by_callback.load(), 20)
+        << "生效通知只能在旧库边界之前的记录全部持久化后执行";
 
     Database ro_new(after.path, /*readonly=*/true); // 验证旧类型未跨越切换边界。
     EXPECT_TRUE(ro_new.query("temperature", 10).empty()) << "旧库的记录不得漏进新库";

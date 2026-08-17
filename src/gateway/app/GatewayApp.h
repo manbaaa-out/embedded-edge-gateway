@@ -129,7 +129,10 @@ private:
     /** 当前生效的 MQTT 连接；热加载成功构造新连接后整体替换该对象。 */
     std::shared_ptr<MqttClient> client_;
 
-    /** HTTP 监控线程专用的只读 SQLite 连接所有权。 */
+    /**
+     * HTTP 当前只读 SQLite 连接；运行期仅通过 shared_ptr 原子自由函数发布和取得。
+     * 每个请求持有自己的副本，因此换库不会使正在执行的查询失去连接。
+     */
     std::shared_ptr<Database>   roDb_;
 
     /** 跨线程停机标志；析构线程写入，HTTP 线程周期读取。 */

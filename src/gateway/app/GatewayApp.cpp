@@ -81,14 +81,17 @@ GatewayApp::GatewayApp() {
     // link_ 以非阻塞模式打开 STM32 串口，后续只在主线程访问。
     link_ = std::make_unique<NodeLink>(cfg->serial_path, cfg->serial_baud);
 
-    // roDb_ 是 HTTP 线程独占使用的只读连接，与写连接通过 SQLite WAL 并发访问。
+    // roDb_ 是 HTTP 当前只读连接；HTTP 请求通过原子 shared_ptr 快照取得所有权。
     roDb_        = std::make_shared<Database>(cfg->db_path, true);
 
     // 裸 std::thread 最后启动，避免构造函数随后抛异常时析构 joinable 线程。
-    // roDb 按值捕获以延长只读连接寿命；port 固定为启动端口，运行期不热切换。
-    http_thread_ = std::thread([this, roDb = roDb_, port = cfg->http_port] {
+    // port 固定为启动端口；database 提供器则让每个请求读取当前生效的只读连接。
+    http_thread_ = std::thread([this, port = cfg->http_port] {
         runHttpServer(
-            *roDb, port,
+            [this] {
+                return std::atomic_load_explicit(&roDb_, std::memory_order_acquire);
+            },
+            port,
             [] {
                 // c 是每次 HTTP 定时检查或查询时读取的最新运行配置快照。
                 auto c = ConfigManager::current();
@@ -267,16 +270,26 @@ void GatewayApp::reloadConfig() {
     if (r.db_changed) {
         LOG_INFO("%s", "db_path changed → reopening database");
         try {
-            // 新 Database 是待移交的写连接。切库指令与写任务共用队列，保证此前数据
-            // 先落入旧库；HTTP 线程捕获的只读连接不会在此分支中替换。
-            if (!pipeline_->swapDatabase(std::make_shared<Database>(ncfg->db_path))) {
+            // 先把新库的读写连接全部构造成功，再向写线程提交切换，避免只切换一侧。
+            auto write_db = std::make_shared<Database>(ncfg->db_path);
+            auto read_db  = std::make_shared<Database>(ncfg->db_path, true);
+            const std::string new_path = ncfg->db_path;
+
+            // 切库任务与遥测批次共用队列。写线程先刷完旧库数据并替换写连接，再通过
+            // 回调原子发布 read_db；正在查询的 HTTP 请求继续持有旧连接，后续请求取新连接。
+            if (!pipeline_->swapDatabase(
+                    std::move(write_db), [this, read_db = std::move(read_db), new_path] {
+                        std::atomic_store_explicit(&roDb_, read_db, std::memory_order_release);
+                        LOG_INFO("http reader switched to new database: %s", new_path.c_str());
+                    })) {
                 all_applied = false;
-                LOG_ERROR("%s", "db swap not delivered (write queue full), still writing to the old database");
+                LOG_ERROR("%s", "db swap not delivered (write queue full), read and write remain "
+                                "on the old database");
             }
         } catch (const std::exception& e) {
-            // e 描述新数据库打开或初始化失败的原因，原写连接仍由管线持有。
+            // 任一候选连接创建失败都不会提交切换，HTTP 与写管线继续使用旧库。
             all_applied = false;
-            LOG_ERROR("db reopen failed, keep writing to the old database: %s", e.what());
+            LOG_ERROR("db reopen failed, keep reading and writing the old database: %s", e.what());
         }
     }
     if (r.mqtt_changed) {

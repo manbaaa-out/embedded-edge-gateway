@@ -15,6 +15,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <thread>
 #include <variant>
@@ -56,12 +57,21 @@ public:
     static constexpr std::chrono::milliseconds kSwapTimeout{200};
 
     /**
+     * 写连接真正切换后的通知函数。
+     *
+     * 回调在数据库写线程执行：此前排队的数据已经写入旧库，新的写连接已经成为当前
+     * 连接。实现不得阻塞；异常会被 writerLoop 捕获并记录，不会终止写线程。
+     */
+    using SwapAppliedCallback = std::function<void()>;
+
+    /**
      * 将新数据库连接作为有序控制任务交给写线程。
      * @param db 新的可写连接；任务执行后由写线程独占使用。
+     * @param on_applied 切换真正生效后的可选通知；用于同步发布依赖新写库的读侧资源。
      * @return true 仅表示入队成功，不表示切换已经执行完毕。
      * @pre 入队成功后，调用方不再并发访问同一个 Database 对象。
      */
-    bool swapDatabase(std::shared_ptr<Database> db);
+    bool swapDatabase(std::shared_ptr<Database> db, SwapAppliedCallback on_applied = {});
 
 private:
     /** 一次 submit 产生的数据库行集合。 */
@@ -70,7 +80,8 @@ private:
     };
     /** 排在数据批次之间的数据库切换控制任务。 */
     struct SwapDb {
-        std::shared_ptr<Database> db;  ///< 切换完成后由写线程持有的新连接。
+        std::shared_ptr<Database> db;   ///< 切换完成后由写线程持有的新连接。
+        SwapAppliedCallback on_applied; ///< 新连接生效后在写线程执行的通知。
     };
     using Job = std::variant<Batch, SwapDb>;  ///< 队列中可出现的数据任务与控制任务。
 

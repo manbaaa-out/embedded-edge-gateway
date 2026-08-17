@@ -2,9 +2,10 @@
  * @file
  * 内嵌监控服务实现。
  *
- * 服务拥有独立 EventLoop 和线程内连接表，只通过专用只读 SQLite 连接与主链路共享
- * 数据。监听 socket 与客户端 socket 使用边沿触发并在回调中读到 EAGAIN；timerfd
- * 周期检查热加载配置、空闲连接和停机条件。前端资源在配置阶段嵌入二进制。
+ * 服务拥有独立 EventLoop 和线程内连接表，通过连接提供器为每次数据请求取得当前
+ * 只读 SQLite 连接。监听 socket 与客户端 socket 使用边沿触发并在回调中读到
+ * EAGAIN；timerfd 周期检查热加载配置、空闲连接和停机条件。前端资源在配置阶段
+ * 嵌入二进制。
  */
 
 #include "gateway/io/http/HttpServer.h"
@@ -133,11 +134,12 @@ int clampReportN(const std::string& raw, int default_n) {
 /**
  * 路由一条已解析请求并生成响应。
  * @param rawPath 包含查询串的 request-target。
- * @param roDb HTTP 线程独占的只读数据库连接。
+ * @param database 返回本次请求应使用的只读数据库连接。
  * @param rt 本次请求使用的运行期配置快照。
  * @return 完整 HTTP 响应。
  */
-static std::string handleHttpRequest(const std::string& rawPath, Database& roDb,
+static std::string handleHttpRequest(const std::string& rawPath,
+                                     const HttpDatabaseProvider& database,
                                      const HttpRuntimeConfig& rt) {
     std::string path, query;  // 拆分后的路由路径和原始查询串。
     splitPathQuery(rawPath, path, query);
@@ -165,7 +167,13 @@ static std::string handleHttpRequest(const std::string& rawPath, Database& roDb,
         const int n = clampReportN(  // 最终传给数据库 LIMIT 的合法点数。
             it != params.end() ? it->second : std::string(), rt.report_n);
 
-        auto rows = roDb.query(dev, n);  // 按时间倒序返回的最近读数。
+        // ro_db 的局部 shared_ptr 把本次查询固定在同一连接上；并发热切换只影响后续请求。
+        auto ro_db = database ? database() : nullptr;
+        if (!ro_db) {
+            return makeResponse(503, "Service Unavailable", "application/json",
+                                "{\"error\":\"database unavailable\"}");
+        }
+        auto rows = ro_db->query(dev, n);  // 按时间倒序返回的最近读数。
         return makeResponse(200, "OK", "application/json", rowsToJson(rows));
     }
 
@@ -209,7 +217,7 @@ struct HttpConn {
 };
 static std::map<int, HttpConn> g_conns;  ///< fd 到连接上下文；仅 HTTP 线程访问。
 
-void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config,
+void runHttpServer(HttpDatabaseProvider database, int port, HttpRuntimeConfigProvider config,
                    std::function<bool()> should_stop) {
     int listen_fd = socket(  // 监听所有 IPv4 地址的非阻塞 TCP socket。
         AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
@@ -294,7 +302,7 @@ void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config,
     listen_channel->events = EPOLLIN | EPOLLET;
     listen_channel->timeout_exempt = true;
     // 监听回调在边沿触发模式下持续 accept，直至队列返回 EAGAIN。
-    listen_channel->on_read = [listen_fd, &loop, &roDb, &config]() {
+    listen_channel->on_read = [listen_fd, &loop, &database, &config]() {
         while (1) {
             int client_fd = accept4(  // 边沿触发下持续接收，直至返回 EAGAIN。
                 listen_fd, NULL, NULL, SOCK_NONBLOCK);
@@ -314,7 +322,7 @@ void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config,
             channel* ch_raw = cc.get();  // 回调借用；EventLoop/dying_ 保证生命周期。
 
             // 读回调排空 socket，将字节追加到连接缓冲，并连续处理完整的流水线请求。
-            cc->on_read = [client_fd, &loop, ch_raw, &roDb, &config]() {
+            cc->on_read = [client_fd, &loop, ch_raw, &database, &config]() {
                 HttpConn& conn = g_conns[client_fd];  // 当前 fd 的持久解析上下文。
                 while (1) {
                     char tmp[4096];  // 单次 recv 的栈缓冲，内容立即追加到 conn.buf。
@@ -334,7 +342,7 @@ void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config,
                             ParseResult r = conn.req.parse(&conn.buf);  // 当前请求解析进度。
                             if (r == ParseResult::kComplete) {
                                 std::string resp =  // 当前请求对应的完整响应字节。
-                                    handleHttpRequest(conn.req.path(), roDb, config());
+                                    handleHttpRequest(conn.req.path(), database, config());
                                 sendData(loop, ch_raw, resp.data(), resp.size());
                                 conn.req.reset();
                             } else if (r == ParseResult::kIncomplete) {

@@ -15,6 +15,7 @@ GATEWAY_BIN="$BUILD_DIR/gateway"                    # 被测网关可执行文�
 SIM_BIN="$BUILD_DIR/tools/node-sim/node-sim"        # 模拟 STM32 节点的可执行文件。
 
 DB_PATH=/tmp/e2e_vserial.db                          # 本轮测试独占的 SQLite 数据库。
+DB_RELOAD_PATH=/tmp/e2e_vserial_reload.db            # SIGHUP 热切换后的目标数据库。
 CONF=/tmp/e2e_vserial.conf                           # 从部署模板派生的临时网关配置。
 # 启动输出和异步运行日志均重定向到同一文件。
 GW_OUT=/tmp/e2e_vserial_gateway.out                  # 网关 stdout/stderr 合并输出文件。
@@ -57,8 +58,11 @@ cleanup() {
 trap cleanup EXIT
 
 # 验证工具、产物和 Broker 后再创建后台进程。
-for tool in socat mosquitto_pub mosquitto_sub sqlite3; do
-  command -v "$tool" >/dev/null || { red "缺少 $tool,请先 apt install socat mosquitto-clients sqlite3"; exit 1; }
+for tool in socat mosquitto_pub mosquitto_sub sqlite3 curl; do
+  command -v "$tool" >/dev/null || {
+    red "缺少 $tool,请先 apt install socat mosquitto-clients sqlite3 curl"
+    exit 1
+  }
 done
 [[ -x "$GATEWAY_BIN" ]] || { red "找不到 $GATEWAY_BIN,请先 cmake --build --preset dev"; exit 1; }
 [[ -x "$SIM_BIN"     ]] || { red "找不到 $SIM_BIN(需 -DGATEWAY_BUILD_TOOLS=ON)"; exit 1; }
@@ -72,9 +76,12 @@ for _ in $(seq 20); do [[ -e "$TTY_GW" && -e "$TTY_NODE" ]] && break; sleep 0.1;
 [[ -e "$TTY_GW" ]] || { red "虚拟串口没建起来"; exit 1; }
 
 # 从部署模板派生一次性测试配置。
-rm -f "$DB_PATH" "$GW_OUT" "$ACK_LOG"
+rm -f "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm" \
+      "$DB_RELOAD_PATH" "$DB_RELOAD_PATH-wal" "$DB_RELOAD_PATH-shm" \
+      "$GW_OUT" "$ACK_LOG"
 sed -e "s#^serial_path.*=.*#serial_path = $TTY_GW#" \
     -e "s#^db_path.*=.*#db_path = $DB_PATH#" \
+    -e "s#^mqtt_host.*=.*#mqtt_host = $BROKER_HOST#" \
     "$REPO_ROOT/deploy/gateway.conf" > "$CONF"
 
 info "起网关"
@@ -164,19 +171,31 @@ AFTER=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM device_data;")   # 噪声运行
 check "80% 噪声注入下仍持续落库(新增 $((AFTER-BEFORE)) 条)" \
       "$([[ "$((AFTER-BEFORE))" -gt 0 ]] && echo 0 || echo 1)"
 
-info "=== E. 热加载:SIGHUP 后进程存活且继续工作 ==="
+info "=== E. 热加载:数据库读写连接在同一切换边界迁移 ==="
+# 关闭噪声实例并恢复稳定采集，使切库后的落库和 HTTP 查询断言不依赖随机帧幸存率。
+stop_sim
+start_sim --period 1
 GW_PID=$(pgrep -f "$GATEWAY_BIN $CONF" | head -1)  # 以完整命令定位本脚本启动的网关。
 if [[ -n "$GW_PID" ]]; then
+  # 只修改测试配置中的 db_path；新库在 reload 前不存在，确保结果不可能来自旧数据。
+  sed -i -e "s#^db_path.*=.*#db_path = $DB_RELOAD_PATH#" "$CONF"
   kill -HUP "$GW_PID"
-  wait_for_log 'reload done'
-  RELOAD_LOGGED=$?  # 保留 wait_for_log 状态，避免后续命令覆盖 `$?`。
+  wait_for_log 'http reader switched to new database'
+  READ_SWITCHED=$?  # 保留等待状态，避免后续 SQLite/curl 命令覆盖 `$?`。
   check "SIGHUP 后进程仍存活" "$(kill -0 "$GW_PID" 2>/dev/null && echo 0 || echo 1)"
-  check "热加载走到 reload done" "$RELOAD_LOGGED"
+  check "写连接完成切库" "$(grep -q 'telemetry writer switched to new database' "$GW_LOG" && echo 0 || echo 1)"
+  check "HTTP 只读连接随后切库" "$READ_SWITCHED"
 
-  BEFORE=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM device_data;")
+  # 回调发生时旧队列边界已经刷完；此后的采集只能进入新库。
+  OLD_AT_SWITCH=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM device_data;")
   sleep 3
-  AFTER=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM device_data;")
-  check "热加载后采集未中断" "$([[ "$AFTER" -gt "$BEFORE" ]] && echo 0 || echo 1)"
+  OLD_AFTER=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM device_data;")
+  NEW_ROWS=$(sqlite3 "$DB_RELOAD_PATH" "SELECT COUNT(*) FROM device_data;" 2>/dev/null || echo 0)
+  check "切换后旧库停止增长" "$([[ "$OLD_AFTER" -eq "$OLD_AT_SWITCH" ]] && echo 0 || echo 1)"
+  check "切换后遥测写入新库(实际 $NEW_ROWS 条)" "$([[ "$NEW_ROWS" -gt 0 ]] && echo 0 || echo 1)"
+
+  HTTP_DATA=$(curl -fsS 'http://127.0.0.1:8888/api/data?dev=temperature&n=10' 2>/dev/null || true)
+  check "HTTP 查询读取新库数据" "$(grep -q '\"device_id\":\"temperature\"' <<<"$HTTP_DATA" && echo 0 || echo 1)"
 fi
 
 echo

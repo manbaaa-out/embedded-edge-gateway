@@ -8,6 +8,7 @@
 
 #include "gateway/core/log/Logger.h"
 
+#include <exception>
 #include <iterator>
 #include <utility>
 
@@ -37,8 +38,8 @@ bool TelemetryPipeline::submit(const std::vector<Reading>& readings, long ts) {
     return queue_.try_push(Job{std::move(b)});
 }
 
-bool TelemetryPipeline::swapDatabase(std::shared_ptr<Database> db) {
-    return queue_.push_for(Job{SwapDb{std::move(db)}}, kSwapTimeout);
+bool TelemetryPipeline::swapDatabase(std::shared_ptr<Database> db, SwapAppliedCallback on_applied) {
+    return queue_.push_for(Job{SwapDb{std::move(db), std::move(on_applied)}}, kSwapTimeout);
 }
 
 void TelemetryPipeline::writerLoop(std::shared_ptr<Database> db) {
@@ -55,6 +56,16 @@ void TelemetryPipeline::writerLoop(std::shared_ptr<Database> db) {
                 }
                 db = std::move(swap->db);
                 LOG_INFO("%s", "telemetry writer switched to new database");
+                if (swap->on_applied) {
+                    try {
+                        // 通知发生在写连接替换之后，因此读侧不会先于写侧切到新库。
+                        swap->on_applied();
+                    } catch (const std::exception& e) {
+                        LOG_ERROR("database swap callback failed: %s", e.what());
+                    } catch (...) {
+                        LOG_ERROR("%s", "database swap callback failed with unknown exception");
+                    }
+                }
                 break;
             }
 

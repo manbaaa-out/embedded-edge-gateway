@@ -4,14 +4,16 @@
  * @file
  * 内嵌 HTTP 监控服务的装配接口。
  *
- * I/O 层只接收数据库引用、运行期配置快照提供器和停机判据，不依赖 ConfigManager
- * 或信号实现。服务可因此在独立线程内运行，同时按请求/扫描周期看到热加载后的配置。
+ * I/O 层只接收数据库连接提供器、运行期配置快照提供器和停机判据，不依赖
+ * ConfigManager 或信号实现。服务可因此在独立线程内运行，同时按请求/扫描周期看到
+ * 热加载后的数据库与配置。
  */
 
 #include "gateway/core/config/Config.h"   // 提供查询点数的统一上限 kMaxReportN。
 #include "gateway/storage/Database.h"
 
 #include <functional>
+#include <memory>
 #include <string>
 
 namespace gateway {
@@ -26,6 +28,15 @@ struct HttpRuntimeConfig {
 using HttpRuntimeConfigProvider = std::function<HttpRuntimeConfig()>;
 
 /**
+ * 当前只读数据库连接的提供器。
+ *
+ * HTTP 服务只在处理 `/api/data` 时调用；返回的 shared_ptr 必须让连接在本次查询期间
+ * 保持存活。提供器可通过原子 shared_ptr 实现热切换，使已经开始的请求继续使用旧连接，
+ * 后续请求取得新连接，而不跨线程修改同一个 Database 对象。
+ */
+using HttpDatabaseProvider = std::function<std::shared_ptr<Database>()>;
+
+/**
  * 解析并限制查询点数。
  * @param raw URL 参数 n 的原文；空字符串表示未提供。
  * @param default_n 配置提供的默认点数，也会夹紧到合法区间。
@@ -37,14 +48,14 @@ int clampReportN(const std::string& raw, int default_n);
 /**
  * 在调用线程中阻塞运行监控服务。
  *
- * @param roDb 由本线程独占使用的只读连接，通常与 WAL 写连接指向同一数据库。
+ * @param database 每次数据查询时取得当前只读连接的提供器，不得为空或返回空指针。
  * @param port 监听 TCP 端口，范围应已由配置层校验。
  * @param config 运行期配置提供器；扫描连接和处理请求时重新调用。
  * @param should_stop 停机判据；空回调表示持续运行。
  *
  * 初始化失败时记录错误并返回；运行后最多等待下一次 timerfd 扫描观察停机请求。
  */
-void runHttpServer(Database& roDb, int port, HttpRuntimeConfigProvider config,
+void runHttpServer(HttpDatabaseProvider database, int port, HttpRuntimeConfigProvider config,
                    std::function<bool()> should_stop);
 
 }  // namespace gateway
