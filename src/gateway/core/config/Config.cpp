@@ -150,10 +150,10 @@ ConfigManager::ReloadResult ConfigManager::reload() {
         auto old = std::atomic_load(&current_); // 比较期间保持旧快照存活。
         assert(old && "reload() called before init()");
         if (old->serial_path != fresh->serial_path ||
-            old->serial_baud != fresh->serial_baud) result.serial_changed = true;
+            old->serial_baud != fresh->serial_baud) result.serial_rebuild_required = true;
         if (old->mqtt_host      != fresh->mqtt_host ||
-            old->mqtt_keepalive != fresh->mqtt_keepalive) result.mqtt_changed = true;
-        if (old->db_path != fresh->db_path) result.db_changed = true;
+            old->mqtt_keepalive != fresh->mqtt_keepalive) result.mqtt_rebuild_required = true;
+        if (old->db_path != fresh->db_path) result.db_swap_required = true;
 
         std::atomic_store(&current_, std::shared_ptr<const Config>(fresh));
         result.ok = true;

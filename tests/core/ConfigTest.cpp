@@ -94,9 +94,9 @@ TEST(Config, ReloadReportsOnlyWhatActuallyChanged) {
 
     auto r = ConfigManager::reload(); // 包含成功状态和三类资源差异标志。
     ASSERT_TRUE(r.ok);
-    EXPECT_TRUE(r.serial_changed);
-    EXPECT_FALSE(r.mqtt_changed) << "host 与 keepalive 都没动,不该重连";
-    EXPECT_FALSE(r.db_changed);
+    EXPECT_TRUE(r.serial_rebuild_required);
+    EXPECT_FALSE(r.mqtt_rebuild_required) << "host 与 keepalive 都没动,不该重连";
+    EXPECT_FALSE(r.db_swap_required);
 
     EXPECT_EQ(ConfigManager::current()->log_level, 0) << "A 档改内存即生效";
     EXPECT_EQ(ConfigManager::current()->serial_path, "/tmp/ttyVX");
@@ -110,11 +110,11 @@ TEST(Config, ReloadDetectsMqttAndDbChanges) {
 
     f.write(baseline("mqtt_host = 10.0.0.1\ndb_path = /tmp/other.db\n"));
 
-    auto r = ConfigManager::reload(); // 本次应同时报告 mqtt_changed 与 db_changed。
+    auto r = ConfigManager::reload(); // 本次应同时报告 mqtt_rebuild_required 与 db_swap_required。
     ASSERT_TRUE(r.ok);
-    EXPECT_TRUE(r.mqtt_changed);
-    EXPECT_TRUE(r.db_changed);
-    EXPECT_FALSE(r.serial_changed) << "串口没动就不该重开";
+    EXPECT_TRUE(r.mqtt_rebuild_required);
+    EXPECT_TRUE(r.db_swap_required);
+    EXPECT_FALSE(r.serial_rebuild_required) << "串口没动就不该重开";
 }
 
 // 监听端口只在启动时绑定，热加载忽略这类字段。

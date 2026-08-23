@@ -59,10 +59,10 @@ public:
      * 应用层资源是否成功重建；快照发布后重建失败，再加载同样文件时标志会为 false。
      */
     struct ReloadResult {
-        bool ok = false;             /**< 新文件已成功解析、校验并发布。 */
-        bool serial_changed = false; /**< serial_path 或 serial_baud 发生变化。 */
-        bool mqtt_changed = false;   /**< mqtt_host 或 mqtt_keepalive 发生变化。 */
-        bool db_changed = false;     /**< db_path 发生变化。 */
+        bool ok = false;                            /**< 新文件已成功解析、校验并发布。 */
+        bool serial_rebuild_required = false;       /**< serial_path 或 serial_baud 发生变化。 */
+        bool mqtt_rebuild_required = false;         /**< mqtt_host 或 mqtt_keepalive 发生变化。 */
+        bool db_swap_required = false;              /**< db_path 发生变化。 */
     };
 
     /**

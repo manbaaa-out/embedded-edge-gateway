@@ -267,7 +267,7 @@ void GatewayApp::reloadConfig() {
     // all_applied 汇总外部资源是否全部生效，只用于最终日志，不参与回滚。
     bool all_applied = true;
 
-    if (r.db_changed) {
+    if (r.db_swap_required) {
         LOG_INFO("%s", "db_path changed → reopening database");
         try {
             // 先把新库的读写连接全部构造成功，再向写线程提交切换，避免只切换一侧。
@@ -292,7 +292,7 @@ void GatewayApp::reloadConfig() {
             LOG_ERROR("db reopen failed, keep reading and writing the old database: %s", e.what());
         }
     }
-    if (r.mqtt_changed) {
+    if (r.mqtt_rebuild_required) {
         LOG_INFO("%s", "mqtt config changed → reconnecting");
         try {
             // fresh 是候选 MQTT 连接；同步构造成功后才替换当前 client_。
@@ -307,7 +307,7 @@ void GatewayApp::reloadConfig() {
             LOG_ERROR("mqtt rebuild failed, uplink may be degraded: %s", e.what());
         }
     }
-    if (r.serial_changed) {
+    if (r.serial_rebuild_required) {
         // Channel 绑定具体 fd，换串口时必须从 epoll 移除后重新创建。
         LOG_INFO("%s", "serial config changed → reopening port");
         loop_.removeChannel(serial_channel_->fd);
