@@ -71,7 +71,7 @@ public:
      * @throws std::bad_alloc 新 SerialPort 对象分配失败；旧 port_ 同样保持不变。
      *
      * 调用方须先从事件循环注销旧 fd，随后无论成功或异常都登记 fd() 的实际值。
-     * parser_ 不会重置：若切换发生在半帧中，新设备开头字节会先被旧 FSM 状态消费。
+     * 成功后会丢弃 parser_ 中的旧半帧，但保留回调和累计统计；失败时旧解析状态不变。
      */
     void reopen(const std::string& path, int baud);
 

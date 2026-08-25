@@ -18,8 +18,8 @@ uint8_t edge_frame_encode(uint8_t type, const uint8_t* payload, uint8_t payload_
         return 0;
     }
 
-    uint8_t n = 0;                    /* out 中下一个写入位置，也是最终帧长。 */
-    uint16_t crc = EDGE_CRC16_INIT;   /* 从 LEN 开始累计的发送侧 CRC。 */
+    uint8_t n = 0;                  /* out 中下一个写入位置，也是最终帧长。 */
+    uint16_t crc = EDGE_CRC16_INIT; /* 从 LEN 开始累计的发送侧 CRC。 */
 
     out[n++] = (uint8_t) EDGE_HDR0;
     out[n++] = (uint8_t) EDGE_HDR1;
@@ -42,9 +42,22 @@ uint8_t edge_frame_encode(uint8_t type, const uint8_t* payload, uint8_t payload_
     return n;
 }
 
-/** @param p 非空解析器；将其切回帧头搜索状态并累计一次显式重同步。 */
-static void edge_parser_resync(edge_parser_t* p) {
+void edge_parser_reset(edge_parser_t* p) {
+    if (p == NULL) {
+        return;
+    }
     p->state = EDGE_ST_WAIT_HDR0;
+    p->len = 0;
+    p->type = 0;
+    p->received = 0;
+    p->crc = EDGE_CRC16_INIT;
+    p->crc_lo = 0;
+    p->crc_hi = 0;
+}
+
+/** @param p 非空解析器；丢弃当前帧并累计一次协议错误重同步。 */
+static void edge_parser_resync(edge_parser_t* p) {
+    edge_parser_reset(p);
     p->stats.resync++;
 }
 

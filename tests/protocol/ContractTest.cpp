@@ -265,6 +265,45 @@ TEST(Parser, StatsCountEachErrorKindSeparately) {
     EXPECT_EQ(p.stats.resync, 2u) << "每次错误都应回到安全起点";
 }
 
+// 管理性字节流切换应丢弃半帧，但不能伪造协议错误或破坏既有回调和统计。
+TEST(Parser, ResetDropsPartialFrameButPreservesBindingAndStats) {
+    Capture cap;     // reset 前后共用的回调目标，用于确认 user 绑定没有变化。
+    edge_parser_t p; // 先累计一次真实错误，再进入一个待丢弃的半帧。
+    edge_parser_init(&p, onFrame, &cap);
+
+    const uint8_t bad_len[] = {EDGE_HDR0, EDGE_HDR1, 0x00}; // 产生一组应被保留的统计。
+    edge_parser_feed_buf(&p, bad_len, sizeof bad_len);
+    ASSERT_EQ(p.stats.len_err, 1u);
+    ASSERT_EQ(p.stats.resync, 1u);
+
+    const uint8_t partial[] = {EDGE_HDR0, EDGE_HDR1, EDGE_LEN_MAX, EDGE_TYPE_DHT11, 0x12};
+    edge_parser_feed_buf(&p, partial, sizeof partial); // 停在最大帧的 payload 中间。
+    ASSERT_EQ(p.state, EDGE_ST_READ_PAYLOAD);
+    ASSERT_EQ(p.received, 1u);
+
+    edge_parser_reset(&p);
+
+    EXPECT_EQ(p.state, EDGE_ST_WAIT_HDR0);
+    EXPECT_EQ(p.received, 0u);
+    EXPECT_EQ(p.on_frame, onFrame);
+    EXPECT_EQ(p.user, &cap);
+    EXPECT_EQ(p.stats.len_err, 1u);
+    EXPECT_EQ(p.stats.resync, 1u) << "管理性 reset 不应伪装成协议错误";
+
+    uint8_t good[EDGE_FRAME_MAX];           // reset 后到达的新字节流首帧。
+    const uint8_t payload[] = {0x09, 0x00}; // seq=9、结果 OK。
+    const uint8_t n = edge_frame_encode(EDGE_TYPE_ACK, payload, 2, good);
+    edge_parser_feed_buf(&p, good, n);
+
+    ASSERT_EQ(cap.frames, 1);
+    EXPECT_EQ(cap.type, EDGE_TYPE_ACK);
+    EXPECT_EQ(cap.payload, std::vector<uint8_t>(payload, payload + 2));
+    EXPECT_EQ(p.stats.frames_ok, 1u);
+    EXPECT_EQ(p.stats.len_err, 1u);
+
+    edge_parser_reset(nullptr); // 空指针契约与 init/feed 保持一致。
+}
+
 // 解析器只验证帧结构；未知业务类型交由上层决定是否接受。
 TEST(Parser, DeliversStructurallyValidFrameWithUnknownType) {
     const uint8_t unknown_type = 0x99; // 不在业务字典中的结构合法 TYPE。

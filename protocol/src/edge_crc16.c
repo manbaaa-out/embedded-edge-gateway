@@ -49,7 +49,7 @@ uint16_t edge_crc16_update(uint16_t crc, uint8_t byte) {
 }
 
 uint16_t edge_crc16(const uint8_t* data, size_t len) {
-    uint16_t crc = EDGE_CRC16_INIT; /* 已处理 data[0..i) 后的累计状态。 */
+    uint16_t crc = EDGE_CRC16_INIT;    /* 已处理 data[0..i) 后的累计状态。 */
     for (size_t i = 0; i < len; ++i) { /* i 是当前输入字节的线序下标。 */
         crc = edge_crc16_update(crc, data[i]);
     }

@@ -53,8 +53,9 @@ void NodeLink::reopen(const std::string& path, int baud) {
         path.c_str(), toBaud(baud), /*nonblock=*/true);
     port_ = std::move(fresh);
 
-    // parser_ 保留累计统计和当前 FSM 状态；切换发生在半帧中时，新链路的开头字节
-    // 会先被旧状态消费，直到长度或 CRC 检查使解析器重新同步。
+    // 新 fd 是新的字节流边界，旧半帧不能由其字节续接；仅丢弃临时 FSM 进度，累计
+    // 统计和业务回调继续保留。该操作在候选端口成功提交后才发生，失败路径不受影响。
+    parser_.resetStream();
     LOG_INFO("node link reopened: %s @ %d", path.c_str(), baud);
 }
 

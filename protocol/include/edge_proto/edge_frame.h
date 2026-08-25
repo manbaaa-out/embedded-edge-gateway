@@ -47,9 +47,9 @@ typedef enum {
 /** 从最近一次 edge_parser_init() 起累计的解析统计；超过 uint32_t 上限后回绕。 */
 typedef struct {
     uint32_t frames_ok; /**< CRC 正确并进入交付路径的帧数，即使回调为空也计数。 */
-    uint32_t len_err;   /**< LEN 小于 EDGE_LEN_MIN 或大于 EDGE_LEN_MAX 的次数。 */
-    uint32_t crc_err;   /**< 收到的 CRC 与本地累计值不一致的次数。 */
-    uint32_t resync;    /**< 显式错误使状态机回到 EDGE_ST_WAIT_HDR0 的次数。 */
+    uint32_t len_err; /**< LEN 小于 EDGE_LEN_MIN 或大于 EDGE_LEN_MAX 的次数。 */
+    uint32_t crc_err; /**< 收到的 CRC 与本地累计值不一致的次数。 */
+    uint32_t resync;  /**< 显式错误使状态机回到 EDGE_ST_WAIT_HDR0 的次数。 */
 } edge_parser_stats_t;
 
 /**
@@ -68,12 +68,12 @@ typedef struct {
     uint8_t len;        /**< 当前帧的 LEN，包含 TYPE、不包含帧头和 CRC。 */
     uint8_t type;       /**< 当前帧的 TYPE 原始值。 */
     uint8_t payload[EDGE_PAYLOAD_MAX]; /**< 当前帧 payload 的固定容量存储。 */
-    uint8_t received;   /**< 已写入 payload 的字节数。 */
-    uint16_t crc;       /**< 从 LEN 起逐字节累计的本地 CRC。 */
-    uint8_t crc_lo;     /**< 线上帧尾收到的 CRC 低字节。 */
-    uint8_t crc_hi;     /**< 线上帧尾收到的 CRC 高字节。 */
+    uint8_t received;                  /**< 已写入 payload 的字节数。 */
+    uint16_t crc;                      /**< 从 LEN 起逐字节累计的本地 CRC。 */
+    uint8_t crc_lo;                    /**< 线上帧尾收到的 CRC 低字节。 */
+    uint8_t crc_hi;                    /**< 线上帧尾收到的 CRC 高字节。 */
 
-    edge_frame_cb_t on_frame; /**< 可为空的同步交付回调。 */
+    edge_frame_cb_t on_frame;  /**< 可为空的同步交付回调。 */
     void* user;                /**< 原样传给 on_frame 的调用方上下文。 */
     edge_parser_stats_t stats; /**< 当前解析器的累计统计。 */
 } edge_parser_t;
@@ -87,6 +87,15 @@ typedef struct {
  * 该操作使先前半帧不再可继续，但不为无效的 payload 数组字节清零。
  */
 void edge_parser_init(edge_parser_t* p, edge_frame_cb_t cb, void* user);
+
+/**
+ * @brief 丢弃当前未完成帧并回到帧头搜索状态。
+ * @param p 已初始化的解析器；为 NULL 时无操作。
+ *
+ * 该操作用于底层字节流发生不连续的场景，例如串口 fd 成功切换。它清除当前帧的
+ * 临时解析进度，但保留回调、user 和累计统计，也不会增加 resync 错误计数。
+ */
+void edge_parser_reset(edge_parser_t* p);
 
 /**
  * @brief 向状态机输入一个字节。

@@ -68,6 +68,14 @@ public:
      */
     void feed(const uint8_t* buf, std::size_t n) { edge_parser_feed_buf(&parser_, buf, n); }
 
+    /**
+     * @brief 丢弃当前未完成帧，供底层字节流成功切换后建立新的解析边界。
+     *
+     * 已安装的业务回调和累计统计保持不变；该操作本身不计为协议解析错误。
+     * @pre 不得与 feed() 或 setOnFrame() 并发。
+     */
+    void resetStream() noexcept { edge_parser_reset(&parser_); }
+
     /** @return 底层累计统计的只读引用；引用不得在本对象销毁后使用。 */
     const edge_parser_stats_t& stats() const noexcept { return parser_.stats; }
 

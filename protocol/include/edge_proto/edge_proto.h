@@ -76,7 +76,7 @@ typedef enum {
     EDGE_RC_OK = 0x00,          /**< 命令已成功执行。 */
     EDGE_RC_BAD_PARAM = 0x01,   /**< payload 缺失、长度错误或参数超出合法范围。 */
     EDGE_RC_UNSUPPORTED = 0x02, /**< 节点不支持该 TYPE 或接收方向错误。 */
-    EDGE_RC_BUSY = 0x03         /**< 节点暂时无法完成，可由上层决定是否稍后重试。 */
+    EDGE_RC_BUSY = 0x03 /**< 节点暂时无法完成，可由上层决定是否稍后重试。 */
 } edge_rc_t;
 
 /** 下行命令和对应上行应答中 seq 的字节偏移。 */
