@@ -11,3 +11,10 @@ gateway_add_test(number_test
     LIBS    gw_format edge_proto
     LABELS  "unit;core"
 )
+
+# 通过子进程退出时的真实异步输出验证格式化、行长边界和截断标记。
+gateway_add_test(logger_test
+    SOURCES LoggerTest.cpp
+    LIBS    gw_log
+    LABELS  "unit;core"
+)

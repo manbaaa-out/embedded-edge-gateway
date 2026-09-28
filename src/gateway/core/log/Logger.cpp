@@ -4,6 +4,8 @@
 #include "gateway/core/log/Logger.h"
 #include "gateway/core/log/AsyncLogger.h"
 
+#include <cstring>
+
 namespace gateway {
 
 std::atomic<LogLevel> Logger::level_{LogLevel::INFO};
@@ -25,27 +27,41 @@ static const char* levelName(LogLevel lv) {
 void Logger::log(LogLevel lv, const char* file, int line, const char* fmt, ...) {
     if (lv < level_.load(std::memory_order_relaxed)) return;
 
-    // snprintf/vsnprintf 返回所需长度，计算后续写入位置前必须限制到缓冲区范围。
-    char buf[1024]; // 当前调用独占的完整日志行缓冲区，最后一字节可用于换行。
+    constexpr char kTruncatedSuffix[] = "... [truncated]";
+    static_assert(sizeof(kTruncatedSuffix) <= kMaxLogLine,
+                  "log line must fit the truncation marker and newline");
+
+    // snprintf/vsnprintf 返回所需长度；末尾 NUL 的位置可在提交前改为换行。
+    char buf[kMaxLogLine]; // 当前调用独占的完整日志行缓冲区。
     int ret = snprintf(buf, sizeof(buf), "[%s] %s:%d ", levelName(lv), file, line);
     // ret 是完整前缀所需字符数，不等于发生截断时的实际写入数。
     if (ret < 0) return;
 
-    size_t prefix_len = static_cast<size_t>(ret); // 正文在 buf 中的起始偏移。
-    if (prefix_len >= sizeof(buf) - 1) {
-        prefix_len = sizeof(buf) - 2;
+    const size_t prefix_len = static_cast<size_t>(ret);
+    bool truncated = prefix_len >= sizeof(buf);
+    size_t total = prefix_len; // 尚未加入换行的长度；截断时在下方统一裁剪。
+
+    // 前缀本身已超长时不再追加正文，避免使用越界的起始偏移。
+    if (!truncated) {
+        const size_t remaining = sizeof(buf) - prefix_len;
+        va_list ap; // 指向 fmt 后的 printf 实参，仅在本次 vsnprintf 调用中有效。
+        va_start(ap, fmt);
+        int body_ret = vsnprintf(buf + prefix_len, remaining, fmt, ap);
+        va_end(ap);
+        if (body_ret < 0) return;
+
+        const size_t body_len = static_cast<size_t>(body_ret);
+        truncated = body_len >= remaining;
+        total += body_len;
     }
 
-    va_list ap; // 指向 fmt 后的 printf 实参，仅在本次 vsnprintf 调用中有效。
-    va_start(ap, fmt);
-    int body_ret = vsnprintf(buf + prefix_len, sizeof(buf) - prefix_len, fmt, ap);
-    // body_ret 是未截断正文所需字符数，用于判断最终行长是否需要夹紧。
-    va_end(ap);
-
-    if (body_ret < 0) return;
-
-    size_t total = prefix_len + static_cast<size_t>(body_ret); // 尚未加入换行的逻辑长度。
-    if (total >= sizeof(buf)) total = sizeof(buf) - 1;
+    if (truncated) {
+        // 在同一条日志内保留可见标记，仍只向异步后端提交一次。
+        constexpr size_t suffix_len = sizeof(kTruncatedSuffix) - 1;
+        total = sizeof(buf) - suffix_len - 1;
+        std::memcpy(buf + total, kTruncatedSuffix, suffix_len);
+        total += suffix_len;
+    }
     buf[total++] = '\n';
 
     AsyncLogger::instance().append(buf, total);

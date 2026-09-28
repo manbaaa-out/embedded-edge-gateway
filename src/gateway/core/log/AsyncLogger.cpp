@@ -85,13 +85,8 @@ namespace gateway {
         if (thread_.joinable()) thread_.join();
     }
 
-    // 后端自身的诊断必须绕过 LOG_*，否则会递归回到本对象。
+    // 前端已完成行长限制；此处只复制、聚合完整日志行。
     void AsyncLogger::append(const char* msg, size_t len) {
-        if (len > kMaxLogLine) {
-            fprintf(stderr, "AsyncLogger: 日志信息将被截断\n");
-            len = kMaxLogLine;
-        }
-
         std::lock_guard<std::mutex> lock(mtx_); // 保护容量判断、裁剪和缓冲区交换。
 
         if (len + currentBuffer_->size() < kBufferSize) {

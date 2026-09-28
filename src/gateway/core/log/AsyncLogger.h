@@ -47,8 +47,9 @@ public:
     /**
      * @brief 追加一条已格式化消息。
      * @param msg 非空输入指针，指向至少 len 个有效字节；内容不要求以 NUL 结尾。
-     * @param len 消息字节数；大于 kMaxLogLine 时会截断并直接向 stderr 报告。
+     * @param len 消息字节数，由调用方保证不超过 Logger.h 中的 kMaxLogLine。
      *
+     * 行长限制和截断标记由 Logger 前端处理；后端按 len 原样复制，不再检查或截断。
      * 该函数可由多个业务线程并发调用。消息整体写入同一缓冲区，不会跨块拆分。
      * 换块时的内存分配失败会向调用方传播。
      */
@@ -57,9 +58,6 @@ public:
 private:
     using Buffer = std::string;             /**< 按字节保存多条完整日志行的连续缓冲区。 */
     using BufferPtr = std::unique_ptr<Buffer>; /**< 缓冲区的独占所有权，用于低成本交换。 */
-
-    /** 单次 append 接受的最大字节数，与 Logger 的行缓冲区大小一致。 */
-    static constexpr size_t kMaxLogLine = 1024;
 
     /** 聚合块容量上限；一行不会跨块，块满后立即唤醒后台线程。 */
     static constexpr size_t kBufferSize = 64 * 1024;

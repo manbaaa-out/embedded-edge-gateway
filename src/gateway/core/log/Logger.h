@@ -7,10 +7,14 @@
 // 从而把“日志行”作为后端加锁和排序的最小单位。
 
 #include <atomic>
+#include <cstddef>
 #include <cstdio>
 #include <cstdarg>
 
 namespace gateway {
+
+/** 完整日志行的最大字节数，包含前缀、正文、截断标记（如有）和换行，不包含 NUL。 */
+inline constexpr std::size_t kMaxLogLine = 1024;
 
 /** 日志严重度；枚举顺序同时定义过滤时的大小关系。 */
 enum class LogLevel {
@@ -41,7 +45,8 @@ public:
      * @param line 宏传入的源代码行号。
      * @param fmt printf 风格格式串，后续参数必须与其匹配。
      *
-     * 低于阈值或格式化失败时不输出；完整行上限为 1024 字节，超出部分截断。
+     * 低于阈值或格式化失败时不输出；完整行上限为 kMaxLogLine 字节。
+     * 前缀或正文超长时截断，并在行尾添加 "... [truncated]"；标记和换行也计入上限。
      * 异步后端首次初始化或换块时的内存/线程异常会向调用方传播。
      */
     static void log(LogLevel lv, const char* file, int line, const char* fmt, ...);
