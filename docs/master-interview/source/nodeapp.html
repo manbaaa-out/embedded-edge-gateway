@@ -1,0 +1,41 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>节点 / App/app.c · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>节点 / App/app.c</h1><p class="meta">源码基线：2026-10-04 · SHA-256 eaf40aa2d6ca0061186ee9661c5c418c8910a637b4cb940225b4810824399506</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>#include &quot;app.h&quot;</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code>#include &quot;main.h&quot;</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>#include &quot;FreeRTOS.h&quot;</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code>#include &quot;task.h&quot;</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code>#include &quot;dwt_delay.h&quot;</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>#include &quot;watchdog.h&quot;</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code>#include &quot;uart_link.h&quot;</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code>#include &quot;sensor_hub.h&quot;</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code>#include &quot;tx_service.h&quot;</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code>#include &quot;cmd_service.h&quot;</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>#include &quot;report_task.h&quot;</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code></code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>void app_start(void)</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code>{</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>  /* 调试时冻结 IWDG 与 TIM4 计数, 避免暂停断点时被看门狗复位。</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code>     F1 的 DBGMCU 属 Cortex-M3 调试域, 常通无 APB 时钟门, 故无需(也没有)</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>     __HAL_RCC_DBGMCU_CLK_ENABLE(); 两个 FREEZE 宏直接置位 DBGMCU-&gt;CR。 */</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>  __HAL_DBGMCU_FREEZE_IWDG();</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>  __HAL_DBGMCU_FREEZE_TIM4();</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code></code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>  /* 必须先开 DWT 周期计数器: delay_us() 与 dht11_wait_level() 的超时都靠 CYCCNT。</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>     不开则 CYCCNT 恒为 0, delay_us 死等、DHT11 超时永不触发 → DHT11_Read 在</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>     taskENTER_CRITICAL 临界区里死循环, SysTick 被屏蔽, 整个 RTOS 卡死, 串口零输出。 */</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code>  DWT_Init();</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code></code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>  if (sensor_hub_init() != pdPASS) { Error_Handler(); }    // BH1750 上电 + 传感器互斥量</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code></code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>  if (tx_service_init() != pdPASS) { Error_Handler(); }     // TX 帧队列</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code></code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code>  if (uart_link_init() != pdPASS) { Error_Handler(); }     // RX 流缓冲</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code></code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>  if (watchdog_init() != pdPASS) { Error_Handler(); }       // N9-B: 全员报到事件组</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code></code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code>  /* 创建任务并检查返回值: 堆不够(configTOTAL_HEAP_SIZE 太小)时会在此处停住,</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code>     而不是任务静默创建失败、之后行为诡异。优先级: 命令(3) &gt; TX(2) &gt; 采样上报(1) */</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code>  if (xTaskCreate(vTxTask, &quot;Trans&quot;, configMINIMAL_STACK_SIZE * 2, NULL, 2, NULL) != pdPASS) { Error_Handler(); }</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code>  if (xTaskCreate(vSampleReportTask, &quot;Sample&quot;, configMINIMAL_STACK_SIZE * 3, NULL, 1, NULL) != pdPASS) { Error_Handler(); }</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>  if (xTaskCreate(vCmdTask, &quot;Cmd&quot;, configMINIMAL_STACK_SIZE * 3, NULL, 3, NULL) != pdPASS) { Error_Handler(); }</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code></code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code>  vTaskStartScheduler();</code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>}</code></span></div></html>

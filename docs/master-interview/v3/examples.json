@@ -1,0 +1,42 @@
+{
+  "T018": {
+    "title": "示例：关闭后排空的消费者（C++ 示意）",
+    "code": "std::unique_lock<std::mutex> lk(m);\ncv.wait(lk, [&] { return stopping || !queue.empty(); });\nif (queue.empty()) return;  // 此时 stopping 必为真\nauto item = std::move(queue.front());\nqueue.pop();\nlk.unlock();\nprocess(item);",
+    "note": "生产者必须在同一把锁下修改 queue/stopping，再通知。wait 的原子解锁并等待消除检查与休眠之间的缺口；唤醒后重新检查谓词。实际消费者循环还应处理 process 失败。"
+  },
+  "T019": {
+    "title": "示例：一次性发布（无后续写者）",
+    "code": "// 初始状态：payload 已构造，ready = false\n// 生产线程\npayload.value = 42;\nready.store(true, std::memory_order_release);\n\n// 消费线程\nif (ready.load(std::memory_order_acquire)) {\n    use(payload.value);\n}",
+    "note": "ready 是 atomic<bool>。只有 acquire 读到这次 release 发布的值时，才能据同步关系访问普通字段；发布后不再修改 payload。复用同一对象需要新的交接协议，不能循环把标志改来改去就推定安全。"
+  },
+  "T028": {
+    "title": "示例：非阻塞发送保留偏移（伪代码）",
+    "code": "while offset < frame.size:\n    n = write(fd, frame.data + offset, frame.size - offset)\n    if n > 0: offset += n; continue\n    if n < 0 and errno == EINTR: continue\n    if n < 0 and errno in {EAGAIN, EWOULDBLOCK}:\n        watch_writable(); return PENDING\n    return FAILED  // 包括无进展的 n == 0，避免无限空转\nreturn LOCAL_KERNEL_ACCEPTED",
+    "note": "frame 的存储和 offset 必须跨回调存活；同一字节流只由一个发送序列推进。最后的返回值刻意命名为本地内核接纳，不表示对端执行完成。"
+  },
+  "T038": {
+    "title": "反例：M=8，窗口 W=5 为什么有歧义",
+    "code": "1. 发送方发送 0,1,2,3,4；接收方全部收到并交付。\n2. 对这些帧的 ACK 全部丢失，发送方仍可能重发旧 0。\n3. 接收方新窗口为 5,6,7,0,1，包含序号 0。\n4. 若没有额外代际信息，旧 0 会与新一轮 0 混淆。\n\n相同大小 SR 收发窗口的一般条件：2W ≤ M。",
+    "note": "这是循环序号空间的经典约束。另加不重复会话号、限制序号在会话内不回绕等规则，会改变接收合法性判定，但必须明确额外假设。"
+  },
+  "T066": {
+    "title": "Cortex-M3 基本异常帧（按栈内偏移）",
+    "code": "SP +  0   R0\nSP +  4   R1\nSP +  8   R2\nSP + 12   R3\nSP + 16   R12\nSP + 20   被打断代码的 LR\nSP + 24   返回 PC\nSP + 28   xPSR\n另可能有对齐填充；M3 不含硬件浮点扩展帧。",
+    "note": "这 8 个字由异常进入机制保存；PendSV 的 R4–R11 软件保存区不是这张基本帧的一部分。异常处理器当前 LR 中的 EXC_RETURN 和帧里的原 LR 是两回事。"
+  },
+  "T075": {
+    "title": "容量推导：先把 bit/s 转成 byte/s",
+    "code": "115200 bit/s，8N1：每字节 1+8+1 = 10 bit\n连续字节速率 r = 115200 / 10 = 11520 byte/s\n64 byte 空环填满时间 = 64 / r ≈ 5.56 ms\n32 byte 半环间隔 = 32 / r ≈ 2.78 ms\n\n所需可用容量 ≥ 已有积压 + 停顿期间最大到达量",
+    "note": "这是连续流数量级。最坏证明还需考虑 ISR 延迟、软件队列剩余容量、突发、环绕次数与恢复消费速率；DMA 环和软件流缓冲不能无条件把容量简单相加。"
+  },
+  "T086": {
+    "title": "四个优先级位时，逻辑值与寄存器编码",
+    "code": "CMSIS 逻辑优先级：0, 1, ... , 15\n写入优先级字节：逻辑值 << (8 - 4)\n逻辑 5 → 0x50；逻辑 6 → 0x60\nBASEPRI = 0x50 时：\n  逻辑 0..4 仍可抢占这类内核临界区\n  逻辑 5..15 的相应异常被屏蔽\n能越过内核保护的 ISR 不得调用内核 FromISR API。",
+    "note": "假定使用与 FreeRTOS Cortex-M3 移植兼容的优先级分组。任务优先级的数值越大越优先，与这里的 NVIC 方向不同。"
+  },
+  "T110": {
+    "title": "SPSC 环形队列的发布顺序（伪代码）",
+    "code": "// 生产者，只有它写 head\nh = head.load(relaxed)\nnext = (h + 1) % N\nif next == tail.load(acquire): return FULL\nslots[h] = item\nhead.store(next, release)\n\n// 消费者，只有它写 tail\nt = tail.load(relaxed)\nif t == head.load(acquire): return EMPTY\nitem = slots[t]\ntail.store((t + 1) % N, release)",
+    "note": "这里预留一个槽，容量为 N−1。槽先写后发布，槽读完后才归还；双向 release/acquire 分别约束数据可见性和复用时机。假定元素存储有效、操作不抛异常且只有一个生产者和一个消费者；平台还需确认所用原子类型与执行上下文兼容。"
+  }
+}

@@ -1,0 +1,78 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>节点 / App/report_task.c · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>节点 / App/report_task.c</h1><p class="meta">源码基线：2026-10-04 · SHA-256 0714cfaf6708c187c18adc8be0104127e969e6042e4459e44862917d0fb9c9a3</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>#include &quot;report_task.h&quot;</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code>#include &quot;FreeRTOS.h&quot;   /* 必须在 task.h 之前: 它带入 FreeRTOSConfig.h + portmacro.h */</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>#include &quot;task.h&quot;</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code>#include &quot;frame_builder.h&quot;</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code>#include &quot;tx_service.h&quot;</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>#include &quot;sensor_hub.h&quot;</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code>#include &quot;watchdog.h&quot;</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code></code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code>#define HEARTBEAT_MS  1000U</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code></code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>static void send_heartbeat(void)</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>{</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>    TxFrame_t f;</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code>    f.len = frame_build(0x03, NULL, 0, f.data);        // NULL+0: 内部循环零次, 安全</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>    tx_send(&amp;f);                                        // 满则丢</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code>}</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code></code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>static void report_frame(const SensorData_t *s)</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>{</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>    TxFrame_t f;</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code></code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>    if (s-&gt;th_valid) {</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>        uint16_t t = (uint16_t)(s-&gt;temperature * 10.0f + 0.5f);  // +0.5f: 截断前四舍五入</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code>        uint16_t h = (uint16_t)(s-&gt;humidity    * 10.0f + 0.5f);</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code>        uint8_t  p[5];</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>        p[0] = (uint8_t)(t &gt;&gt; 8);  p[1] = (uint8_t)(t &amp; 0xFF);   // 温度 大端</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code>        p[2] = (uint8_t)(h &gt;&gt; 8);  p[3] = (uint8_t)(h &amp; 0xFF);   // 湿度 大端</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>        p[4] = (uint8_t)(p[0] + p[1] + p[2] + p[3]);             // 校验位: 网关只验 CRC16, 此字节不解析(占位)</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code>        f.len = frame_build(0x01, p, 5, f.data);</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code>        tx_send(&amp;f);</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>    }</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code></code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code>    if (s-&gt;lux_valid) {</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code>        float lf = s-&gt;lux;</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code>        if (lf &lt; 0.0f)     lf = 0.0f;</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code>        if (lf &gt; 65535.0f) lf = 65535.0f;              // u16 封顶</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code>        uint16_t lx = (uint16_t)(lf + 0.5f);           // 400.x -&gt; 400</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>        uint8_t  p[2];</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code>        p[0] = (uint8_t)(lx &gt;&gt; 8);  p[1] = (uint8_t)(lx &amp; 0xFF); // 光照 大端</code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code>        f.len = frame_build(0x02, p, 2, f.data);</code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>        tx_send(&amp;f);</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code>    }</code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code>    </code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code>    /* 0x04 设备状态: 无条件发, 跟随采样轮, 复用本轮 valid 标志 (§3.3 TYPE 字典)</code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code>    bit0=DHT11 OK, bit1=BH1750 OK, bit2~7 预留=0</code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code>    即便上面两帧都没发(传感器全挂), 这帧也要出去, 让网关知道&quot;节点在, 但外设故障&quot; */</code></span>
+<span class="line" id="L47"><a href="#L47" aria-label="第 47 行">47</a><code>    {</code></span>
+<span class="line" id="L48"><a href="#L48" aria-label="第 48 行">48</a><code>        uint8_t st = (uint8_t)((s-&gt;th_valid ? 0x01 : 0x00) |</code></span>
+<span class="line" id="L49"><a href="#L49" aria-label="第 49 行">49</a><code>                               (s-&gt;lux_valid ? 0x02 : 0x00));</code></span>
+<span class="line" id="L50"><a href="#L50" aria-label="第 50 行">50</a><code>        f.len = frame_build(0x04, &amp;st, 1, f.data);</code></span>
+<span class="line" id="L51"><a href="#L51" aria-label="第 51 行">51</a><code>        tx_send(&amp;f);</code></span>
+<span class="line" id="L52"><a href="#L52" aria-label="第 52 行">52</a><code>    }</code></span>
+<span class="line" id="L53"><a href="#L53" aria-label="第 53 行">53</a><code>}</code></span>
+<span class="line" id="L54"><a href="#L54" aria-label="第 54 行">54</a><code></code></span>
+<span class="line" id="L55"><a href="#L55" aria-label="第 55 行">55</a><code>void vSampleReportTask(void *pv)</code></span>
+<span class="line" id="L56"><a href="#L56" aria-label="第 56 行">56</a><code>{</code></span>
+<span class="line" id="L57"><a href="#L57" aria-label="第 57 行">57</a><code>    (void)pv;</code></span>
+<span class="line" id="L58"><a href="#L58" aria-label="第 58 行">58</a><code>    TickType_t last_wake = xTaskGetTickCount();   // 基准时刻</code></span>
+<span class="line" id="L59"><a href="#L59" aria-label="第 59 行">59</a><code>    uint32_t   since_sample_ms = 0xFFFFFFFFU;     // 置满, 开机第一轮就采</code></span>
+<span class="line" id="L60"><a href="#L60" aria-label="第 60 行">60</a><code></code></span>
+<span class="line" id="L61"><a href="#L61" aria-label="第 61 行">61</a><code>    for (;;) {</code></span>
+<span class="line" id="L62"><a href="#L62" aria-label="第 62 行">62</a><code>        /* N9-B: 先给自己打卡, 再判定三位是否全齐 —— 顺序不能反, 否则自己这位永远缺。 */</code></span>
+<span class="line" id="L63"><a href="#L63" aria-label="第 63 行">63</a><code>        watchdog_checkin(WDG_BIT_SAMPLE);</code></span>
+<span class="line" id="L64"><a href="#L64" aria-label="第 64 行">64</a><code>        watchdog_kick_if_all_checked_in();</code></span>
+<span class="line" id="L65"><a href="#L65" aria-label="第 65 行">65</a><code></code></span>
+<span class="line" id="L66"><a href="#L66" aria-label="第 66 行">66</a><code>        send_heartbeat();                          // 每个 1s 节拍发心跳</code></span>
+<span class="line" id="L67"><a href="#L67" aria-label="第 67 行">67</a><code></code></span>
+<span class="line" id="L68"><a href="#L68" aria-label="第 68 行">68</a><code>        if (since_sample_ms &gt;= sensor_hub_get_period_ms()) {</code></span>
+<span class="line" id="L69"><a href="#L69" aria-label="第 69 行">69</a><code>            SensorData_t s;</code></span>
+<span class="line" id="L70"><a href="#L70" aria-label="第 70 行">70</a><code>            sensor_hub_read_all(&amp;s);</code></span>
+<span class="line" id="L71"><a href="#L71" aria-label="第 71 行">71</a><code>            report_frame(&amp;s);</code></span>
+<span class="line" id="L72"><a href="#L72" aria-label="第 72 行">72</a><code>            since_sample_ms = 0;</code></span>
+<span class="line" id="L73"><a href="#L73" aria-label="第 73 行">73</a><code>        }</code></span>
+<span class="line" id="L74"><a href="#L74" aria-label="第 74 行">74</a><code></code></span>
+<span class="line" id="L75"><a href="#L75" aria-label="第 75 行">75</a><code>        vTaskDelayUntil(&amp;last_wake, pdMS_TO_TICKS(HEARTBEAT_MS));  // 绝对 1s 栅格</code></span>
+<span class="line" id="L76"><a href="#L76" aria-label="第 76 行">76</a><code>        since_sample_ms += HEARTBEAT_MS;</code></span>
+<span class="line" id="L77"><a href="#L77" aria-label="第 77 行">77</a><code>    }</code></span>
+<span class="line" id="L78"><a href="#L78" aria-label="第 78 行">78</a><code>}</code></span></div></html>

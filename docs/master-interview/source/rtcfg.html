@@ -1,0 +1,504 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>节点 / Core/Inc/FreeRTOSConfig.h · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>节点 / Core/Inc/FreeRTOSConfig.h</h1><p class="meta">源码基线：2026-10-04 · SHA-256 05403479a852c2a28c4896bdf897947e1d3d46bc952d2b09244aaf16c2b80dae</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>/*</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code> * FreeRTOSConfig.h — 本工程配置头</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code> *</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code> * 结构与注释按官方模板一一对应:</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code> *   FreeRTOS-Kernel-main/examples/template_configuration/FreeRTOSConfig.h</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code> * 对齐日期: 2026-07-24; 注释已译为中文(依据官方模板原文 + FreeRTOS 官方配置手册核对)。</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code> *</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code> * 规则:</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code> *   1. 章节顺序 / 参数集合 / 说明注释 与模板严格一致(完整镜像)。</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code> *   2. 模板默认值与本工程冲突处, 一律保留本工程的工作值, 并以【保留】标注。</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code> *   3. 本 port 为 ARM_CM3 (Cortex-M3, ARMv7-M, 单核, 无 FPU/MPU/TrustZone),</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code> *      MPU / ARMv8-M / SMP 等段落对它无效, 全部保留但以【CM3 N/A】标注。</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code> *   4. 模板没有、但本工程必需的定义(STM32 中断优先级换算 / handler 名映射 /</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code> *      tickless 睡眠钩子)以【项目专属】标注, 放在语义最贴近的章节里。</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code> */</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code></code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>#ifndef FREERTOS_CONFIG_H</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>#define FREERTOS_CONFIG_H</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code></code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>/* 硬件描述相关定义。 *********************************************************/</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code></code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code>/* 多数情况下, configCPU_CLOCK_HZ 必须设为&quot;驱动内核周期性 tick 中断所用外设&quot;的</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code> * 时钟频率。它通常(但不总是)等于系统主时钟频率。 */</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>#define configCPU_CLOCK_HZ    ( 72000000UL )   /* 【保留】STM32F103 @72MHz(模板 20MHz) */</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code></code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>/* configSYSTICK_CLOCK_HZ 是 ARM Cortex-M port 专用的可选参数。当 SysTick 定时器</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code> * 与内核主频同频时(STM32F103 默认如此)无需定义, 留空即可。若 SysTick 用了不同</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code> * 时钟, 则把 configCPU_CLOCK_HZ 设为内核频率, 再把本参数设为 SysTick 频率。</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code> * 不定义则不使用。 */</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code></code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code>/*</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code> #define configSYSTICK_CLOCK_HZ                  [平台相关]</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code> */</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code></code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>/* 调度行为相关定义。 *********************************************************/</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code></code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>/* configTICK_RATE_HZ 以 Hz 为单位设定 tick 中断的频率。 */</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code>#define configTICK_RATE_HZ                         1000   /* 【保留】1ms 一个 tick(模板 100) */</code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code></code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code>/* configUSE_PREEMPTION 置 1 使用抢占式调度; 置 0 使用协作式调度。 */</code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code>#define configUSE_PREEMPTION                       1</code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code></code></span>
+<span class="line" id="L47"><a href="#L47" aria-label="第 47 行">47</a><code>/* configUSE_TIME_SLICING 置 1: 每次 tick 中断都在同优先级的就绪态任务之间轮换;</code></span>
+<span class="line" id="L48"><a href="#L48" aria-label="第 48 行">48</a><code> * 置 0: 不因为来了一次 tick 中断就在同优先级就绪任务之间切换。 */</code></span>
+<span class="line" id="L49"><a href="#L49" aria-label="第 49 行">49</a><code>#define configUSE_TIME_SLICING                     1   /* 【保留】原工程未定义, 走内核默认 1(模板 0) */</code></span>
+<span class="line" id="L50"><a href="#L50" aria-label="第 50 行">50</a><code></code></span>
+<span class="line" id="L51"><a href="#L51" aria-label="第 51 行">51</a><code>/* configUSE_PORT_OPTIMISED_TASK_SELECTION 置 1: 用针对目标硬件指令集优化的算法</code></span>
+<span class="line" id="L52"><a href="#L52" aria-label="第 52 行">52</a><code> * 选择下一个要运行的任务(通常借助&quot;前导零计数 CLZ&quot;汇编指令); 置 0: 用适用于所有</code></span>
+<span class="line" id="L53"><a href="#L53" aria-label="第 53 行">53</a><code> * port 的通用 C 算法来选择。并非所有 port 都支持该选项。不定义则默认 0。 */</code></span>
+<span class="line" id="L54"><a href="#L54" aria-label="第 54 行">54</a><code>#define configUSE_PORT_OPTIMISED_TASK_SELECTION    0</code></span>
+<span class="line" id="L55"><a href="#L55" aria-label="第 55 行">55</a><code></code></span>
+<span class="line" id="L56"><a href="#L56" aria-label="第 56 行">56</a><code>/* configUSE_TICKLESS_IDLE 置 1: 使用低功耗无节拍(tickless)模式; 置 0: 让 tick</code></span>
+<span class="line" id="L57"><a href="#L57" aria-label="第 57 行">57</a><code> * 中断始终运行。并非所有 port 都支持无节拍模式。不定义则默认 0。 */</code></span>
+<span class="line" id="L58"><a href="#L58" aria-label="第 58 行">58</a><code>#define configUSE_TICKLESS_IDLE                    1   /* 【保留】空闲进 WFI 低功耗(模板 0) */</code></span>
+<span class="line" id="L59"><a href="#L59" aria-label="第 59 行">59</a><code></code></span>
+<span class="line" id="L60"><a href="#L60" aria-label="第 60 行">60</a><code>/* ---- 【项目专属】tickless 睡眠前后钩子 (模板无, configUSE_TICKLESS_IDLE 用) ----</code></span>
+<span class="line" id="L61"><a href="#L61" aria-label="第 61 行">61</a><code> * 睡前停 TIM4 时基中断: 它是 HAL 时基(1kHz 唤醒源), 不停会每 1ms 把 CPU 从 WFI</code></span>
+<span class="line" id="L62"><a href="#L62" aria-label="第 62 行">62</a><code> * 唤醒、tickless 失效; 停了同时冻结 uwTick。醒后恢复。函数体在</code></span>
+<span class="line" id="L63"><a href="#L63" aria-label="第 63 行">63</a><code> * stm32f1xx_hal_timebase_tim.c, 这里只声明(不能 include hal.h, 会污染本配置头)。</code></span>
+<span class="line" id="L64"><a href="#L64" aria-label="第 64 行">64</a><code> * port.c 重编程 SysTick 在下一个截止点唤醒, 不依赖 TIM4。 */</code></span>
+<span class="line" id="L65"><a href="#L65" aria-label="第 65 行">65</a><code>extern void HAL_SuspendTick(void);</code></span>
+<span class="line" id="L66"><a href="#L66" aria-label="第 66 行">66</a><code>extern void HAL_ResumeTick(void);</code></span>
+<span class="line" id="L67"><a href="#L67" aria-label="第 67 行">67</a><code>#define configPRE_SLEEP_PROCESSING( x )   do { HAL_SuspendTick(); } while( 0 )</code></span>
+<span class="line" id="L68"><a href="#L68" aria-label="第 68 行">68</a><code>#define configPOST_SLEEP_PROCESSING( x )  do { HAL_ResumeTick();  } while( 0 )</code></span>
+<span class="line" id="L69"><a href="#L69" aria-label="第 69 行">69</a><code>/* ---------------------------------------------------------------------------- */</code></span>
+<span class="line" id="L70"><a href="#L70" aria-label="第 70 行">70</a><code></code></span>
+<span class="line" id="L71"><a href="#L71" aria-label="第 71 行">71</a><code>/* configMAX_PRIORITIES 设定可用的任务优先级档数。任务可取 0 ~ (configMAX_PRIORITIES</code></span>
+<span class="line" id="L72"><a href="#L72" aria-label="第 72 行">72</a><code> * - 1) 的优先级, 0 为最低优先级。 */</code></span>
+<span class="line" id="L73"><a href="#L73" aria-label="第 73 行">73</a><code>#define configMAX_PRIORITIES                       7   /* 【保留】优先级档 0~6(模板 5) */</code></span>
+<span class="line" id="L74"><a href="#L74" aria-label="第 74 行">74</a><code></code></span>
+<span class="line" id="L75"><a href="#L75" aria-label="第 75 行">75</a><code>/* configMINIMAL_STACK_SIZE 定义空闲任务所用栈的大小(单位是&quot;字&quot;, 不是字节!)。</code></span>
+<span class="line" id="L76"><a href="#L76" aria-label="第 76 行">76</a><code> * 内核仅将此常量用于空闲任务; 各 Demo 也用它来让示例在不同架构间可移植。 */</code></span>
+<span class="line" id="L77"><a href="#L77" aria-label="第 77 行">77</a><code>#define configMINIMAL_STACK_SIZE                   128</code></span>
+<span class="line" id="L78"><a href="#L78" aria-label="第 78 行">78</a><code></code></span>
+<span class="line" id="L79"><a href="#L79" aria-label="第 79 行">79</a><code>/* configMAX_TASK_NAME_LEN 设定任务可读名称的最大长度(字符数), 含结尾的 NUL。 */</code></span>
+<span class="line" id="L80"><a href="#L80" aria-label="第 80 行">80</a><code>#define configMAX_TASK_NAME_LEN                    16</code></span>
+<span class="line" id="L81"><a href="#L81" aria-label="第 81 行">81</a><code></code></span>
+<span class="line" id="L82"><a href="#L82" aria-label="第 82 行">82</a><code>/* configTICK_TYPE_WIDTH_IN_BITS 控制 TickType_t 的类型(即位宽):</code></span>
+<span class="line" id="L83"><a href="#L83" aria-label="第 83 行">83</a><code> *   TICK_TYPE_WIDTH_16_BITS → TickType_t 为无符号 16 位;</code></span>
+<span class="line" id="L84"><a href="#L84" aria-label="第 84 行">84</a><code> *   TICK_TYPE_WIDTH_32_BITS → TickType_t 为无符号 32 位;</code></span>
+<span class="line" id="L85"><a href="#L85" aria-label="第 85 行">85</a><code> *   TICK_TYPE_WIDTH_64_BITS → TickType_t 为无符号 64 位。 */</code></span>
+<span class="line" id="L86"><a href="#L86" aria-label="第 86 行">86</a><code>#define configTICK_TYPE_WIDTH_IN_BITS              TICK_TYPE_WIDTH_32_BITS   /* 等价原 configUSE_16_BIT_TICKS 0, 换成模板新写法(二者互斥, 不能同时定义) */</code></span>
+<span class="line" id="L87"><a href="#L87" aria-label="第 87 行">87</a><code></code></span>
+<span class="line" id="L88"><a href="#L88" aria-label="第 88 行">88</a><code>/* configIDLE_SHOULD_YIELD 置 1: 若存在处于空闲优先级(优先级 0)、可运行的应用</code></span>
+<span class="line" id="L89"><a href="#L89" aria-label="第 89 行">89</a><code> * 任务, 空闲任务就让出 CPU 给它; 置 0: 空闲任务用满自己的时间片。不定义则默认 1。 */</code></span>
+<span class="line" id="L90"><a href="#L90" aria-label="第 90 行">90</a><code>#define configIDLE_SHOULD_YIELD                    1</code></span>
+<span class="line" id="L91"><a href="#L91" aria-label="第 91 行">91</a><code></code></span>
+<span class="line" id="L92"><a href="#L92" aria-label="第 92 行">92</a><code>/* 每个任务都有一组任务通知。configTASK_NOTIFICATION_ARRAY_ENTRIES 设定该数组的</code></span>
+<span class="line" id="L93"><a href="#L93" aria-label="第 93 行">93</a><code> * 索引个数。不定义则默认 1。 */</code></span>
+<span class="line" id="L94"><a href="#L94" aria-label="第 94 行">94</a><code>#define configTASK_NOTIFICATION_ARRAY_ENTRIES      1</code></span>
+<span class="line" id="L95"><a href="#L95" aria-label="第 95 行">95</a><code></code></span>
+<span class="line" id="L96"><a href="#L96" aria-label="第 96 行">96</a><code>/* configQUEUE_REGISTRY_SIZE 设定可被&quot;队列注册表&quot;引用的队列与信号量的最大数量。</code></span>
+<span class="line" id="L97"><a href="#L97" aria-label="第 97 行">97</a><code> * 仅在使用&quot;内核感知调试器&quot;时才需要。不定义则默认 0。 */</code></span>
+<span class="line" id="L98"><a href="#L98" aria-label="第 98 行">98</a><code>#define configQUEUE_REGISTRY_SIZE                  0</code></span>
+<span class="line" id="L99"><a href="#L99" aria-label="第 99 行">99</a><code></code></span>
+<span class="line" id="L100"><a href="#L100" aria-label="第 100 行">100</a><code>/* configENABLE_BACKWARD_COMPATIBILITY 置 1: 把旧版 FreeRTOS 的函数名与数据类型</code></span>
+<span class="line" id="L101"><a href="#L101" aria-label="第 101 行">101</a><code> * 映射到其最新等价物。不定义则默认 1。 */</code></span>
+<span class="line" id="L102"><a href="#L102" aria-label="第 102 行">102</a><code>#define configENABLE_BACKWARD_COMPATIBILITY        0</code></span>
+<span class="line" id="L103"><a href="#L103" aria-label="第 103 行">103</a><code></code></span>
+<span class="line" id="L104"><a href="#L104" aria-label="第 104 行">104</a><code>/* 每个任务有自己的一组指针可用作线程本地存储(TLS)。</code></span>
+<span class="line" id="L105"><a href="#L105" aria-label="第 105 行">105</a><code> * configNUM_THREAD_LOCAL_STORAGE_POINTERS 设定该数组的索引个数。不定义则默认 0。 */</code></span>
+<span class="line" id="L106"><a href="#L106" aria-label="第 106 行">106</a><code>#define configNUM_THREAD_LOCAL_STORAGE_POINTERS    0</code></span>
+<span class="line" id="L107"><a href="#L107" aria-label="第 107 行">107</a><code></code></span>
+<span class="line" id="L108"><a href="#L108" aria-label="第 108 行">108</a><code>/* configUSE_MINI_LIST_ITEM 置 0: MiniListItem_t 与 ListItem_t 完全相同; 置 1:</code></span>
+<span class="line" id="L109"><a href="#L109" aria-label="第 109 行">109</a><code> * MiniListItem_t 比 ListItem_t 少 3 个字段, 以节省少量 RAM, 代价是违反&quot;严格别名</code></span>
+<span class="line" id="L110"><a href="#L110" aria-label="第 110 行">110</a><code> * 规则&quot;(某些编译器依赖该规则做优化)。不定义则默认 1。 */</code></span>
+<span class="line" id="L111"><a href="#L111" aria-label="第 111 行">111</a><code>#define configUSE_MINI_LIST_ITEM                   1</code></span>
+<span class="line" id="L112"><a href="#L112" aria-label="第 112 行">112</a><code></code></span>
+<span class="line" id="L113"><a href="#L113" aria-label="第 113 行">113</a><code>/* 设定 xTaskCreate() 中&quot;栈大小&quot;参数所用的类型; 其他若干返回栈使用信息的 API 也</code></span>
+<span class="line" id="L114"><a href="#L114" aria-label="第 114 行">114</a><code> * 用同一类型。不定义则默认为 size_t。 */</code></span>
+<span class="line" id="L115"><a href="#L115" aria-label="第 115 行">115</a><code>#define configSTACK_DEPTH_TYPE                     size_t</code></span>
+<span class="line" id="L116"><a href="#L116" aria-label="第 116 行">116</a><code></code></span>
+<span class="line" id="L117"><a href="#L117" aria-label="第 117 行">117</a><code>/* configMESSAGE_BUFFER_LENGTH_TYPE 设定&quot;写入消息缓冲区的每条消息长度&quot;所用的类型</code></span>
+<span class="line" id="L118"><a href="#L118" aria-label="第 118 行">118</a><code> * (该长度也会被写进消息缓冲区)。不定义则默认为 size_t —— 但若消息长度永远不会</code></span>
+<span class="line" id="L119"><a href="#L119" aria-label="第 119 行">119</a><code> * 超过 uint8_t 能表示的范围, 用 size_t 会浪费空间。 */</code></span>
+<span class="line" id="L120"><a href="#L120" aria-label="第 120 行">120</a><code>#define configMESSAGE_BUFFER_LENGTH_TYPE           size_t</code></span>
+<span class="line" id="L121"><a href="#L121" aria-label="第 121 行">121</a><code></code></span>
+<span class="line" id="L122"><a href="#L122" aria-label="第 122 行">122</a><code>/* configHEAP_CLEAR_MEMORY_ON_FREE 置 1: 用 vPortFree() 释放由 pvPortMalloc()</code></span>
+<span class="line" id="L123"><a href="#L123" aria-label="第 123 行">123</a><code> * 分配的内存块时, 将其清零。不定义则默认 0。 */</code></span>
+<span class="line" id="L124"><a href="#L124" aria-label="第 124 行">124</a><code>#define configHEAP_CLEAR_MEMORY_ON_FREE            1</code></span>
+<span class="line" id="L125"><a href="#L125" aria-label="第 125 行">125</a><code></code></span>
+<span class="line" id="L126"><a href="#L126" aria-label="第 126 行">126</a><code>/* vTaskList 与 vTaskGetRunTimeStats 接口把缓冲区作为参数, 并假定其长度为</code></span>
+<span class="line" id="L127"><a href="#L127" aria-label="第 127 行">127</a><code> * configSTATS_BUFFER_MAX_LENGTH。不定义则默认 0xFFFF。新应用建议改用</code></span>
+<span class="line" id="L128"><a href="#L128" aria-label="第 128 行">128</a><code> * vTaskListTasks / vTaskGetRunTimeStatistics 并显式传入缓冲区长度, 以避免内存越界。 */</code></span>
+<span class="line" id="L129"><a href="#L129" aria-label="第 129 行">129</a><code>#define configSTATS_BUFFER_MAX_LENGTH              0xFFFF</code></span>
+<span class="line" id="L130"><a href="#L130" aria-label="第 130 行">130</a><code></code></span>
+<span class="line" id="L131"><a href="#L131" aria-label="第 131 行">131</a><code>/* configUSE_NEWLIB_REENTRANT 置 1: 为每个任务分配一个 newlib 可重入(reent)结构;</code></span>
+<span class="line" id="L132"><a href="#L132" aria-label="第 132 行">132</a><code> * 置 0: 不支持 newlib reent 结构。不定义则默认 0。</code></span>
+<span class="line" id="L133"><a href="#L133" aria-label="第 133 行">133</a><code> *</code></span>
+<span class="line" id="L134"><a href="#L134" aria-label="第 134 行">134</a><code> * 注意: newlib 支持是应大量需求而加入的, 但 FreeRTOS 维护者本身既不使用也不测试</code></span>
+<span class="line" id="L135"><a href="#L135" aria-label="第 135 行">135</a><code> * 它, 对其运行结果不负责。使用者须熟悉 newlib, 并提供必要的系统级桩函数。注意</code></span>
+<span class="line" id="L136"><a href="#L136" aria-label="第 136 行">136</a><code> * (截至撰写时)当前 newlib 设计实现了一个系统级 malloc(), 必须为其提供锁。 */</code></span>
+<span class="line" id="L137"><a href="#L137" aria-label="第 137 行">137</a><code>#define configUSE_NEWLIB_REENTRANT                 0</code></span>
+<span class="line" id="L138"><a href="#L138" aria-label="第 138 行">138</a><code></code></span>
+<span class="line" id="L139"><a href="#L139" aria-label="第 139 行">139</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L140"><a href="#L140" aria-label="第 140 行">140</a><code>/* 软件定时器相关定义。 *******************************************************/</code></span>
+<span class="line" id="L141"><a href="#L141" aria-label="第 141 行">141</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L142"><a href="#L142" aria-label="第 142 行">142</a><code></code></span>
+<span class="line" id="L143"><a href="#L143" aria-label="第 143 行">143</a><code>/* configUSE_TIMERS 置 1: 把软件定时器功能编入固件(此时 timers.c 必须参与编译);</code></span>
+<span class="line" id="L144"><a href="#L144" aria-label="第 144 行">144</a><code> * 置 0: 从固件中排除软件定时器功能。不定义则默认 0。 */</code></span>
+<span class="line" id="L145"><a href="#L145" aria-label="第 145 行">145</a><code>#define configUSE_TIMERS                1</code></span>
+<span class="line" id="L146"><a href="#L146" aria-label="第 146 行">146</a><code></code></span>
+<span class="line" id="L147"><a href="#L147" aria-label="第 147 行">147</a><code>/* configTIMER_TASK_PRIORITY 设定定时器服务任务的优先级。仅当 configUSE_TIMERS 为</code></span>
+<span class="line" id="L148"><a href="#L148" aria-label="第 148 行">148</a><code> * 1 时使用。定时器任务是标准的 FreeRTOS 任务, 优先级与普通任务一样设定。 */</code></span>
+<span class="line" id="L149"><a href="#L149" aria-label="第 149 行">149</a><code>#define configTIMER_TASK_PRIORITY       ( 2 )   /* 【保留】(模板 configMAX_PRIORITIES-1) */</code></span>
+<span class="line" id="L150"><a href="#L150" aria-label="第 150 行">150</a><code></code></span>
+<span class="line" id="L151"><a href="#L151" aria-label="第 151 行">151</a><code>/* configTIMER_TASK_STACK_DEPTH 设定分配给定时器服务任务的栈大小(单位是&quot;字&quot;,</code></span>
+<span class="line" id="L152"><a href="#L152" aria-label="第 152 行">152</a><code> * 不是字节!)。仅当 configUSE_TIMERS 为 1 时使用。 */</code></span>
+<span class="line" id="L153"><a href="#L153" aria-label="第 153 行">153</a><code>#define configTIMER_TASK_STACK_DEPTH    ( configMINIMAL_STACK_SIZE * 2 )   /* 【保留】(模板 =MINIMAL) */</code></span>
+<span class="line" id="L154"><a href="#L154" aria-label="第 154 行">154</a><code></code></span>
+<span class="line" id="L155"><a href="#L155" aria-label="第 155 行">155</a><code>/* configTIMER_QUEUE_LENGTH 设定&quot;定时器命令队列&quot;的长度(队列可容纳的离散命令条数),</code></span>
+<span class="line" id="L156"><a href="#L156" aria-label="第 156 行">156</a><code> * 用于向定时器服务任务发送命令。仅当 configUSE_TIMERS 为 1 时使用。 */</code></span>
+<span class="line" id="L157"><a href="#L157" aria-label="第 157 行">157</a><code>#define configTIMER_QUEUE_LENGTH        10</code></span>
+<span class="line" id="L158"><a href="#L158" aria-label="第 158 行">158</a><code></code></span>
+<span class="line" id="L159"><a href="#L159" aria-label="第 159 行">159</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L160"><a href="#L160" aria-label="第 160 行">160</a><code>/* 事件组相关定义。 **********************************************************/</code></span>
+<span class="line" id="L161"><a href="#L161" aria-label="第 161 行">161</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L162"><a href="#L162" aria-label="第 162 行">162</a><code></code></span>
+<span class="line" id="L163"><a href="#L163" aria-label="第 163 行">163</a><code>/* configUSE_EVENT_GROUPS 置 1: 把事件组功能编入固件(此时 event_groups.c 必须</code></span>
+<span class="line" id="L164"><a href="#L164" aria-label="第 164 行">164</a><code> * 参与编译); 置 0: 从固件中排除事件组功能。不定义则默认 1。 */</code></span>
+<span class="line" id="L165"><a href="#L165" aria-label="第 165 行">165</a><code>#define configUSE_EVENT_GROUPS    1</code></span>
+<span class="line" id="L166"><a href="#L166" aria-label="第 166 行">166</a><code></code></span>
+<span class="line" id="L167"><a href="#L167" aria-label="第 167 行">167</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L168"><a href="#L168" aria-label="第 168 行">168</a><code>/* 流缓冲区相关定义。 ********************************************************/</code></span>
+<span class="line" id="L169"><a href="#L169" aria-label="第 169 行">169</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L170"><a href="#L170" aria-label="第 170 行">170</a><code></code></span>
+<span class="line" id="L171"><a href="#L171" aria-label="第 171 行">171</a><code>/* configUSE_STREAM_BUFFERS 置 1: 把流缓冲区功能编入固件(此时 stream_buffer.c</code></span>
+<span class="line" id="L172"><a href="#L172" aria-label="第 172 行">172</a><code> * 必须参与编译); 置 0: 从固件中排除流缓冲区功能。不定义则默认 1。 */</code></span>
+<span class="line" id="L173"><a href="#L173" aria-label="第 173 行">173</a><code>#define configUSE_STREAM_BUFFERS    1</code></span>
+<span class="line" id="L174"><a href="#L174" aria-label="第 174 行">174</a><code></code></span>
+<span class="line" id="L175"><a href="#L175" aria-label="第 175 行">175</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L176"><a href="#L176" aria-label="第 176 行">176</a><code>/* 内存分配相关定义。 ********************************************************/</code></span>
+<span class="line" id="L177"><a href="#L177" aria-label="第 177 行">177</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L178"><a href="#L178" aria-label="第 178 行">178</a><code></code></span>
+<span class="line" id="L179"><a href="#L179" aria-label="第 179 行">179</a><code>/* configSUPPORT_STATIC_ALLOCATION 置 1: 把&quot;用静态分配内存来创建 FreeRTOS 对象</code></span>
+<span class="line" id="L180"><a href="#L180" aria-label="第 180 行">180</a><code> * (任务、队列等)&quot;的 API 编入固件; 置 0: 排除创建静态分配对象的能力。不定义则</code></span>
+<span class="line" id="L181"><a href="#L181" aria-label="第 181 行">181</a><code> * 默认 0。 */</code></span>
+<span class="line" id="L182"><a href="#L182" aria-label="第 182 行">182</a><code>#define configSUPPORT_STATIC_ALLOCATION              0   /* 【保留】暂不用静态创建(模板 1) */</code></span>
+<span class="line" id="L183"><a href="#L183" aria-label="第 183 行">183</a><code></code></span>
+<span class="line" id="L184"><a href="#L184" aria-label="第 184 行">184</a><code>/* configSUPPORT_DYNAMIC_ALLOCATION 置 1: 把&quot;用动态分配内存来创建 FreeRTOS 对象</code></span>
+<span class="line" id="L185"><a href="#L185" aria-label="第 185 行">185</a><code> * (任务、队列等)&quot;的 API 编入固件; 置 0: 排除创建动态分配对象的能力。不定义则</code></span>
+<span class="line" id="L186"><a href="#L186" aria-label="第 186 行">186</a><code> * 默认 1。 */</code></span>
+<span class="line" id="L187"><a href="#L187" aria-label="第 187 行">187</a><code>#define configSUPPORT_DYNAMIC_ALLOCATION             1</code></span>
+<span class="line" id="L188"><a href="#L188" aria-label="第 188 行">188</a><code></code></span>
+<span class="line" id="L189"><a href="#L189" aria-label="第 189 行">189</a><code>/* 当固件包含 heap_1.c / heap_2.c / heap_4.c 时, 设定 FreeRTOS 堆的总大小(字节)。</code></span>
+<span class="line" id="L190"><a href="#L190" aria-label="第 190 行">190</a><code> * 该堆会出现在 .bss 段。此值须按各应用需要裁剪。 */</code></span>
+<span class="line" id="L191"><a href="#L191" aria-label="第 191 行">191</a><code>#define configTOTAL_HEAP_SIZE                        ( ( size_t ) ( 10 * 1024 ) )   /* 【保留】10KB(模板 4096) */</code></span>
+<span class="line" id="L192"><a href="#L192" aria-label="第 192 行">192</a><code></code></span>
+<span class="line" id="L193"><a href="#L193" aria-label="第 193 行">193</a><code>/* configAPPLICATION_ALLOCATED_HEAP 置 1: 由应用自己分配作为 FreeRTOS 堆的数组;</code></span>
+<span class="line" id="L194"><a href="#L194" aria-label="第 194 行">194</a><code> * 置 0: 由链接器分配该堆数组。不定义则默认 0。 */</code></span>
+<span class="line" id="L195"><a href="#L195" aria-label="第 195 行">195</a><code>#define configAPPLICATION_ALLOCATED_HEAP             0</code></span>
+<span class="line" id="L196"><a href="#L196" aria-label="第 196 行">196</a><code></code></span>
+<span class="line" id="L197"><a href="#L197" aria-label="第 197 行">197</a><code>/* configSTACK_ALLOCATION_FROM_SEPARATE_HEAP 置 1: 任务栈从 FreeRTOS 堆之外的地方</code></span>
+<span class="line" id="L198"><a href="#L198" aria-label="第 198 行">198</a><code> * 分配(适合把栈放进快速内存); 置 0: 任务栈来自标准 FreeRTOS 堆。置 1 时应用须</code></span>
+<span class="line" id="L199"><a href="#L199" aria-label="第 199 行">199</a><code> * 自行提供 pvPortMallocStack() 与 vPortFreeStack() 实现。不定义则默认 0。 */</code></span>
+<span class="line" id="L200"><a href="#L200" aria-label="第 200 行">200</a><code>#define configSTACK_ALLOCATION_FROM_SEPARATE_HEAP    0</code></span>
+<span class="line" id="L201"><a href="#L201" aria-label="第 201 行">201</a><code></code></span>
+<span class="line" id="L202"><a href="#L202" aria-label="第 202 行">202</a><code>/* configENABLE_HEAP_PROTECTOR 置 1: 为 heap_4.c / heap_5.c 内部的堆块指针启用</code></span>
+<span class="line" id="L203"><a href="#L203" aria-label="第 203 行">203</a><code> * 边界检查与混淆, 以帮助捕获指针损坏。不定义则默认 0。 */</code></span>
+<span class="line" id="L204"><a href="#L204" aria-label="第 204 行">204</a><code>#define configENABLE_HEAP_PROTECTOR                  0</code></span>
+<span class="line" id="L205"><a href="#L205" aria-label="第 205 行">205</a><code></code></span>
+<span class="line" id="L206"><a href="#L206" aria-label="第 206 行">206</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L207"><a href="#L207" aria-label="第 207 行">207</a><code>/* 中断嵌套行为配置。 ********************************************************/</code></span>
+<span class="line" id="L208"><a href="#L208" aria-label="第 208 行">208</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L209"><a href="#L209" aria-label="第 209 行">209</a><code>/* 【项目专属换算】模板此段直接写 0/0, 那是通用占位; STM32 必须按 NVIC 优先级位宽</code></span>
+<span class="line" id="L210"><a href="#L210" aria-label="第 210 行">210</a><code> * 左移到寄存器实际位置, 否则中断优先级全错。下面保留本工程的换算写法。 */</code></span>
+<span class="line" id="L211"><a href="#L211" aria-label="第 211 行">211</a><code></code></span>
+<span class="line" id="L212"><a href="#L212" aria-label="第 212 行">212</a><code>/* Cortex-M 优先级位宽: 用 CMSIS 头里定义的(STM32=4), 否则回退 4。 */</code></span>
+<span class="line" id="L213"><a href="#L213" aria-label="第 213 行">213</a><code>#ifdef __NVIC_PRIO_BITS</code></span>
+<span class="line" id="L214"><a href="#L214" aria-label="第 214 行">214</a><code>    #define configPRIO_BITS         __NVIC_PRIO_BITS</code></span>
+<span class="line" id="L215"><a href="#L215" aria-label="第 215 行">215</a><code>#else</code></span>
+<span class="line" id="L216"><a href="#L216" aria-label="第 216 行">216</a><code>    #define configPRIO_BITS         4</code></span>
+<span class="line" id="L217"><a href="#L217" aria-label="第 217 行">217</a><code>#endif</code></span>
+<span class="line" id="L218"><a href="#L218" aria-label="第 218 行">218</a><code></code></span>
+<span class="line" id="L219"><a href="#L219" aria-label="第 219 行">219</a><code>/* 最低优先级(数字最大): 内核 PendSV/SysTick 概念上用它。 */</code></span>
+<span class="line" id="L220"><a href="#L220" aria-label="第 220 行">220</a><code>#define configLIBRARY_LOWEST_INTERRUPT_PRIORITY         15</code></span>
+<span class="line" id="L221"><a href="#L221" aria-label="第 221 行">221</a><code></code></span>
+<span class="line" id="L222"><a href="#L222" aria-label="第 222 行">222</a><code>/* &quot;那条线&quot;: 调用 FreeRTOS API 的中断, 优先级数字必须 &gt;= 这个值。 */</code></span>
+<span class="line" id="L223"><a href="#L223" aria-label="第 223 行">223</a><code>#define configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY    5</code></span>
+<span class="line" id="L224"><a href="#L224" aria-label="第 224 行">224</a><code></code></span>
+<span class="line" id="L225"><a href="#L225" aria-label="第 225 行">225</a><code>/* configKERNEL_INTERRUPT_PRIORITY 设定 tick 中断与上下文切换中断的优先级</code></span>
+<span class="line" id="L226"><a href="#L226" aria-label="第 226 行">226</a><code> * (左移到 NVIC 寄存器实际位置, 不要手改)。 */</code></span>
+<span class="line" id="L227"><a href="#L227" aria-label="第 227 行">227</a><code>#define configKERNEL_INTERRUPT_PRIORITY \</code></span>
+<span class="line" id="L228"><a href="#L228" aria-label="第 228 行">228</a><code>    ( configLIBRARY_LOWEST_INTERRUPT_PRIORITY &lt;&lt; ( 8 - configPRIO_BITS ) )</code></span>
+<span class="line" id="L229"><a href="#L229" aria-label="第 229 行">229</a><code></code></span>
+<span class="line" id="L230"><a href="#L230" aria-label="第 230 行">230</a><code>/* configMAX_SYSCALL_INTERRUPT_PRIORITY 设定一条优先级界线: 优先级高于此线的中断</code></span>
+<span class="line" id="L231"><a href="#L231" aria-label="第 231 行">231</a><code> * 里不得调用 FreeRTOS API; 高于此线的中断永不被内核关闭, 因此不会被 RTOS 活动</code></span>
+<span class="line" id="L232"><a href="#L232" aria-label="第 232 行">232</a><code> * 延迟(同样左移, 不要手改)。 */</code></span>
+<span class="line" id="L233"><a href="#L233" aria-label="第 233 行">233</a><code>#define configMAX_SYSCALL_INTERRUPT_PRIORITY \</code></span>
+<span class="line" id="L234"><a href="#L234" aria-label="第 234 行">234</a><code>    ( configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY &lt;&lt; ( 8 - configPRIO_BITS ) )</code></span>
+<span class="line" id="L235"><a href="#L235" aria-label="第 235 行">235</a><code></code></span>
+<span class="line" id="L236"><a href="#L236" aria-label="第 236 行">236</a><code>/* configMAX_SYSCALL_INTERRUPT_PRIORITY 的另一个名字 —— 用哪个名字取决于具体 port。 */</code></span>
+<span class="line" id="L237"><a href="#L237" aria-label="第 237 行">237</a><code>#define configMAX_API_CALL_INTERRUPT_PRIORITY    configMAX_SYSCALL_INTERRUPT_PRIORITY</code></span>
+<span class="line" id="L238"><a href="#L238" aria-label="第 238 行">238</a><code></code></span>
+<span class="line" id="L239"><a href="#L239" aria-label="第 239 行">239</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L240"><a href="#L240" aria-label="第 240 行">240</a><code>/* 钩子(Hook)与回调函数相关定义。 *****************************************/</code></span>
+<span class="line" id="L241"><a href="#L241" aria-label="第 241 行">241</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L242"><a href="#L242" aria-label="第 242 行">242</a><code></code></span>
+<span class="line" id="L243"><a href="#L243" aria-label="第 243 行">243</a><code>/* 将下列 configUSE_* 常量置 1 即把对应的钩子功能编入固件; 置 0 则排除。凡置 1 的,</code></span>
+<span class="line" id="L244"><a href="#L244" aria-label="第 244 行">244</a><code> * 应用编写者都必须自行提供对应的钩子函数。 */</code></span>
+<span class="line" id="L245"><a href="#L245" aria-label="第 245 行">245</a><code>#define configUSE_IDLE_HOOK                   0</code></span>
+<span class="line" id="L246"><a href="#L246" aria-label="第 246 行">246</a><code>#define configUSE_TICK_HOOK                   0</code></span>
+<span class="line" id="L247"><a href="#L247" aria-label="第 247 行">247</a><code>#define configUSE_MALLOC_FAILED_HOOK          0</code></span>
+<span class="line" id="L248"><a href="#L248" aria-label="第 248 行">248</a><code>#define configUSE_DAEMON_TASK_STARTUP_HOOK    0</code></span>
+<span class="line" id="L249"><a href="#L249" aria-label="第 249 行">249</a><code></code></span>
+<span class="line" id="L250"><a href="#L250" aria-label="第 250 行">250</a><code>/* configUSE_SB_COMPLETED_CALLBACK 置 1: 为每个流缓冲区/消息缓冲区实例提供&quot;发送</code></span>
+<span class="line" id="L251"><a href="#L251" aria-label="第 251 行">251</a><code> * 完成&quot;与&quot;接收完成&quot;回调。置 1 后可用 xStreamBufferCreateWithCallback() 等 API</code></span>
+<span class="line" id="L252"><a href="#L252" aria-label="第 252 行">252</a><code> * (以及消息缓冲区对应 API)创建带应用回调的实例。不定义则默认 0。 */</code></span>
+<span class="line" id="L253"><a href="#L253" aria-label="第 253 行">253</a><code>#define configUSE_SB_COMPLETED_CALLBACK       0</code></span>
+<span class="line" id="L254"><a href="#L254" aria-label="第 254 行">254</a><code></code></span>
+<span class="line" id="L255"><a href="#L255" aria-label="第 255 行">255</a><code>/* configCHECK_FOR_STACK_OVERFLOW 置 1 或 2: 在上下文切换时检查栈溢出; 置 0: 不检查。</code></span>
+<span class="line" id="L256"><a href="#L256" aria-label="第 256 行">256</a><code> * 为 1 时只检查任务上下文入栈时栈指针是否越界 —— 快但不太灵; 为 2 时检查任务栈末尾</code></span>
+<span class="line" id="L257"><a href="#L257" aria-label="第 257 行">257</a><code> * 预写的图案是否被覆盖 —— 较慢, 但能捕获大多数(非全部)栈溢出。置 1 或 2 时应用须</code></span>
+<span class="line" id="L258"><a href="#L258" aria-label="第 258 行">258</a><code> * 提供栈溢出回调函数。不定义则默认 0。 */</code></span>
+<span class="line" id="L259"><a href="#L259" aria-label="第 259 行">259</a><code>#define configCHECK_FOR_STACK_OVERFLOW        0   /* 【保留】先关, 跑通后再开成 2 调试栈溢出(模板 2) */</code></span>
+<span class="line" id="L260"><a href="#L260" aria-label="第 260 行">260</a><code></code></span>
+<span class="line" id="L261"><a href="#L261" aria-label="第 261 行">261</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L262"><a href="#L262" aria-label="第 262 行">262</a><code>/* 运行时统计与任务统计采集相关定义。 ***************************************/</code></span>
+<span class="line" id="L263"><a href="#L263" aria-label="第 263 行">263</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L264"><a href="#L264" aria-label="第 264 行">264</a><code></code></span>
+<span class="line" id="L265"><a href="#L265" aria-label="第 265 行">265</a><code>/* configGENERATE_RUN_TIME_STATS 置 1: 让 FreeRTOS 采集各任务占用的处理时间; 置 0:</code></span>
+<span class="line" id="L266"><a href="#L266" aria-label="第 266 行">266</a><code> * 不采集。置 1 时应用须提供一个时钟源。不定义则默认 0。 */</code></span>
+<span class="line" id="L267"><a href="#L267" aria-label="第 267 行">267</a><code>#define configGENERATE_RUN_TIME_STATS           0</code></span>
+<span class="line" id="L268"><a href="#L268" aria-label="第 268 行">268</a><code></code></span>
+<span class="line" id="L269"><a href="#L269" aria-label="第 269 行">269</a><code>/* configUSE_TRACE_FACILITY 置 1: 在任务结构体中加入供追踪与可视化工具使用的额外</code></span>
+<span class="line" id="L270"><a href="#L270" aria-label="第 270 行">270</a><code> * 成员; 置 0: 从结构体中排除这些额外信息。不定义则默认 0。 */</code></span>
+<span class="line" id="L271"><a href="#L271" aria-label="第 271 行">271</a><code>#define configUSE_TRACE_FACILITY                0</code></span>
+<span class="line" id="L272"><a href="#L272" aria-label="第 272 行">272</a><code></code></span>
+<span class="line" id="L273"><a href="#L273" aria-label="第 273 行">273</a><code>/* 置 1: 把 vTaskList() 与 vTaskGetRunTimeStats() 编入固件; 置 0: 排除这两个函数。</code></span>
+<span class="line" id="L274"><a href="#L274" aria-label="第 274 行">274</a><code> * 它们会引入对字符串格式化函数的依赖(否则本不需要), 故单独分出。不定义则默认 0。 */</code></span>
+<span class="line" id="L275"><a href="#L275" aria-label="第 275 行">275</a><code>#define configUSE_STATS_FORMATTING_FUNCTIONS    0</code></span>
+<span class="line" id="L276"><a href="#L276" aria-label="第 276 行">276</a><code></code></span>
+<span class="line" id="L277"><a href="#L277" aria-label="第 277 行">277</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L278"><a href="#L278" aria-label="第 278 行">278</a><code>/* 协程(Co-routine)相关定义。 *********************************************/</code></span>
+<span class="line" id="L279"><a href="#L279" aria-label="第 279 行">279</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L280"><a href="#L280" aria-label="第 280 行">280</a><code></code></span>
+<span class="line" id="L281"><a href="#L281" aria-label="第 281 行">281</a><code>/* configUSE_CO_ROUTINES 置 1: 把协程功能编入固件(此时 croutine.c 必须加入工程);</code></span>
+<span class="line" id="L282"><a href="#L282" aria-label="第 282 行">282</a><code> * 置 0: 从固件中排除协程功能。不定义则默认 0。 */</code></span>
+<span class="line" id="L283"><a href="#L283" aria-label="第 283 行">283</a><code>#define configUSE_CO_ROUTINES              0   /* 本工程未编译 croutine.c */</code></span>
+<span class="line" id="L284"><a href="#L284" aria-label="第 284 行">284</a><code></code></span>
+<span class="line" id="L285"><a href="#L285" aria-label="第 285 行">285</a><code>/* configMAX_CO_ROUTINE_PRIORITIES 定义可供应用协程使用的优先级档数。任意数量的</code></span>
+<span class="line" id="L286"><a href="#L286" aria-label="第 286 行">286</a><code> * 协程可共用同一优先级。不定义则默认 0。 */</code></span>
+<span class="line" id="L287"><a href="#L287" aria-label="第 287 行">287</a><code>#define configMAX_CO_ROUTINE_PRIORITIES    1</code></span>
+<span class="line" id="L288"><a href="#L288" aria-label="第 288 行">288</a><code></code></span>
+<span class="line" id="L289"><a href="#L289" aria-label="第 289 行">289</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L290"><a href="#L290" aria-label="第 290 行">290</a><code>/* 调试辅助。 ****************************************************************/</code></span>
+<span class="line" id="L291"><a href="#L291" aria-label="第 291 行">291</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L292"><a href="#L292" aria-label="第 292 行">292</a><code></code></span>
+<span class="line" id="L293"><a href="#L293" aria-label="第 293 行">293</a><code>/* configASSERT() 语义与标准 C 的 assert() 相同。既可定义为在断言失败时采取某种动作,</code></span>
+<span class="line" id="L294"><a href="#L294" aria-label="第 294 行">294</a><code> * 也可完全不定义(注释掉或删除)以彻底移除断言。可定义成任何你想要的行为, 例如断言</code></span>
+<span class="line" id="L295"><a href="#L295" aria-label="第 295 行">295</a><code> * 失败时调用一个把文件名与行号传出的函数(如 vAssertCalled(__FILE__, __LINE__)),</code></span>
+<span class="line" id="L296"><a href="#L296" aria-label="第 296 行">296</a><code> * 或者像这里一样: 关中断并原地死循环, 便于在调试器里定位触发行。 */</code></span>
+<span class="line" id="L297"><a href="#L297" aria-label="第 297 行">297</a><code></code></span>
+<span class="line" id="L298"><a href="#L298" aria-label="第 298 行">298</a><code>/* *INDENT-OFF* */</code></span>
+<span class="line" id="L299"><a href="#L299" aria-label="第 299 行">299</a><code>#define configASSERT( x )         \</code></span>
+<span class="line" id="L300"><a href="#L300" aria-label="第 300 行">300</a><code>    if( ( x ) == 0 )              \</code></span>
+<span class="line" id="L301"><a href="#L301" aria-label="第 301 行">301</a><code>    {                             \</code></span>
+<span class="line" id="L302"><a href="#L302" aria-label="第 302 行">302</a><code>        taskDISABLE_INTERRUPTS(); \</code></span>
+<span class="line" id="L303"><a href="#L303" aria-label="第 303 行">303</a><code>        for( ; ; )                \</code></span>
+<span class="line" id="L304"><a href="#L304" aria-label="第 304 行">304</a><code>        ;                         \</code></span>
+<span class="line" id="L305"><a href="#L305" aria-label="第 305 行">305</a><code>    }</code></span>
+<span class="line" id="L306"><a href="#L306" aria-label="第 306 行">306</a><code>/* *INDENT-ON* */</code></span>
+<span class="line" id="L307"><a href="#L307" aria-label="第 307 行">307</a><code></code></span>
+<span class="line" id="L308"><a href="#L308" aria-label="第 308 行">308</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L309"><a href="#L309" aria-label="第 309 行">309</a><code>/* FreeRTOS MPU 专用定义。 ***************************************************/</code></span>
+<span class="line" id="L310"><a href="#L310" aria-label="第 310 行">310</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L311"><a href="#L311" aria-label="第 311 行">311</a><code>/* 【CM3 N/A】以下 MPU 段仅 FreeRTOS Cortex-M MPU port 使用, 标准 ARMv7-M</code></span>
+<span class="line" id="L312"><a href="#L312" aria-label="第 312 行">312</a><code> * (本工程 ARM_CM3) 不使用; 保留仅为与模板一一对应。 */</code></span>
+<span class="line" id="L313"><a href="#L313" aria-label="第 313 行">313</a><code></code></span>
+<span class="line" id="L314"><a href="#L314" aria-label="第 314 行">314</a><code>/* configINCLUDE_APPLICATION_DEFINED_PRIVILEGED_FUNCTIONS 置 1: 允许应用提供运行在</code></span>
+<span class="line" id="L315"><a href="#L315" aria-label="第 315 行">315</a><code> * 特权模式下的函数。不定义则默认 0。仅 Cortex-M MPU port 使用。 */</code></span>
+<span class="line" id="L316"><a href="#L316" aria-label="第 316 行">316</a><code>#define configINCLUDE_APPLICATION_DEFINED_PRIVILEGED_FUNCTIONS    0</code></span>
+<span class="line" id="L317"><a href="#L317" aria-label="第 317 行">317</a><code></code></span>
+<span class="line" id="L318"><a href="#L318" aria-label="第 318 行">318</a><code>/* configTOTAL_MPU_REGIONS 设为目标硬件上实现的 MPU 区域数(通常 8 或 16)。不定义</code></span>
+<span class="line" id="L319"><a href="#L319" aria-label="第 319 行">319</a><code> * 则默认 8。仅 Cortex-M MPU port 使用。 */</code></span>
+<span class="line" id="L320"><a href="#L320" aria-label="第 320 行">320</a><code>#define configTOTAL_MPU_REGIONS                                   8</code></span>
+<span class="line" id="L321"><a href="#L321" aria-label="第 321 行">321</a><code></code></span>
+<span class="line" id="L322"><a href="#L322" aria-label="第 322 行">322</a><code>/* configTEX_S_C_B_FLASH 允许应用覆盖&quot;覆盖 Flash 的 MPU 区域&quot;的 TEX、S(可共享)、</code></span>
+<span class="line" id="L323"><a href="#L323" aria-label="第 323 行">323</a><code> * C(可缓存)、B(可缓冲)位默认值。不定义则默认 0x07UL(即 TEX=000, S=1, C=1,</code></span>
+<span class="line" id="L324"><a href="#L324" aria-label="第 324 行">324</a><code> * B=1)。仅 Cortex-M MPU port 使用。 */</code></span>
+<span class="line" id="L325"><a href="#L325" aria-label="第 325 行">325</a><code>#define configTEX_S_C_B_FLASH                                     0x07UL</code></span>
+<span class="line" id="L326"><a href="#L326" aria-label="第 326 行">326</a><code></code></span>
+<span class="line" id="L327"><a href="#L327" aria-label="第 327 行">327</a><code>/* configTEX_S_C_B_SRAM 允许应用覆盖&quot;覆盖 RAM 的 MPU 区域&quot;的 TEX、S、C、B 位默认值。</code></span>
+<span class="line" id="L328"><a href="#L328" aria-label="第 328 行">328</a><code> * 不定义则默认 0x07UL(TEX=000, S=1, C=1, B=1)。仅 Cortex-M MPU port 使用。 */</code></span>
+<span class="line" id="L329"><a href="#L329" aria-label="第 329 行">329</a><code>#define configTEX_S_C_B_SRAM                                      0x07UL</code></span>
+<span class="line" id="L330"><a href="#L330" aria-label="第 330 行">330</a><code></code></span>
+<span class="line" id="L331"><a href="#L331" aria-label="第 331 行">331</a><code>/* configENFORCE_SYSTEM_CALLS_FROM_KERNEL_ONLY 置 0: 阻止任何源自内核代码之外的</code></span>
+<span class="line" id="L332"><a href="#L332" aria-label="第 332 行">332</a><code> * 提权; 置 1: 允许应用任务提升特权。不定义则默认 1。仅 Cortex-M MPU port 使用。 */</code></span>
+<span class="line" id="L333"><a href="#L333" aria-label="第 333 行">333</a><code>#define configENFORCE_SYSTEM_CALLS_FROM_KERNEL_ONLY               1</code></span>
+<span class="line" id="L334"><a href="#L334" aria-label="第 334 行">334</a><code></code></span>
+<span class="line" id="L335"><a href="#L335" aria-label="第 335 行">335</a><code>/* configALLOW_UNPRIVILEGED_CRITICAL_SECTIONS 置 1: 允许非特权任务进入临界区(相当</code></span>
+<span class="line" id="L336"><a href="#L336" aria-label="第 336 行">336</a><code> * 于屏蔽中断); 置 0: 阻止非特权任务进入临界区。不定义则默认 1。仅 Cortex-M MPU</code></span>
+<span class="line" id="L337"><a href="#L337" aria-label="第 337 行">337</a><code> * port 使用。 */</code></span>
+<span class="line" id="L338"><a href="#L338" aria-label="第 338 行">338</a><code>#define configALLOW_UNPRIVILEGED_CRITICAL_SECTIONS                0</code></span>
+<span class="line" id="L339"><a href="#L339" aria-label="第 339 行">339</a><code></code></span>
+<span class="line" id="L340"><a href="#L340" aria-label="第 340 行">340</a><code>/* FreeRTOS 内核 V10.6.0 引入了新的 v2 MPU 封装(mpu_wrappers_v2.c)。</code></span>
+<span class="line" id="L341"><a href="#L341" aria-label="第 341 行">341</a><code> * configUSE_MPU_WRAPPERS_V1 置 0: 使用新的 v2 封装; 置 1: 使用旧的 v1 封装</code></span>
+<span class="line" id="L342"><a href="#L342" aria-label="第 342 行">342</a><code> * (mpu_wrappers.c)。不定义则默认 0。 */</code></span>
+<span class="line" id="L343"><a href="#L343" aria-label="第 343 行">343</a><code>#define configUSE_MPU_WRAPPERS_V1                                 0</code></span>
+<span class="line" id="L344"><a href="#L344" aria-label="第 344 行">344</a><code></code></span>
+<span class="line" id="L345"><a href="#L345" aria-label="第 345 行">345</a><code>/* 使用 v2 MPU 封装时, 将 configPROTECTED_KERNEL_OBJECT_POOL_SIZE 设为应用中内核</code></span>
+<span class="line" id="L346"><a href="#L346" aria-label="第 346 行">346</a><code> * 对象的总数(含任务、队列、信号量、互斥量、事件组、定时器、流缓冲区与消息缓冲区)。</code></span>
+<span class="line" id="L347"><a href="#L347" aria-label="第 347 行">347</a><code> * 应用在任一时刻拥有的内核对象数不得超过该值。 */</code></span>
+<span class="line" id="L348"><a href="#L348" aria-label="第 348 行">348</a><code>#define configPROTECTED_KERNEL_OBJECT_POOL_SIZE                   10</code></span>
+<span class="line" id="L349"><a href="#L349" aria-label="第 349 行">349</a><code></code></span>
+<span class="line" id="L350"><a href="#L350" aria-label="第 350 行">350</a><code>/* 使用 v2 MPU 封装时, 将 configSYSTEM_CALL_STACK_SIZE 设为系统调用栈的大小(单位</code></span>
+<span class="line" id="L351"><a href="#L351" aria-label="第 351 行">351</a><code> * &quot;字&quot;)。每个任务都静态分配一块该大小的缓冲区, 用作执行系统调用时的栈。例如该值</code></span>
+<span class="line" id="L352"><a href="#L352" aria-label="第 352 行">352</a><code> * 为 128、应用有 10 个任务时, 系统调用栈共占 128 * 10 = 1280 字。 */</code></span>
+<span class="line" id="L353"><a href="#L353" aria-label="第 353 行">353</a><code>#define configSYSTEM_CALL_STACK_SIZE                              128</code></span>
+<span class="line" id="L354"><a href="#L354" aria-label="第 354 行">354</a><code></code></span>
+<span class="line" id="L355"><a href="#L355" aria-label="第 355 行">355</a><code>/* 使用 v2 MPU 封装时, configENABLE_ACCESS_CONTROL_LIST 置 1: 启用访问控制列表(ACL)</code></span>
+<span class="line" id="L356"><a href="#L356" aria-label="第 356 行">356</a><code> * 特性。启用 ACL 后, 非特权任务默认除自身外无法访问任何内核对象, 应用须用相应 API</code></span>
+<span class="line" id="L357"><a href="#L357" aria-label="第 357 行">357</a><code> * 显式授予其所需内核对象的访问权。不定义则默认 0。 */</code></span>
+<span class="line" id="L358"><a href="#L358" aria-label="第 358 行">358</a><code>#define configENABLE_ACCESS_CONTROL_LIST                          1</code></span>
+<span class="line" id="L359"><a href="#L359" aria-label="第 359 行">359</a><code></code></span>
+<span class="line" id="L360"><a href="#L360" aria-label="第 360 行">360</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L361"><a href="#L361" aria-label="第 361 行">361</a><code>/* SMP(对称多处理)专用配置定义。 ****************************************/</code></span>
+<span class="line" id="L362"><a href="#L362" aria-label="第 362 行">362</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L363"><a href="#L363" aria-label="第 363 行">363</a><code>/* 【CM3 N/A】单核 MCU; configNUMBER_OF_CORES 未定义 → 默认 1, 以下 SMP 项不生效。</code></span>
+<span class="line" id="L364"><a href="#L364" aria-label="第 364 行">364</a><code> * 保留仅为与模板一一对应。 */</code></span>
+<span class="line" id="L365"><a href="#L365" aria-label="第 365 行">365</a><code></code></span>
+<span class="line" id="L366"><a href="#L366" aria-label="第 366 行">366</a><code>/* configNUMBER_OF_CORES 设为可用处理器核心数。不定义则默认 1。 */</code></span>
+<span class="line" id="L367"><a href="#L367" aria-label="第 367 行">367</a><code></code></span>
+<span class="line" id="L368"><a href="#L368" aria-label="第 368 行">368</a><code>/*</code></span>
+<span class="line" id="L369"><a href="#L369" aria-label="第 369 行">369</a><code> #define configNUMBER_OF_CORES                     [可用核心数]</code></span>
+<span class="line" id="L370"><a href="#L370" aria-label="第 370 行">370</a><code> */</code></span>
+<span class="line" id="L371"><a href="#L371" aria-label="第 371 行">371</a><code></code></span>
+<span class="line" id="L372"><a href="#L372" aria-label="第 372 行">372</a><code>/* 使用 SMP(即 configNUMBER_OF_CORES 大于 1)时: configRUN_MULTIPLE_PRIORITIES 置 0,</code></span>
+<span class="line" id="L373"><a href="#L373" aria-label="第 373 行">373</a><code> * 则仅当多个任务优先级不同时才允许它们同时运行, 从而维持&quot;只要有更高优先级任务可运行,</code></span>
+<span class="line" id="L374"><a href="#L374" aria-label="第 374 行">374</a><code> * 更低优先级任务就绝不运行&quot;的范式; 置 1, 则不同优先级的多个任务可同时运行 —— 于是</code></span>
+<span class="line" id="L375"><a href="#L375" aria-label="第 375 行">375</a><code> * 高、低优先级任务可能在不同核心上同时运行。 */</code></span>
+<span class="line" id="L376"><a href="#L376" aria-label="第 376 行">376</a><code>#define configRUN_MULTIPLE_PRIORITIES             0</code></span>
+<span class="line" id="L377"><a href="#L377" aria-label="第 377 行">377</a><code></code></span>
+<span class="line" id="L378"><a href="#L378" aria-label="第 378 行">378</a><code>/* 使用 SMP 时, configUSE_CORE_AFFINITY 置 1: 启用核心亲和性特性 —— 可用</code></span>
+<span class="line" id="L379"><a href="#L379" aria-label="第 379 行">379</a><code> * vTaskCoreAffinitySet / vTaskCoreAffinityGet 设置和读取任务可运行于哪些核心;</code></span>
+<span class="line" id="L380"><a href="#L380" aria-label="第 380 行">380</a><code> * 置 0: 调度器可在任意可用核心上运行任意任务。 */</code></span>
+<span class="line" id="L381"><a href="#L381" aria-label="第 381 行">381</a><code>#define configUSE_CORE_AFFINITY                   0</code></span>
+<span class="line" id="L382"><a href="#L382" aria-label="第 382 行">382</a><code></code></span>
+<span class="line" id="L383"><a href="#L383" aria-label="第 383 行">383</a><code>/* 使用 SMP 且启用核心亲和性时, configTASK_DEFAULT_CORE_AFFINITY 改变&quot;创建时未指定</code></span>
+<span class="line" id="L384"><a href="#L384" aria-label="第 384 行">384</a><code> * 亲和性掩码&quot;的任务的默认亲和性掩码。设为 1 会让这类任务运行在核 0; 设为</code></span>
+<span class="line" id="L385"><a href="#L385" aria-label="第 385 行">385</a><code> * (1 &lt;&lt; portGET_CORE_ID()) 则让其运行在当前核。不定义则默认 tskNO_AFFINITY。 */</code></span>
+<span class="line" id="L386"><a href="#L386" aria-label="第 386 行">386</a><code>#define configTASK_DEFAULT_CORE_AFFINITY          tskNO_AFFINITY</code></span>
+<span class="line" id="L387"><a href="#L387" aria-label="第 387 行">387</a><code></code></span>
+<span class="line" id="L388"><a href="#L388" aria-label="第 388 行">388</a><code>/* 使用 SMP 时, configUSE_TASK_PREEMPTION_DISABLE 置 1: 可用 vTaskPreemptionDisable /</code></span>
+<span class="line" id="L389"><a href="#L389" aria-label="第 389 行">389</a><code> * vTaskPreemptionEnable 把单个任务设为抢占式或协作式。 */</code></span>
+<span class="line" id="L390"><a href="#L390" aria-label="第 390 行">390</a><code>#define configUSE_TASK_PREEMPTION_DISABLE         0</code></span>
+<span class="line" id="L391"><a href="#L391" aria-label="第 391 行">391</a><code></code></span>
+<span class="line" id="L392"><a href="#L392" aria-label="第 392 行">392</a><code>/* 使用 SMP 时, configUSE_PASSIVE_IDLE_HOOK 置 1: 允许应用使用被动空闲任务钩子, 无需</code></span>
+<span class="line" id="L393"><a href="#L393" aria-label="第 393 行">393</a><code> * 单独任务的开销即可加入后台功能。不定义则默认 0。 */</code></span>
+<span class="line" id="L394"><a href="#L394" aria-label="第 394 行">394</a><code>#define configUSE_PASSIVE_IDLE_HOOK               0</code></span>
+<span class="line" id="L395"><a href="#L395" aria-label="第 395 行">395</a><code></code></span>
+<span class="line" id="L396"><a href="#L396" aria-label="第 396 行">396</a><code>/* 使用 SMP 时, configTIMER_SERVICE_TASK_CORE_AFFINITY 让应用设置 RTOS 守护/定时器</code></span>
+<span class="line" id="L397"><a href="#L397" aria-label="第 397 行">397</a><code> * 服务任务的核心亲和性。不定义则默认 tskNO_AFFINITY。 */</code></span>
+<span class="line" id="L398"><a href="#L398" aria-label="第 398 行">398</a><code>#define configTIMER_SERVICE_TASK_CORE_AFFINITY    tskNO_AFFINITY</code></span>
+<span class="line" id="L399"><a href="#L399" aria-label="第 399 行">399</a><code></code></span>
+<span class="line" id="L400"><a href="#L400" aria-label="第 400 行">400</a><code>/* 使用 SMP 时, configIDLE_AFFINITY 置 1: 把每个空闲任务钉在其对应核心上(空闲任务 N</code></span>
+<span class="line" id="L401"><a href="#L401" aria-label="第 401 行">401</a><code> * 只在核 N 上运行, 亲和性掩码为 1 &lt;&lt; N); 置 0: 允许调度器在任意可用核心上运行空闲</code></span>
+<span class="line" id="L402"><a href="#L402" aria-label="第 402 行">402</a><code> * 任务。不定义则默认 0。 */</code></span>
+<span class="line" id="L403"><a href="#L403" aria-label="第 403 行">403</a><code>#define configIDLE_AFFINITY                       0</code></span>
+<span class="line" id="L404"><a href="#L404" aria-label="第 404 行">404</a><code></code></span>
+<span class="line" id="L405"><a href="#L405" aria-label="第 405 行">405</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L406"><a href="#L406" aria-label="第 406 行">406</a><code>/* ARMv8-M 安全侧(secure side)port 相关定义。 **************************/</code></span>
+<span class="line" id="L407"><a href="#L407" aria-label="第 407 行">407</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L408"><a href="#L408" aria-label="第 408 行">408</a><code>/* 【CM3 N/A】ARMv8-M 专用; ARM_CM3 忽略。保留仅为与模板一一对应。</code></span>
+<span class="line" id="L409"><a href="#L409" aria-label="第 409 行">409</a><code> * (configKERNEL_PROVIDED_STATIC_MEMORY 仅在静态分配开启时才起作用, 此处静态</code></span>
+<span class="line" id="L410"><a href="#L410" aria-label="第 410 行">410</a><code> *  分配关闭, 故惰性无影响。) */</code></span>
+<span class="line" id="L411"><a href="#L411" aria-label="第 411 行">411</a><code></code></span>
+<span class="line" id="L412"><a href="#L412" aria-label="第 412 行">412</a><code>/* secureconfigMAX_SECURE_CONTEXTS 定义可调用进 ARMv8-M 芯片安全侧的最大任务数。</code></span>
+<span class="line" id="L413"><a href="#L413" aria-label="第 413 行">413</a><code> * 其他 port 不使用。 */</code></span>
+<span class="line" id="L414"><a href="#L414" aria-label="第 414 行">414</a><code>#define secureconfigMAX_SECURE_CONTEXTS        5</code></span>
+<span class="line" id="L415"><a href="#L415" aria-label="第 415 行">415</a><code></code></span>
+<span class="line" id="L416"><a href="#L416" aria-label="第 416 行">416</a><code>/* configKERNEL_PROVIDED_STATIC_MEMORY 定义由内核提供的 vApplicationGetIdleTaskMemory()</code></span>
+<span class="line" id="L417"><a href="#L417" aria-label="第 417 行">417</a><code> * 与 vApplicationGetTimerTaskMemory() 实现, 分别提供空闲任务与定时器任务所用的内存。</code></span>
+<span class="line" id="L418"><a href="#L418" aria-label="第 418 行">418</a><code> * 应用也可自行提供这两个函数的实现 —— 只需把本宏置 0 或不定义。 */</code></span>
+<span class="line" id="L419"><a href="#L419" aria-label="第 419 行">419</a><code>#define configKERNEL_PROVIDED_STATIC_MEMORY    1</code></span>
+<span class="line" id="L420"><a href="#L420" aria-label="第 420 行">420</a><code></code></span>
+<span class="line" id="L421"><a href="#L421" aria-label="第 421 行">421</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L422"><a href="#L422" aria-label="第 422 行">422</a><code>/* ARMv8-M port 专用配置定义。 *********************************************/</code></span>
+<span class="line" id="L423"><a href="#L423" aria-label="第 423 行">423</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L424"><a href="#L424" aria-label="第 424 行">424</a><code>/* 【CM3 N/A】ARMv8-M(M23/M33/M55...)专用, ARM_CM3 端口不读取这些宏。</code></span>
+<span class="line" id="L425"><a href="#L425" aria-label="第 425 行">425</a><code> * 保留仅为与模板一一对应。 */</code></span>
+<span class="line" id="L426"><a href="#L426" aria-label="第 426 行">426</a><code></code></span>
+<span class="line" id="L427"><a href="#L427" aria-label="第 427 行">427</a><code>/* 在非安全侧运行 FreeRTOS 时, configENABLE_TRUSTZONE 置 1 以启用 ARMv8-M port 的</code></span>
+<span class="line" id="L428"><a href="#L428" aria-label="第 428 行">428</a><code> * TrustZone 支持, 从而允许非安全侧的 FreeRTOS 任务调用安全侧导出的(非安全可调用)</code></span>
+<span class="line" id="L429"><a href="#L429" aria-label="第 429 行">429</a><code> * 函数。 */</code></span>
+<span class="line" id="L430"><a href="#L430" aria-label="第 430 行">430</a><code>#define configENABLE_TRUSTZONE            1</code></span>
+<span class="line" id="L431"><a href="#L431" aria-label="第 431 行">431</a><code></code></span>
+<span class="line" id="L432"><a href="#L432" aria-label="第 432 行">432</a><code>/* 若应用不想用 TrustZone, 但硬件又不支持关闭 TrustZone, 则整个应用(含 FreeRTOS</code></span>
+<span class="line" id="L433"><a href="#L433" aria-label="第 433 行">433</a><code> * 调度器)可全程运行在安全侧、绝不分支到非安全侧。为此除把 configENABLE_TRUSTZONE</code></span>
+<span class="line" id="L434"><a href="#L434" aria-label="第 434 行">434</a><code> * 置 0 外, 还要把 configRUN_FREERTOS_SECURE_ONLY 置 1。 */</code></span>
+<span class="line" id="L435"><a href="#L435" aria-label="第 435 行">435</a><code>#define configRUN_FREERTOS_SECURE_ONLY    1</code></span>
+<span class="line" id="L436"><a href="#L436" aria-label="第 436 行">436</a><code></code></span>
+<span class="line" id="L437"><a href="#L437" aria-label="第 437 行">437</a><code>/* configENABLE_MPU 置 1 以启用内存保护单元(MPU), 置 0 则保持 MPU 禁用。 */</code></span>
+<span class="line" id="L438"><a href="#L438" aria-label="第 438 行">438</a><code>#define configENABLE_MPU                  1</code></span>
+<span class="line" id="L439"><a href="#L439" aria-label="第 439 行">439</a><code></code></span>
+<span class="line" id="L440"><a href="#L440" aria-label="第 440 行">440</a><code>/* configENABLE_FPU 置 1 以启用浮点单元(FPU), 置 0 则保持 FPU 禁用。 */</code></span>
+<span class="line" id="L441"><a href="#L441" aria-label="第 441 行">441</a><code>#define configENABLE_FPU                  1</code></span>
+<span class="line" id="L442"><a href="#L442" aria-label="第 442 行">442</a><code></code></span>
+<span class="line" id="L443"><a href="#L443" aria-label="第 443 行">443</a><code>/* configENABLE_MVE 置 1 以启用 M-Profile 向量扩展(MVE)支持, 置 0 则禁用。该选项</code></span>
+<span class="line" id="L444"><a href="#L444" aria-label="第 444 行">444</a><code> * 仅适用于 Cortex-M52/M55/M85 与 STAR-MC3 port(只有这些架构才有 MVE)。对</code></span>
+<span class="line" id="L445"><a href="#L445" aria-label="第 445 行">445</a><code> * Cortex-M23/M33/M35P port 必须不定义或定义为 0。 */</code></span>
+<span class="line" id="L446"><a href="#L446" aria-label="第 446 行">446</a><code>#define configENABLE_MVE                  1</code></span>
+<span class="line" id="L447"><a href="#L447" aria-label="第 447 行">447</a><code></code></span>
+<span class="line" id="L448"><a href="#L448" aria-label="第 448 行">448</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L449"><a href="#L449" aria-label="第 449 行">449</a><code>/* ARMv7-M 与 ARMv8-M port 专用配置定义。 ********************************/</code></span>
+<span class="line" id="L450"><a href="#L450" aria-label="第 450 行">450</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L451"><a href="#L451" aria-label="第 451 行">451</a><code></code></span>
+<span class="line" id="L452"><a href="#L452" aria-label="第 452 行">452</a><code>/* configCHECK_HANDLER_INSTALLATION 置 1: 启用额外断言, 验证应用是否正确安装了</code></span>
+<span class="line" id="L453"><a href="#L453" aria-label="第 453 行">453</a><code> * FreeRTOS 中断处理函数。应用可用两种方式安装:</code></span>
+<span class="line" id="L454"><a href="#L454" aria-label="第 454 行">454</a><code> *   1. 直接路由 —— 直接把 vPortSVCHandler 与 xPortPendSVHandler 安装为 SVC 与</code></span>
+<span class="line" id="L455"><a href="#L455" aria-label="第 455 行">455</a><code> *      PendSV 中断的处理函数;</code></span>
+<span class="line" id="L456"><a href="#L456" aria-label="第 456 行">456</a><code> *   2. 间接路由 —— 为 SVC 与 PendSV 各装一个独立处理函数, 再从其中把控制权转到</code></span>
+<span class="line" id="L457"><a href="#L457" aria-label="第 457 行">457</a><code> *      vPortSVCHandler / xPortPendSVHandler。用间接路由的应用必须把本宏置 0。</code></span>
+<span class="line" id="L458"><a href="#L458" aria-label="第 458 行">458</a><code> * 不定义则默认 1。 */</code></span>
+<span class="line" id="L459"><a href="#L459" aria-label="第 459 行">459</a><code>#define configCHECK_HANDLER_INSTALLATION    1</code></span>
+<span class="line" id="L460"><a href="#L460" aria-label="第 460 行">460</a><code></code></span>
+<span class="line" id="L461"><a href="#L461" aria-label="第 461 行">461</a><code>/* ---- 【项目专属】Direct Routing: 把 port.c 里的函数名映射到向量表期望的名字 ----</code></span>
+<span class="line" id="L462"><a href="#L462" aria-label="第 462 行">462</a><code> * startup_stm32f103xb.s 的向量表用 SVC_Handler / PendSV_Handler / SysTick_Handler,</code></span>
+<span class="line" id="L463"><a href="#L463" aria-label="第 463 行">463</a><code> * 这里把内核 port 的实现直接命名成这三个 → 直接路由, 与上面的</code></span>
+<span class="line" id="L464"><a href="#L464" aria-label="第 464 行">464</a><code> * configCHECK_HANDLER_INSTALLATION 一致。(模板无此映射) */</code></span>
+<span class="line" id="L465"><a href="#L465" aria-label="第 465 行">465</a><code>#define vPortSVCHandler         SVC_Handler</code></span>
+<span class="line" id="L466"><a href="#L466" aria-label="第 466 行">466</a><code>#define xPortPendSVHandler      PendSV_Handler</code></span>
+<span class="line" id="L467"><a href="#L467" aria-label="第 467 行">467</a><code>#define xPortSysTickHandler     SysTick_Handler</code></span>
+<span class="line" id="L468"><a href="#L468" aria-label="第 468 行">468</a><code>/* ---------------------------------------------------------------------------- */</code></span>
+<span class="line" id="L469"><a href="#L469" aria-label="第 469 行">469</a><code></code></span>
+<span class="line" id="L470"><a href="#L470" aria-label="第 470 行">470</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L471"><a href="#L471" aria-label="第 471 行">471</a><code>/* 包含 / 排除功能特性的定义。 *********************************************/</code></span>
+<span class="line" id="L472"><a href="#L472" aria-label="第 472 行">472</a><code>/******************************************************************************/</code></span>
+<span class="line" id="L473"><a href="#L473" aria-label="第 473 行">473</a><code></code></span>
+<span class="line" id="L474"><a href="#L474" aria-label="第 474 行">474</a><code>/* 将下列 configUSE_* 常量置 1 即把对应特性编入固件, 置 0 则排除。 */</code></span>
+<span class="line" id="L475"><a href="#L475" aria-label="第 475 行">475</a><code>#define configUSE_TASK_NOTIFICATIONS           1</code></span>
+<span class="line" id="L476"><a href="#L476" aria-label="第 476 行">476</a><code>#define configUSE_MUTEXES                      1</code></span>
+<span class="line" id="L477"><a href="#L477" aria-label="第 477 行">477</a><code>#define configUSE_RECURSIVE_MUTEXES            1</code></span>
+<span class="line" id="L478"><a href="#L478" aria-label="第 478 行">478</a><code>#define configUSE_COUNTING_SEMAPHORES          1</code></span>
+<span class="line" id="L479"><a href="#L479" aria-label="第 479 行">479</a><code>#define configUSE_QUEUE_SETS                   0</code></span>
+<span class="line" id="L480"><a href="#L480" aria-label="第 480 行">480</a><code>#define configUSE_APPLICATION_TASK_TAG         0</code></span>
+<span class="line" id="L481"><a href="#L481" aria-label="第 481 行">481</a><code></code></span>
+<span class="line" id="L482"><a href="#L482" aria-label="第 482 行">482</a><code>/* configUSE_POSIX_ERRNO 启用任务全局变量 FreeRTOS_errno, 其中保存该任务最近一次的</code></span>
+<span class="line" id="L483"><a href="#L483" aria-label="第 483 行">483</a><code> * 错误码。 */</code></span>
+<span class="line" id="L484"><a href="#L484" aria-label="第 484 行">484</a><code>#define configUSE_POSIX_ERRNO                  0</code></span>
+<span class="line" id="L485"><a href="#L485" aria-label="第 485 行">485</a><code></code></span>
+<span class="line" id="L486"><a href="#L486" aria-label="第 486 行">486</a><code>/* 将下列 INCLUDE_* 常量置 1 即把对应 API 函数编入固件, 置 0 则排除。即便置 1, 多数</code></span>
+<span class="line" id="L487"><a href="#L487" aria-label="第 487 行">487</a><code> * 链接器也会移除未被使用的函数。 */</code></span>
+<span class="line" id="L488"><a href="#L488" aria-label="第 488 行">488</a><code>#define INCLUDE_vTaskPrioritySet               1</code></span>
+<span class="line" id="L489"><a href="#L489" aria-label="第 489 行">489</a><code>#define INCLUDE_uxTaskPriorityGet              1</code></span>
+<span class="line" id="L490"><a href="#L490" aria-label="第 490 行">490</a><code>#define INCLUDE_vTaskDelete                    1</code></span>
+<span class="line" id="L491"><a href="#L491" aria-label="第 491 行">491</a><code>#define INCLUDE_vTaskSuspend                   1</code></span>
+<span class="line" id="L492"><a href="#L492" aria-label="第 492 行">492</a><code>#define INCLUDE_xTaskDelayUntil                1   /* 原 INCLUDE_vTaskDelayUntil 的新名(等价) */</code></span>
+<span class="line" id="L493"><a href="#L493" aria-label="第 493 行">493</a><code>#define INCLUDE_vTaskDelay                     1</code></span>
+<span class="line" id="L494"><a href="#L494" aria-label="第 494 行">494</a><code>#define INCLUDE_xTaskGetSchedulerState         1</code></span>
+<span class="line" id="L495"><a href="#L495" aria-label="第 495 行">495</a><code>#define INCLUDE_xTaskGetCurrentTaskHandle      1</code></span>
+<span class="line" id="L496"><a href="#L496" aria-label="第 496 行">496</a><code>#define INCLUDE_uxTaskGetStackHighWaterMark    1   /* 【保留】查栈用量(模板 0) */</code></span>
+<span class="line" id="L497"><a href="#L497" aria-label="第 497 行">497</a><code>#define INCLUDE_xTaskGetIdleTaskHandle         0</code></span>
+<span class="line" id="L498"><a href="#L498" aria-label="第 498 行">498</a><code>#define INCLUDE_eTaskGetState                  0</code></span>
+<span class="line" id="L499"><a href="#L499" aria-label="第 499 行">499</a><code>#define INCLUDE_xTimerPendFunctionCall         0</code></span>
+<span class="line" id="L500"><a href="#L500" aria-label="第 500 行">500</a><code>#define INCLUDE_xTaskAbortDelay                0</code></span>
+<span class="line" id="L501"><a href="#L501" aria-label="第 501 行">501</a><code>#define INCLUDE_xTaskGetHandle                 0</code></span>
+<span class="line" id="L502"><a href="#L502" aria-label="第 502 行">502</a><code>#define INCLUDE_xTaskResumeFromISR             1</code></span>
+<span class="line" id="L503"><a href="#L503" aria-label="第 503 行">503</a><code></code></span>
+<span class="line" id="L504"><a href="#L504" aria-label="第 504 行">504</a><code>#endif /* FREERTOS_CONFIG_H */</code></span></div></html>

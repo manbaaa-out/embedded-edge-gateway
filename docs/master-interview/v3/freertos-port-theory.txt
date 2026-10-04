@@ -1,0 +1,32 @@
+## T117|把 FreeRTOS 移植到 Cortex-M3，源码和编译选项怎样选？|rtkernel,rtportonline,rtheapdoc,pm0056
+A: FreeRTOS 移植首先是把内核公共代码、与编译器和 CPU 匹配的 portable 层、恰好一种内存管理实现一起编进目标程序，再提供 FreeRTOSConfig.h。选择依据是 CPU 指令集、编译器 ABI 和项目实际使用的内核功能；把所有 portable 目录或多个 heap 文件一并编译会造成重复符号或错误的上下文切换实现。
+M: 内核公共层与硬件适配层|任务调度使用 tasks.c、list.c；使用队列、软件定时器、事件组、流缓冲时再加入 queue.c、timers.c、event_groups.c、stream_buffer.c。GCC 编译的 Cortex-M3 使用 portable/GCC/ARM_CM3/port.c 与同目录 portmacro.h。port 负责初始任务栈、SVC 启动首任务、PendSV 切换、SysTick 节拍和 BASEPRI 临界区；应用不应自行重写这套保存恢复流程。
+M: 头文件和目标架构|编译器需能找到内核 include、所选 port 目录和应用的 FreeRTOSConfig.h；链接时只有一个启动向量表和一组 FreeRTOS 异常入口。目标必须编译为 Cortex-M3 兼容指令与 ABI；芯片头、CMSIS 优先级位数、系统时钟和链接脚本应与真实器件一致。Cortex-M3 没有硬件 FPU，不应拿 M4F 或 ARMv8-M 的 port 来代替。
+M: 内存与版本可追溯|可按需求选择 heap_4.c，它用一块预留数组分配任务栈、TCB、队列等对象并合并相邻空闲块；静态创建则需另外打开相应配置并提供内核要求的存储。记录内核副本的准确来源、版本或提交、许可证和编译文件清单；开发分支快照的版本字符串不能当作正式发行标签。
+E: 最小编译清单怎样检查|先把 tasks.c、list.c、queue.c、匹配的 port.c、heap_4.c 和三个头文件目录接入，再只为实际开启的 timers、event groups、stream buffers 加源码。若报找不到 portmacro.h，先查移植层 include 路径；若出现多个 pvPortMalloc 或 SysTick_Handler，查是否混入两种 heap 或两套异常实现。
+F: 使用 CubeMX 的 FreeRTOS 中间件和手动移植可以混用吗？|可以复用 HAL 与 CMSIS 基础文件，但不能同时把 CubeMX 生成的另一套 FreeRTOS/CMSIS-RTOS 包装和手动接入的内核重复编译。先确定是原生 API 还是 CMSIS-RTOS 包装，再检查生成文件、入口和链接符号。
+F: 为什么编译通过仍不能证明移植成功？|编译只检查源码和符号。向量表、NVIC 分组、SysTick 时钟、任务栈余量和 ISR 的 API 调用边界要到链接检查与板上运行阶段才能验证。
+## T118|SVC、PendSV、SysTick 怎样接入向量表并启动第一个任务？|pm0056,rtportonline,rtkernel
+A: Cortex-M 移植需要把向量表中的 SVC、PendSV、SysTick 入口接到 FreeRTOS port。启动调度器时内核创建 Idle 等系统任务，port 配置节拍和异常优先级，再触发 SVC 恢复第一个任务；正常 tick 由 SysTick 推进，需要换任务时挂起 PendSV，由它完成上下文切换。
+M: 从复位到任务|复位处理函数先设置 MSP、初始化数据段、执行系统初始化并进入 main；main 初始化时钟、外设和内核对象，再调用 vTaskStartScheduler。xPortStartScheduler 配置 SysTick 与异常优先级，SVC 恢复首任务保存的 R4–R11 与 PSP。此后线程态任务使用各自的 PSP 栈，异常处理器使用 MSP；不能把链接脚本中的主栈大小当作所有任务栈大小。
+M: 向量表只应指向有效实现|启动汇编通常把 SVC_Handler、PendSV_Handler、SysTick_Handler 声明为弱默认处理函数；可以通过 FreeRTOSConfig.h 宏把 port 的三个处理函数直接命名成这些符号，也可以使用正确转发入口。CubeMX 若同时生成同名空函数，应移除或禁用，否则可能重复定义，或运行时进空函数而无法调度。重新生成代码后必须复查。
+M: 三个异常为何分工|SysTick 调用内核推进时间，并在任务需要切换时设置 PendSV 挂起位；PendSV 处于最低可配置优先级，减少在其他中断中间切换上下文的风险。SVC 用于从启动代码进入第一个任务。SVC、PendSV、SysTick 是系统异常，不等同于 DMA/USART 外设 IRQ。
+E: 有符号还要核对向量|检查 ELF 符号和 map 文件，确认三个 Handler 来自预期 port.o，再核对启动向量表引用的是同名符号。若 SVC 保持弱默认实现，第一次启动通常进 Default_Handler；若 SysTick 被空桩占用，任务延时不会按预期到期。链接成功仍应单步观察首任务和 tick。
+F: 为什么调度通常选 PendSV 而不在 SysTick 内直接保存恢复？|tick 应尽快完成计时和唤醒判断；PendSV 作为最低优先级的延后异常，可等更紧迫的 ISR 结束再完成切换。这样中断嵌套与上下文归属更清楚。
+F: 检查异常入口的断言能替代板上验证吗？|不能。它能发现部分向量接错，不能证明 SysTick 周期准确、栈未溢出或每条外设中断都遵守 FromISR 优先级限制。
+## T119|FreeRTOSConfig.h 的时钟、堆栈和中断优先级怎样计算？|rtisr,rtheapdoc,rtstack,pm0056
+A: 先从真实时钟树确定 CPU 和 SysTick 频率，再选 tick 频率；从 SRAM 预算确定堆与每个任务栈；最后按 CMSIS 实现的优先级位数计算中断阈值。任务优先级数字越大越高，Cortex-M NVIC 优先级数字越小越紧迫，两套数字不能直接比较。
+M: 时钟与任务栈单位|SysTick 与 CPU 同频时，可以不定义 configSYSTICK_CLOCK_HZ，由 port 使用 configCPU_CLOCK_HZ；普通 tick 的重装载值为 SysTick 时钟频率除以 configTICK_RATE_HZ 再减一。若 CPU 为 72 MHz、tick 为 1 kHz，则 LOAD=71999。xTaskCreate 的栈深度以 StackType_t 元素计；32 位 Cortex-M port 上 384 个元素是 1536 字节。configMINIMAL_STACK_SIZE 只直接决定 Idle 栈，其他任务需逐个指定并测高水位。
+M: 动态堆与链接内存|选择 heap_4 时，configTOTAL_HEAP_SIZE 是 FreeRTOS 堆数组的字节数，数组通常进入 .bss。任务栈、TCB、队列等动态对象从这里分配；链接脚本的 _Min_Heap_Size 和 _Min_Stack_Size 是另一层预留，不能拿来替代 RTOS 堆或任务栈预算。建任务前还要给静态数据、DMA 缓冲、主栈和中断栈留 RAM。
+M: NVIC 逻辑值与寄存器编码|若实现 4 个优先级位，逻辑值 5 应左移 8−4 位成为 0x50，最低值 15 对应 0xF0。配置全抢占位的优先级分组后，只有逻辑优先级数字大于或等于 configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY 的 ISR 可调用 FreeRTOS 的 FromISR API；数字更小的高紧迫度 ISR 不能调用。阈值不能为 0，默认优先级 0 也不能留给调用内核的 ISR。
+E: 计算一组可检查的参数|以 72 MHz、1 kHz tick、4 个优先级位和最大系统调用逻辑优先级 5 为例：configCPU_CLOCK_HZ=72000000、configTICK_RATE_HZ=1000、configPRIO_BITS=4、configMAX_SYSCALL_INTERRUPT_PRIORITY=(5<<(8−4))=0x50。若 DMA IRQ 使用 CMSIS 逻辑优先级 6，就可以在 ISR 中调用相应 FromISR API；实际硬件仍须检查 NVIC 分组与所有调用路径。
+F: 把 configTOTAL_HEAP_SIZE 调大为什么可能反而链接失败？|heap_4 的数组占用真实 SRAM；静态数据、主栈与 RTOS 堆一起超过链接脚本的 RAM 范围时，固件无法链接。调大前应看 map 文件、创建失败位置和最小剩余堆。
+F: configMAX_PRIORITIES=7 是否限制系统只能有 7 个任务？|不是。它规定任务优先级可使用 0 到 6 七档；同一档可以有多个任务。可创建任务数受 RAM、内核配置和资源占用约束。
+## T120|HAL 与 FreeRTOS 使用不同 Tick 时，怎样实现 Tickless 并验证移植？|rtlowpower,rtportonline,rtisr,rtdelay
+A: HAL 超时与 FreeRTOS 延时可以来自不同定时器。HAL 时基应在调度器启动前就可用；RTOS 的 SysTick 则在启动调度器时由 port 接管。开启 Tickless 后，要识别哪些周期中断会把 CPU 立即唤醒，睡眠前暂停它们的中断，醒后恢复；同时明确 HAL 计数是否对睡眠时间补偿。
+M: 双时基与启动顺序|HAL_Init 和时钟初始化可能调用 HAL_GetTick 处理超时，因此不能简单在调度器未启动时就把 HAL_GetTick 改为 xTaskGetTickCount。若 HAL 另用一个 1 ms 定时器，它与 RTOS tick 是两套计数，前者供驱动等待，后者供任务调度；把 HAL_Delay 的时钟源替换掉，并不会自动让 HAL_Delay 变成可调度的任务延时。
+M: Tickless 的具体边界|空闲任务预计可睡一段时间时，port 暂停正常节拍、重编程 SysTick、执行 WFI，醒后补偿 RTOS tick。另一个每 1 ms 触发的 HAL 定时器若不暂停其中断，会不断把 CPU 唤醒。若睡前只关闭 HAL 定时器的更新中断、醒后恢复，而没有补偿 HAL uwTick，则 HAL 计数在睡眠期间会落后于实际经过时间；不能把两个 tick 都当作连续墙上时钟。
+M: 分层验收|先确认编译与 ELF 中三个异常入口的符号来源，再观察首任务、任务阻塞和 tick 增长；接着验证每条调用 FromISR 的 IRQ 优先级以及队列/流缓冲唤醒；最后在实际板上检查睡眠唤醒、HAL 超时、任务栈高水位、堆余量、故障现场和长时间运行。构建或链接成功只覆盖前几层。
+E: 一个会破坏休眠的反例|RTOS SysTick 已延长到下一次 100 ms 截止期，但 HAL 的另一个 1 ms 定时器中断仍保持使能，WFI 约每毫秒就被唤醒。此时可能观察到 RTOS tick 被抑制，却没有得到预期的 CPU 连续睡眠时间。应分别看中断计数、唤醒源与 HAL Tick 的时间语义。
+F: 睡眠时暂停 HAL Tick 会不会影响 HAL 驱动超时？|会改变 HAL_GetTick 的经过时间语义。若驱动在睡眠前后依赖绝对期限，需要明确补偿或用其他连续时钟；若任务因阻塞而空闲，也应检查唤醒后超时路径是否仍满足业务要求。
+F: 纯编译测试能证明 Tickless 降功耗吗？|不能。需要在目标板上测电流或至少测进入/唤醒次数和驻留时间；WFI 能执行不等于一定达到了预期功耗。

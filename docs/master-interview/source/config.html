@@ -1,0 +1,166 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>网关 / src/gateway/core/config/Config.cpp · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>网关 / src/gateway/core/config/Config.cpp</h1><p class="meta">源码基线：2026-10-04 · SHA-256 614a5414768e3881614af85fe4df23e24fb410ac99c144a2e6a37ef90af6f6dc</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>// key=value 配置文件的解析、校验和快照发布实现。</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code>//</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>// 解析以 Config 默认值为基线，因此未出现的键沿用默认值，重复键以最后一行为准。</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code>// 语法没有引号或转义，值中首个 # 开始的内容一律视为注释。无法识别的整行或键只告警，</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code>// 但已知键的值必须完整解析且通过统一校验。启动和热加载共用同一条校验路径，区别仅在</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>// 失败策略：init() 向上抛出，reload() 捕获后保留旧快照。</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code></code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code>#include &quot;gateway/core/config/Config.h&quot;</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code>#include &quot;gateway/core/log/Logger.h&quot;</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code>#include &lt;fstream&gt;</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>#include &lt;stdexcept&gt;</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>#include &lt;atomic&gt;</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>#include &lt;cassert&gt;</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code></code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>namespace gateway {</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code></code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>std::string                   ConfigManager::path_;</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>std::shared_ptr&lt;const Config&gt; ConfigManager::current_;</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>std::shared_ptr&lt;const Config&gt; ConfigManager::startup_;</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code></code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>/**</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code> * @param s 待处理原字符串。</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code> * @return 去除两端空格、制表、回车和换行后的副本；全空白输入返回空串。</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code> */</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code>static std::string trim(const std::string&amp; s) {</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>    size_t b = s.find_first_not_of(&quot; \t\r\n&quot;); // 首个非空白字符位置。</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code>    if (b == std::string::npos) return &quot;&quot;;</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>    size_t e = s.find_last_not_of(&quot; \t\r\n&quot;); // 末个非空白字符位置。</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code>    return s.substr(b, e - b + 1);</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code>}</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code></code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>/**</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code> * @param val 已去除首尾空白的整数文本。</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code> * @param key 对应配置键，仅用于错误消息。</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code> * @return 完整转换后的 int。</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code> * @throws std::runtime_error 无数字、越界或存在尾随字符。</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code> */</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>static int toInt(const std::string&amp; val, const std::string&amp; key) {</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code>    try {</code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code>        size_t pos = 0;                  // std::stoi 停止解析后的字符偏移。</code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>        int v = std::stoi(val, &amp;pos);    // 已转换、尚待检查尾随字符的整数。</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code>        if (pos != val.size()) throw std::invalid_argument(&quot;trailing chars&quot;);</code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code>        return v;</code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code>    } catch (...) {</code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code>        throw std::runtime_error(&quot;config &#x27;&quot; + key + &quot;&#x27; invalid int value: &#x27;&quot; + val + &quot;&#x27;&quot;);</code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code>    }</code></span>
+<span class="line" id="L47"><a href="#L47" aria-label="第 47 行">47</a><code>}</code></span>
+<span class="line" id="L48"><a href="#L48" aria-label="第 48 行">48</a><code></code></span>
+<span class="line" id="L49"><a href="#L49" aria-label="第 49 行">49</a><code>Config ConfigManager::parseFile(const std::string&amp; path) {</code></span>
+<span class="line" id="L50"><a href="#L50" aria-label="第 50 行">50</a><code>    std::ifstream in(path); // 本次解析独占的输入流，函数返回时关闭。</code></span>
+<span class="line" id="L51"><a href="#L51" aria-label="第 51 行">51</a><code>    if (!in) throw std::runtime_error(&quot;cannot open config file: &quot; + path);</code></span>
+<span class="line" id="L52"><a href="#L52" aria-label="第 52 行">52</a><code></code></span>
+<span class="line" id="L53"><a href="#L53" aria-label="第 53 行">53</a><code>    Config c;          // 以结构体默认值为未配置字段的回退值。</code></span>
+<span class="line" id="L54"><a href="#L54" aria-label="第 54 行">54</a><code>    std::string line;  // 当前尚未规范化的文件行。</code></span>
+<span class="line" id="L55"><a href="#L55" aria-label="第 55 行">55</a><code>    int lineno = 0;    // 面向用户的 1-based 行号。</code></span>
+<span class="line" id="L56"><a href="#L56" aria-label="第 56 行">56</a><code>    while (std::getline(in, line)) {</code></span>
+<span class="line" id="L57"><a href="#L57" aria-label="第 57 行">57</a><code>        lineno++;</code></span>
+<span class="line" id="L58"><a href="#L58" aria-label="第 58 行">58</a><code>        std::string t = trim(line); // 去除首尾空白后的有效行。</code></span>
+<span class="line" id="L59"><a href="#L59" aria-label="第 59 行">59</a><code>        if (t.empty() || t[0] == &#x27;#&#x27;) continue;</code></span>
+<span class="line" id="L60"><a href="#L60" aria-label="第 60 行">60</a><code></code></span>
+<span class="line" id="L61"><a href="#L61" aria-label="第 61 行">61</a><code>        size_t eq = t.find(&#x27;=&#x27;); // 第一个等号分隔键和值，值中后续等号原样保留。</code></span>
+<span class="line" id="L62"><a href="#L62" aria-label="第 62 行">62</a><code>        if (eq == std::string::npos) {</code></span>
+<span class="line" id="L63"><a href="#L63" aria-label="第 63 行">63</a><code>            LOG_WARN(&quot;config line %d: no &#x27;=&#x27;, skipped: %s&quot;, lineno, t.c_str());</code></span>
+<span class="line" id="L64"><a href="#L64" aria-label="第 64 行">64</a><code>            continue;</code></span>
+<span class="line" id="L65"><a href="#L65" aria-label="第 65 行">65</a><code>        }</code></span>
+<span class="line" id="L66"><a href="#L66" aria-label="第 66 行">66</a><code>        std::string key = trim(t.substr(0, eq));     // 规范化后的配置键。</code></span>
+<span class="line" id="L67"><a href="#L67" aria-label="第 67 行">67</a><code>        std::string val = trim(t.substr(eq + 1));   // 尚未移除行尾注释的配置值。</code></span>
+<span class="line" id="L68"><a href="#L68" aria-label="第 68 行">68</a><code></code></span>
+<span class="line" id="L69"><a href="#L69" aria-label="第 69 行">69</a><code>        // 值中第一个 &#x27;#&#x27; 开始的内容视为行尾注释。</code></span>
+<span class="line" id="L70"><a href="#L70" aria-label="第 70 行">70</a><code>        size_t hash = val.find(&#x27;#&#x27;); // 行尾注释起点；路径和主机名也遵循此语法。</code></span>
+<span class="line" id="L71"><a href="#L71" aria-label="第 71 行">71</a><code>        if (hash != std::string::npos) {</code></span>
+<span class="line" id="L72"><a href="#L72" aria-label="第 72 行">72</a><code>            val = trim(val.substr(0, hash));</code></span>
+<span class="line" id="L73"><a href="#L73" aria-label="第 73 行">73</a><code>        }</code></span>
+<span class="line" id="L74"><a href="#L74" aria-label="第 74 行">74</a><code></code></span>
+<span class="line" id="L75"><a href="#L75" aria-label="第 75 行">75</a><code>        if      (key == &quot;log_level&quot;)      c.log_level      = toInt(val, key);</code></span>
+<span class="line" id="L76"><a href="#L76" aria-label="第 76 行">76</a><code>        else if (key == &quot;idle_timeout&quot;)   c.idle_timeout   = toInt(val, key);</code></span>
+<span class="line" id="L77"><a href="#L77" aria-label="第 77 行">77</a><code>        else if (key == &quot;report_n&quot;)       c.report_n       = toInt(val, key);</code></span>
+<span class="line" id="L78"><a href="#L78" aria-label="第 78 行">78</a><code>        else if (key == &quot;mqtt_keepalive&quot;) c.mqtt_keepalive = toInt(val, key);</code></span>
+<span class="line" id="L79"><a href="#L79" aria-label="第 79 行">79</a><code>        else if (key == &quot;serial_baud&quot;)    c.serial_baud    = toInt(val, key);</code></span>
+<span class="line" id="L80"><a href="#L80" aria-label="第 80 行">80</a><code>        else if (key == &quot;mqtt_port&quot;)      c.mqtt_port      = toInt(val, key);</code></span>
+<span class="line" id="L81"><a href="#L81" aria-label="第 81 行">81</a><code>        else if (key == &quot;http_port&quot;)      c.http_port      = toInt(val, key);</code></span>
+<span class="line" id="L82"><a href="#L82" aria-label="第 82 行">82</a><code>        else if (key == &quot;serial_path&quot;)    c.serial_path    = val;</code></span>
+<span class="line" id="L83"><a href="#L83" aria-label="第 83 行">83</a><code>        else if (key == &quot;mqtt_host&quot;)      c.mqtt_host      = val;</code></span>
+<span class="line" id="L84"><a href="#L84" aria-label="第 84 行">84</a><code>        else if (key == &quot;db_path&quot;)        c.db_path        = val;</code></span>
+<span class="line" id="L85"><a href="#L85" aria-label="第 85 行">85</a><code>        else</code></span>
+<span class="line" id="L86"><a href="#L86" aria-label="第 86 行">86</a><code>            LOG_WARN(&quot;config line %d: unknown key, ignored: %s&quot;, lineno, key.c_str());</code></span>
+<span class="line" id="L87"><a href="#L87" aria-label="第 87 行">87</a><code>    }</code></span>
+<span class="line" id="L88"><a href="#L88" aria-label="第 88 行">88</a><code>    return c;</code></span>
+<span class="line" id="L89"><a href="#L89" aria-label="第 89 行">89</a><code>}</code></span>
+<span class="line" id="L90"><a href="#L90" aria-label="第 90 行">90</a><code></code></span>
+<span class="line" id="L91"><a href="#L91" aria-label="第 91 行">91</a><code>bool ConfigManager::validate(const Config&amp; c) {</code></span>
+<span class="line" id="L92"><a href="#L92" aria-label="第 92 行">92</a><code>    bool ok = true; // 汇总全部字段错误，以便一次加载报告所有问题。</code></span>
+<span class="line" id="L93"><a href="#L93" aria-label="第 93 行">93</a><code>    // name 仅用于诊断，p 是待检查的 TCP 端口。</code></span>
+<span class="line" id="L94"><a href="#L94" aria-label="第 94 行">94</a><code>    auto checkPort = [&amp;](const char* name, int p) {</code></span>
+<span class="line" id="L95"><a href="#L95" aria-label="第 95 行">95</a><code>        if (p &lt; 1 || p &gt; 65535) {</code></span>
+<span class="line" id="L96"><a href="#L96" aria-label="第 96 行">96</a><code>            LOG_WARN(&quot;config %s invalid port: %d (1..65535)&quot;, name, p); ok = false;</code></span>
+<span class="line" id="L97"><a href="#L97" aria-label="第 97 行">97</a><code>        }</code></span>
+<span class="line" id="L98"><a href="#L98" aria-label="第 98 行">98</a><code>    };</code></span>
+<span class="line" id="L99"><a href="#L99" aria-label="第 99 行">99</a><code>    checkPort(&quot;mqtt_port&quot;, c.mqtt_port);</code></span>
+<span class="line" id="L100"><a href="#L100" aria-label="第 100 行">100</a><code>    checkPort(&quot;http_port&quot;, c.http_port);</code></span>
+<span class="line" id="L101"><a href="#L101" aria-label="第 101 行">101</a><code>    if (c.idle_timeout   &lt;= 0) { LOG_WARN(&quot;idle_timeout invalid: %d (&gt;0)&quot;, c.idle_timeout); ok = false; }</code></span>
+<span class="line" id="L102"><a href="#L102" aria-label="第 102 行">102</a><code>    if (c.report_n &lt;= 0 || c.report_n &gt; kMaxReportN) {</code></span>
+<span class="line" id="L103"><a href="#L103" aria-label="第 103 行">103</a><code>        LOG_WARN(&quot;report_n invalid: %d (1..%d)&quot;, c.report_n, kMaxReportN); ok = false;</code></span>
+<span class="line" id="L104"><a href="#L104" aria-label="第 104 行">104</a><code>    }</code></span>
+<span class="line" id="L105"><a href="#L105" aria-label="第 105 行">105</a><code>    if (c.mqtt_keepalive &lt;  0) { LOG_WARN(&quot;mqtt_keepalive invalid: %d (&gt;=0)&quot;, c.mqtt_keepalive); ok = false; }</code></span>
+<span class="line" id="L106"><a href="#L106" aria-label="第 106 行">106</a><code>    if (c.serial_baud    &lt;= 0) { LOG_WARN(&quot;serial_baud invalid: %d&quot;, c.serial_baud); ok = false; }</code></span>
+<span class="line" id="L107"><a href="#L107" aria-label="第 107 行">107</a><code>    // 路径和 mqtt_host 共用非空约束；name 用于生成可定位的日志。</code></span>
+<span class="line" id="L108"><a href="#L108" aria-label="第 108 行">108</a><code>    auto checkPath = [&amp;](const char* name, const std::string&amp; p) {</code></span>
+<span class="line" id="L109"><a href="#L109" aria-label="第 109 行">109</a><code>        if (p.empty()) { LOG_WARN(&quot;config %s must not be empty&quot;, name); ok = false; }</code></span>
+<span class="line" id="L110"><a href="#L110" aria-label="第 110 行">110</a><code>    };</code></span>
+<span class="line" id="L111"><a href="#L111" aria-label="第 111 行">111</a><code>    checkPath(&quot;serial_path&quot;, c.serial_path);</code></span>
+<span class="line" id="L112"><a href="#L112" aria-label="第 112 行">112</a><code>    checkPath(&quot;db_path&quot;,     c.db_path);</code></span>
+<span class="line" id="L113"><a href="#L113" aria-label="第 113 行">113</a><code>    checkPath(&quot;mqtt_host&quot;,   c.mqtt_host);</code></span>
+<span class="line" id="L114"><a href="#L114" aria-label="第 114 行">114</a><code>    return ok;</code></span>
+<span class="line" id="L115"><a href="#L115" aria-label="第 115 行">115</a><code>}</code></span>
+<span class="line" id="L116"><a href="#L116" aria-label="第 116 行">116</a><code></code></span>
+<span class="line" id="L117"><a href="#L117" aria-label="第 117 行">117</a><code>void ConfigManager::init(const std::string&amp; path) {</code></span>
+<span class="line" id="L118"><a href="#L118" aria-label="第 118 行">118</a><code>    auto cfg = std::make_shared&lt;Config&gt;(parseFile(path)); // 校验前的候选启动快照。</code></span>
+<span class="line" id="L119"><a href="#L119" aria-label="第 119 行">119</a><code></code></span>
+<span class="line" id="L120"><a href="#L120" aria-label="第 120 行">120</a><code>    // 启动配置非法时直接失败，避免以部分默认值继续启动。</code></span>
+<span class="line" id="L121"><a href="#L121" aria-label="第 121 行">121</a><code>    if (!validate(*cfg))</code></span>
+<span class="line" id="L122"><a href="#L122" aria-label="第 122 行">122</a><code>        throw std::runtime_error(&quot;config validation failed: &quot; + path +</code></span>
+<span class="line" id="L123"><a href="#L123" aria-label="第 123 行">123</a><code>                                 &quot; (具体哪一项见上面的 WARN 日志)&quot;);</code></span>
+<span class="line" id="L124"><a href="#L124" aria-label="第 124 行">124</a><code></code></span>
+<span class="line" id="L125"><a href="#L125" aria-label="第 125 行">125</a><code>    path_    = path;</code></span>
+<span class="line" id="L126"><a href="#L126" aria-label="第 126 行">126</a><code>    startup_ = std::make_shared&lt;Config&gt;(*cfg);</code></span>
+<span class="line" id="L127"><a href="#L127" aria-label="第 127 行">127</a><code>    std::atomic_store(&amp;current_, std::shared_ptr&lt;const Config&gt;(cfg));</code></span>
+<span class="line" id="L128"><a href="#L128" aria-label="第 128 行">128</a><code>}</code></span>
+<span class="line" id="L129"><a href="#L129" aria-label="第 129 行">129</a><code></code></span>
+<span class="line" id="L130"><a href="#L130" aria-label="第 130 行">130</a><code>std::shared_ptr&lt;const Config&gt; ConfigManager::current() {</code></span>
+<span class="line" id="L131"><a href="#L131" aria-label="第 131 行">131</a><code>    return std::atomic_load(&amp;current_);</code></span>
+<span class="line" id="L132"><a href="#L132" aria-label="第 132 行">132</a><code>}</code></span>
+<span class="line" id="L133"><a href="#L133" aria-label="第 133 行">133</a><code></code></span>
+<span class="line" id="L134"><a href="#L134" aria-label="第 134 行">134</a><code>ConfigManager::ReloadResult ConfigManager::reload() {</code></span>
+<span class="line" id="L135"><a href="#L135" aria-label="第 135 行">135</a><code>    ReloadResult result; // 默认表示失败且没有可应用的资源差异。</code></span>
+<span class="line" id="L136"><a href="#L136" aria-label="第 136 行">136</a><code>    try {</code></span>
+<span class="line" id="L137"><a href="#L137" aria-label="第 137 行">137</a><code>        auto fresh = std::make_shared&lt;Config&gt;(parseFile(path_)); // 尚未发布的新候选快照。</code></span>
+<span class="line" id="L138"><a href="#L138" aria-label="第 138 行">138</a><code>        if (!validate(*fresh)) return result;</code></span>
+<span class="line" id="L139"><a href="#L139" aria-label="第 139 行">139</a><code></code></span>
+<span class="line" id="L140"><a href="#L140" aria-label="第 140 行">140</a><code>        // fv 是文件候选值，sv 是启动期实际值；不可热加载字段始终恢复为 sv。</code></span>
+<span class="line" id="L141"><a href="#L141" aria-label="第 141 行">141</a><code>        auto restoreC = [](const char* name, int&amp; fv, int sv) {</code></span>
+<span class="line" id="L142"><a href="#L142" aria-label="第 142 行">142</a><code>            if (fv != sv)</code></span>
+<span class="line" id="L143"><a href="#L143" aria-label="第 143 行">143</a><code>                LOG_WARN(&quot;config &#x27;%s&#x27; needs restart (current=%d, file&#x27;s %d takes effect after restart)&quot;,</code></span>
+<span class="line" id="L144"><a href="#L144" aria-label="第 144 行">144</a><code>                         name, sv, fv);</code></span>
+<span class="line" id="L145"><a href="#L145" aria-label="第 145 行">145</a><code>            fv = sv;</code></span>
+<span class="line" id="L146"><a href="#L146" aria-label="第 146 行">146</a><code>        };</code></span>
+<span class="line" id="L147"><a href="#L147" aria-label="第 147 行">147</a><code>        restoreC(&quot;mqtt_port&quot;,    fresh-&gt;mqtt_port,    startup_-&gt;mqtt_port);</code></span>
+<span class="line" id="L148"><a href="#L148" aria-label="第 148 行">148</a><code>        restoreC(&quot;http_port&quot;,    fresh-&gt;http_port,    startup_-&gt;http_port);</code></span>
+<span class="line" id="L149"><a href="#L149" aria-label="第 149 行">149</a><code></code></span>
+<span class="line" id="L150"><a href="#L150" aria-label="第 150 行">150</a><code>        auto old = std::atomic_load(&amp;current_); // 比较期间保持旧快照存活。</code></span>
+<span class="line" id="L151"><a href="#L151" aria-label="第 151 行">151</a><code>        assert(old &amp;&amp; &quot;reload() called before init()&quot;);</code></span>
+<span class="line" id="L152"><a href="#L152" aria-label="第 152 行">152</a><code>        if (old-&gt;serial_path != fresh-&gt;serial_path ||</code></span>
+<span class="line" id="L153"><a href="#L153" aria-label="第 153 行">153</a><code>            old-&gt;serial_baud != fresh-&gt;serial_baud) result.serial_rebuild_required = true;</code></span>
+<span class="line" id="L154"><a href="#L154" aria-label="第 154 行">154</a><code>        if (old-&gt;mqtt_host      != fresh-&gt;mqtt_host ||</code></span>
+<span class="line" id="L155"><a href="#L155" aria-label="第 155 行">155</a><code>            old-&gt;mqtt_keepalive != fresh-&gt;mqtt_keepalive) result.mqtt_rebuild_required = true;</code></span>
+<span class="line" id="L156"><a href="#L156" aria-label="第 156 行">156</a><code>        if (old-&gt;db_path != fresh-&gt;db_path) result.db_swap_required = true;</code></span>
+<span class="line" id="L157"><a href="#L157" aria-label="第 157 行">157</a><code></code></span>
+<span class="line" id="L158"><a href="#L158" aria-label="第 158 行">158</a><code>        std::atomic_store(&amp;current_, std::shared_ptr&lt;const Config&gt;(fresh));</code></span>
+<span class="line" id="L159"><a href="#L159" aria-label="第 159 行">159</a><code>        result.ok = true;</code></span>
+<span class="line" id="L160"><a href="#L160" aria-label="第 160 行">160</a><code>    } catch (const std::exception&amp; e) {</code></span>
+<span class="line" id="L161"><a href="#L161" aria-label="第 161 行">161</a><code>        LOG_WARN(&quot;config reload failed, keep old config: %s&quot;, e.what());</code></span>
+<span class="line" id="L162"><a href="#L162" aria-label="第 162 行">162</a><code>    }</code></span>
+<span class="line" id="L163"><a href="#L163" aria-label="第 163 行">163</a><code>    return result;</code></span>
+<span class="line" id="L164"><a href="#L164" aria-label="第 164 行">164</a><code>}</code></span>
+<span class="line" id="L165"><a href="#L165" aria-label="第 165 行">165</a><code></code></span>
+<span class="line" id="L166"><a href="#L166" aria-label="第 166 行">166</a><code>} // namespace gateway</code></span></div></html>

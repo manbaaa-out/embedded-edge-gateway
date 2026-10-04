@@ -1,0 +1,53 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>网关 / src/gateway/app/main.cpp · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>网关 / src/gateway/app/main.cpp</h1><p class="meta">源码基线：2026-10-04 · SHA-256 229347ee5d617c18dec648e34165a20bd05180de42034b81668580af5507dd83</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>/**</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code> * @file main.cpp</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code> * @brief 建立信号和配置前提，并把进程生命周期交给 GatewayApp。</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code> *</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code> * 入口刻意不包含业务分支：先屏蔽托管信号，再初始化不可缺少的配置，最后创建应用</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code> * 组合根。这个顺序保证随后创建的日志、MQTT、数据库和 HTTP 线程继承信号掩码。</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code> */</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code></code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code>#include &quot;gateway/core/log/Logger.h&quot;</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code>#include &quot;gateway/core/config/Config.h&quot;</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>#include &quot;gateway/app/GatewayApp.h&quot;</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code></code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>#include &lt;exception&gt;</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code></code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>/**</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code> * @brief 网关进程入口。</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code> * @param argc 命令行参数数量；大于 1 时读取自定义配置路径。</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code> * @param argv 参数数组；argv[1] 可指定配置文件，其他参数当前忽略。</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code> * @return 0 表示正常停机，1 表示配置、启动资源或核心事件源失败。</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code> */</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>int main(int argc, char* argv[]) {</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>    // conf_path 指向进程参数存储或字符串常量，生命周期覆盖整个 main()。</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>    const char* conf_path = (argc &gt; 1) ? argv[1] : &quot;/etc/gateway.conf&quot;;</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code></code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code>    // 屏蔽失败不会阻止采集启动，但 signalfd 热加载和优雅退出将不可依赖。</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>    (void) gateway::GatewayApp::blockManagedSignals();</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code></code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>    try {</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code>        gateway::ConfigManager::init(conf_path);</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code>    } catch (const std::exception&amp; e) {</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>        // e 保存配置文件打开、解析或校验失败的具体原因。</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>        LOG_ERROR(&quot;config init failed: %s&quot;, e.what());</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code>        return 1;</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code>    }</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code></code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code>    // cfg 是启动配置的不可变共享快照，用于在首次业务日志前设置过滤级别。</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code>    auto cfg = gateway::ConfigManager::current();</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>    gateway::Logger::setLevel(static_cast&lt;gateway::LogLevel&gt;(cfg-&gt;log_level));</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code>    LOG_INFO(&quot;gateway starting, config from %s&quot;, conf_path);</code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code></code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>    try {</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code>        // app 是所有运行期资源的组合根；其块作用域明确限定完整析构发生在 main 返回前。</code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code>        gateway::GatewayApp app;</code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code></code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code>        // rc 是主事件循环给出的进程退出码，先保存以便 app 在 return 前完成析构。</code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code>        const int rc = app.run();</code></span>
+<span class="line" id="L47"><a href="#L47" aria-label="第 47 行">47</a><code>        return rc;</code></span>
+<span class="line" id="L48"><a href="#L48" aria-label="第 48 行">48</a><code>    } catch (const std::exception&amp; e) {</code></span>
+<span class="line" id="L49"><a href="#L49" aria-label="第 49 行">49</a><code>        // e 汇总启动资源或主事件循环抛出的致命异常。</code></span>
+<span class="line" id="L50"><a href="#L50" aria-label="第 50 行">50</a><code>        LOG_ERROR(&quot;gateway fatal: %s&quot;, e.what());</code></span>
+<span class="line" id="L51"><a href="#L51" aria-label="第 51 行">51</a><code>        return 1;</code></span>
+<span class="line" id="L52"><a href="#L52" aria-label="第 52 行">52</a><code>    }</code></span>
+<span class="line" id="L53"><a href="#L53" aria-label="第 53 行">53</a><code>}</code></span></div></html>

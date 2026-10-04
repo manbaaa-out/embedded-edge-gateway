@@ -1,0 +1,18 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>节点 / BSP/bh1750.h · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>节点 / BSP/bh1750.h</h1><p class="meta">源码基线：2026-10-04 · SHA-256 258b30526508c1cf4c94f03810a2c4a8148f166282e8d8b1bcf3474ae711de89</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>#ifndef __BH1750_H__</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code>#define __BH1750_H__</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code></code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code>#include &quot;i2c.h&quot;   // 需要用到 hi2c1 句柄和 HAL I2C 函数</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code></code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>/* ---- BH1750 I2C 地址 ---- */</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code>// 7位地址 0x23(ADDR脚接地/悬空),左移1位 = 0x46,供 HAL 使用</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code>#define BH1750_ADDR   (0x23 &lt;&lt; 1)</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code></code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code>/* ---- BH1750 指令码 ---- */</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>#define BH1750_POWER_ON      0x01   // 通电</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>#define BH1750_RESET         0x07   // 复位数据寄存器</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>#define BH1750_CONT_HIGH_RES 0x10   // 连续高分辨率模式(1 lx, 约120ms)</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code></code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>void  BH1750_Init(void);</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code>float BH1750_ReadLux(void);</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code></code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>#endif /* __BH1750_H__ */</code></span></div></html>

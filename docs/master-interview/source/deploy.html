@@ -1,0 +1,38 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>网关 / deploy/gateway.service.in · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>网关 / deploy/gateway.service.in</h1><p class="meta">源码基线：2026-10-04 · SHA-256 fedca8a64c2f59f45a41e76d1ac17ed483f86e078bb80ffa7132a0686e5d6456</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>[Unit]</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code># 元数据和启动顺序：network-online 只保证网络配置完成，连接失败仍由进程重试策略处理。</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>Description=Embedded Edge Gateway</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code>Documentation=https://github.com/manbaaa-out/embedded-edge-gateway</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code>After=network-online.target</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>Wants=network-online.target</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code></code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code>[Service]</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code># 前台进程由 systemd 直接跟踪；两个 @...@ 路径在 CMake 配置阶段展开。</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code>Type=simple</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/gateway @GATEWAY_CONFIG_FILE@</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code># reload 只向主进程发送 SIGHUP；配置是否可热改由 ConfigManager 的字段分类决定。</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>ExecReload=/bin/kill -HUP $MAINPID</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code># 非零退出时等待三秒重启，正常停止和配置热加载不触发重启。</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>Restart=on-failure</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code>RestartSec=3</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code></code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code># DynamicUser 为每次服务生命周期分配低权限身份；SupplementaryGroups 仅补充串口权限。</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code># StateDirectory 创建并授权 /var/lib/gateway，0750 阻止无关本地用户读取传感数据。</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>DynamicUser=yes</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>SupplementaryGroups=dialout</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>StateDirectory=gateway</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>StateDirectoryMode=0750</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code></code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code># stdout/stderr 统一进入 journald，并用固定标识支持 `journalctl -t gateway` 查询。</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>StandardOutput=journal</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code>StandardError=journal</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>SyslogIdentifier=gateway</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code></code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code># 禁止新增权限，将系统树设为只读，隐藏用户目录，并分配服务私有 /tmp。</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>NoNewPrivileges=true</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>ProtectSystem=strict</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code>ProtectHome=true</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code>PrivateTmp=true</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code></code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code>[Install]</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code># enable 后随常规多用户启动目标拉起服务。</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>WantedBy=multi-user.target</code></span></div></html>

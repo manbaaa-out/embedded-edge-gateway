@@ -1,0 +1,39 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>节点 / cmake/freertos.cmake · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>节点 / cmake/freertos.cmake</h1><p class="meta">源码基线：2026-10-04 · SHA-256 85876e6a7a83809fdd960b1098c70ec9c9b00a2a0256bb7a8e75c7f4a6139776</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code># ============================================================</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code># FreeRTOS Kernel 接入 (手动移植, GCC/ARM_CM3, heap_4)</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code># 内核已内嵌进工程 (ST 官方 Middlewares/Third_Party 布局),</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code># 只保留本工程实际编译的 33 个文件。来源/版本/裁剪范围见</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code># Middlewares/Third_Party/FreeRTOS-Kernel/VERSION.txt</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code># ============================================================</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code></code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code>set(FREERTOS_DIR ${CMAKE_SOURCE_DIR}/Middlewares/Third_Party/FreeRTOS-Kernel)</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code></code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code># 启动前先确认路径真的存在, 路径错了立刻在 configure 阶段报错,</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code># 而不是拖到编译期才爆一堆找不到头文件 (治&quot;潜伏坑&quot;)</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>if(NOT EXISTS ${FREERTOS_DIR}/tasks.c)</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>    message(FATAL_ERROR &quot;FreeRTOS not found at ${FREERTOS_DIR} -- 检查内核目录名/位置&quot;)</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code>endif()</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code></code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code># 内核核心源码 + GCC port + heap_4</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>target_sources(${CMAKE_PROJECT_NAME} PRIVATE</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>    ${FREERTOS_DIR}/tasks.c</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>    ${FREERTOS_DIR}/list.c</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>    ${FREERTOS_DIR}/queue.c</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>    ${FREERTOS_DIR}/timers.c</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>    ${FREERTOS_DIR}/event_groups.c</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>    ${FREERTOS_DIR}/stream_buffer.c</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code>    ${FREERTOS_DIR}/portable/GCC/ARM_CM3/port.c</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code>    ${FREERTOS_DIR}/portable/MemMang/heap_4.c</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>)</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code></code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code># 头文件路径: API 头 + portmacro.h + FreeRTOSConfig.h(放在 Core/Inc)</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code># 收进 INTERFACE 库, 让 BSP/App 各层也能复用同一套 include, 不必各自重复写。</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code>add_library(freertos_if INTERFACE)</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>target_include_directories(freertos_if INTERFACE</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>    ${FREERTOS_DIR}/include</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code>    ${FREERTOS_DIR}/portable/GCC/ARM_CM3</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code>    ${CMAKE_SOURCE_DIR}/Core/Inc</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code>)</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code></code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code># 注意: 对可执行文件必须用 plain 签名 —— cmake/stm32cubemx/CMakeLists.txt 已</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code># 用 plain 调用过 target_link_libraries, 同一 target 不能混用两种签名。</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code>target_link_libraries(${CMAKE_PROJECT_NAME} freertos_if)</code></span></div></html>

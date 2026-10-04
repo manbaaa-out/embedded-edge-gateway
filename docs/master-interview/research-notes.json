@@ -1,0 +1,365 @@
+{
+  "revision": 5,
+  "checked_period": "2026-09-20 / 2026-09-21 / 2026-09-24 / 2026-10-04",
+  "method": "技术结论采用原始资料交叉核对；原理自行组织和推导。此前基础资料保留原读取日期，访问局限在对应条目标明。项目事实另外核对双端源码，不由上游文档推定。",
+  "checks": [
+    {
+      "topic": "C++ 生命周期与共享所有权",
+      "refs": [
+        "cppguide",
+        "cppmemory",
+        "cppmove",
+        "cppvector"
+      ],
+      "location": "RAII/构造失败；shared_ptr 原子访问；vector.modifiers",
+      "finding": "区分对象寿命、指针变量同步和被指数据同步；std::move 是转换，扩容失效与异常保证按具体操作解释。"
+    },
+    {
+      "topic": "语言优化与 volatile",
+      "refs": [
+        "volatile",
+        "cppatomics",
+        "cstandard"
+      ],
+      "location": "GCC Volatiles；C++ atomics.order；C 对象表示与整数规则",
+      "finding": "volatile 不提供线程同步；发布普通数据需要满足同步关系。补充了 release/acquire 一次性发布示例和溢出反例。"
+    },
+    {
+      "topic": "条件变量与 futex",
+      "refs": [
+        "condvar",
+        "futex",
+        "mutex"
+      ],
+      "location": "pthread_cond_wait 的原子解锁/等待；futex 的等待/唤醒基础",
+      "finding": "谓词必须在同一同步协议下检查与修改；通知不保存业务条件，futex 也不是可直接替代完整互斥量的全部机制。"
+    },
+    {
+      "topic": "epoll 公平性与 ET",
+      "refs": [
+        "epoll",
+        "read",
+        "write"
+      ],
+      "location": "epoll(7) Questions and answers、Possible pitfalls",
+      "finding": "ET 读到 EAGAIN 是常规策略；若限制单轮工作量，必须另外保留就绪任务，避免既饥饿又漏后续处理。"
+    },
+    {
+      "topic": "fd、信号与合并通知",
+      "refs": [
+        "eventfd",
+        "signalfd"
+      ],
+      "location": "eventfd 计数语义；signalfd 的线程信号掩码",
+      "finding": "eventfd 用于唤醒，业务队列才保存命令；创建线程前屏蔽指定信号，使掩码继承到工作线程。"
+    },
+    {
+      "topic": "超时的时钟与观测延迟",
+      "refs": [
+        "timerfd",
+        "tcprto"
+      ],
+      "location": "timerfd CLOCK_MONOTONIC/BOOTTIME；RFC 6298 §2、§3、§5",
+      "finding": "分开系统休眠计时、RTO、整体截止时间与回调实际执行；重传样本存在歧义，TCP 的数值规则不机械套用自定义协议。"
+    },
+    {
+      "topic": "SR 窗口与循环序号",
+      "refs": [
+        "arq",
+        "arqsr",
+        "rfc1982"
+      ],
+      "location": "MIT 第 20 章；16.36 Lecture 18 SRP Rules；RFC 1982",
+      "finding": "给出 M=8、W=5 的旧帧歧义推演，并解释 2W≤M 的条件；会话内不复用是另一项约束。"
+    },
+    {
+      "topic": "确认、执行与幂等",
+      "refs": [
+        "mqttspec",
+        "httpsem",
+        "arq"
+      ],
+      "location": "MQTT 3.1.1 §4.3；HTTP §9.2.2；ARQ 交付",
+      "finding": "协议 ACK、业务执行和结果缓存回收不同；幂等约束预期效果，不承诺所有响应相同。"
+    },
+    {
+      "topic": "TCP 的字节流与关闭",
+      "refs": [
+        "tcp",
+        "tcpcc"
+      ],
+      "location": "RFC 9293 的序号、状态、TIME-WAIT；拥塞控制规范",
+      "finding": "TCP 不保留应用消息边界；四次挥手是常见交互而非固定报文数，TIME_WAIT 与连接代际及最后 ACK 有关。"
+    },
+    {
+      "topic": "MQTT 会话与 QoS",
+      "refs": [
+        "mqttspec",
+        "mosquitto"
+      ],
+      "location": "OASIS MQTT 3.1.1 §3.1.2、§3.3、§4.3",
+      "finding": "QoS 的交付语义作用于协议链路；Clean Session、Retain 与应用业务去重分别说明，不承诺外部副作用恰好一次。"
+    },
+    {
+      "topic": "HTTP 请求定界",
+      "refs": [
+        "http11",
+        "httpsem"
+      ],
+      "location": "RFC 9112 §6、§9；RFC 9110",
+      "finding": "处理长度、传输编码、持续连接和错误边界；受限服务应明确不支持的特性，不能把一次读取视为整条请求。"
+    },
+    {
+      "topic": "SQLite 并发边界",
+      "refs": [
+        "sqlitethread",
+        "sqlitewal"
+      ],
+      "location": "SQLite threading modes 与 WAL concurrency/checkpoint",
+      "finding": "WAL 仍是单写者；连接内部安全不等于跨多个 API 的业务事务自动隔离，长读事务会影响检查点。"
+    },
+    {
+      "topic": "SQLite 持久性",
+      "refs": [
+        "sqlitepragma",
+        "sqlitetrans"
+      ],
+      "location": "PRAGMA synchronous 的 WAL/NORMAL；transaction 的失败语义",
+      "finding": "NORMAL 可在掉电时回退最近提交，不能等同每次提交物理持久；应用封装必须检查阶段错误。"
+    },
+    {
+      "topic": "索引与绑定",
+      "refs": [
+        "sqlitequery",
+        "sqlitebind"
+      ],
+      "location": "Query Planning 多列索引；sqlite3_bind 生命周期",
+      "finding": "索引服务访问路径，绑定服务参数解释及寿命；空结果与查询失败需要独立表示。"
+    },
+    {
+      "topic": "Cortex-M3 异常帧",
+      "refs": [
+        "pm0056",
+        "cmsisreg"
+      ],
+      "location": "PM0056 Rev 7 异常进入/返回与栈；CMSIS MSP/PSP",
+      "finding": "基本帧为 8 字，另可能有对齐填充；中断执行栈、被打断线程的入栈位置与 EXC_RETURN 分开解释。"
+    },
+    {
+      "topic": "NVIC 与 BASEPRI",
+      "refs": [
+        "pm0056",
+        "cmsisnvic",
+        "rtisr"
+      ],
+      "location": "优先级寄存器、分组、FreeRTOS 中断阈值",
+      "finding": "区分 CMSIS 逻辑值和左移编码；BASEPRI 不屏蔽所有中断，能够越过内核保护的 ISR 不得调用相关内核 API。"
+    },
+    {
+      "topic": "STM32 时钟与寄存器",
+      "refs": [
+        "rm0008",
+        "stm32ds",
+        "pm0056"
+      ],
+      "location": "RM0008 RCC、TIM、USART、DMA、IWDG；本地 HAL",
+      "finding": "定时器倍频仅用于适用的时钟树；UART 线路完成、DMA 传输完成与软件回调是不同里程碑。RM0008 大文件访问限制时同时对照本地寄存器与 HAL 实现。"
+    },
+    {
+      "topic": "I²C 电气约束",
+      "refs": [
+        "i2cspec"
+      ],
+      "location": "NXP UM10204 Rev 7 §7 上拉设计、bus clear",
+      "finding": "Rp 上限由上升时间和电容约束，下限由灌电流约束；九个时钟针对部分 SDA 卡低状态，不保证 SCL 卡低时恢复。"
+    },
+    {
+      "topic": "BH1750 模式与转换",
+      "refs": [
+        "bh1750"
+      ],
+      "location": "ROHM Rev.B 电气表、指令表、I²C 测量示例",
+      "finding": "默认高分辨率模式典型 120 ms、最大 180 ms，默认结果系数 1.2；地址位表示与 HAL 参数格式分开解释。"
+    },
+    {
+      "topic": "DHT11 的版本差异",
+      "refs": [
+        "dht11"
+      ],
+      "location": "V1.3_20170331 表 3、§6、§7、表 4",
+      "finding": "读取间隔大于 2 s；温度小数/符号与湿度小数规则不能泛化到所有名为 DHT11 的资料。应用允许更短间隔是当前待改进点。"
+    },
+    {
+      "topic": "DMA 缓冲所有权",
+      "refs": [
+        "dmaapp",
+        "rm0008",
+        "rtstreamonline"
+      ],
+      "location": "AN2548 的 DMA 原理；UART HAL；StreamBuffer 返回值",
+      "finding": "循环 DMA 不等待消费者归还内存；IDLE 是进度事件，环形指针差不足以识别任意多次绕圈。AN2548 本轮可检索，全文抓取受限。"
+    },
+    {
+      "topic": "FreeRTOS 任务调度",
+      "refs": [
+        "rtbook4",
+        "rtportonline"
+      ],
+      "location": "官方内核书任务章；ARM_CM3 的 SVC/PendSV/SysTick",
+      "finding": "任务就绪不等于已运行；SysTick 请求切换、PendSV 执行保存恢复；并非每 Tick 都切换。"
+    },
+    {
+      "topic": "FreeRTOS 队列与流缓冲",
+      "refs": [
+        "rtbook5",
+        "rtqueueapi",
+        "rtstreamonline"
+      ],
+      "location": "队列复制和等待；流缓冲单写/单读与触发水位",
+      "finding": "按值队列和指针队列有不同寿命责任；StreamBuffer 不保留消息边界，触发水位不等于帧长，ISR 发送必须处理实际写入量。"
+    },
+    {
+      "topic": "FromISR 与唤醒",
+      "refs": [
+        "rtbook7",
+        "rtisr",
+        "rtportonline"
+      ],
+      "location": "官方内核书 Interrupt Management；移植层屏蔽与 yield",
+      "finding": "普通 API 的等待时间设零不能自动变为 ISR API；woken 应累计，最后请求切换。"
+    },
+    {
+      "topic": "互斥量优先级继承",
+      "refs": [
+        "rtbook8",
+        "rtmutex"
+      ],
+      "location": "官方资源管理章；basic priority inheritance 文档",
+      "finding": "继承减少无关中优先级任务干扰，不缩短硬件转换；多锁和超时路径取决于简化实现，不能宣称完整任意依赖图继承。"
+    },
+    {
+      "topic": "任务通知、定时器和事件组",
+      "refs": [
+        "rtbook6",
+        "rtbook9",
+        "rtbook10",
+        "rttimerdoc"
+      ],
+      "location": "官方内核书；EventGroupSetBitsFromISR 的延后处理",
+      "finding": "定时器回调由服务任务串行执行；事件位合并而不计数，ISR 事件置位可能依赖定时器命令队列。具体节点行为另核对内嵌源码。"
+    },
+    {
+      "topic": "堆、栈与内存预算",
+      "refs": [
+        "rtbook3",
+        "rtstack",
+        "rtheapdoc"
+      ],
+      "location": "heap_1 至 heap_5；任务创建参数与栈高水位",
+      "finding": "栈深度按元素而非字节，任务 PSP 与中断 MSP 分开；历史高水位不能证明未执行路径安全。"
+    },
+    {
+      "topic": "Tickless 与时基",
+      "refs": [
+        "rtlowpower",
+        "rtportonline",
+        "pm0056"
+      ],
+      "location": "vPortSuppressTicksAndSleep；SysTick 24 位",
+      "finding": "入睡前重新确认、按计数补 Tick；HAL 时间是否补偿是独立设计，Sleep/Stop/Standby 不可混称。"
+    },
+    {
+      "topic": "看门狗与复位",
+      "refs": [
+        "rm0008",
+        "stm32ds"
+      ],
+      "location": "IWDG、WWDG、复位标志；当前初始化源码",
+      "finding": "按 LSI 频率范围估算 IWDG；心跳代表检查点，不自动证明驱动或业务前进。区分调试冻结与独立运行。"
+    },
+    {
+      "topic": "CAN、SPI、ADC 与 OTA",
+      "refs": [
+        "canintro",
+        "canarb",
+        "adcapp",
+        "rm0008",
+        "mcuboot"
+      ],
+      "location": "经典 CAN、ST ADC 精度笔记、SPI 寄存器、MCUboot 设计",
+      "finding": "作为通用八股覆盖，未虚构节点已实现这些应用功能；ADC 采样建立时间与分辨率不同，OTA 要处理掉电与试运行确认。"
+    },
+    {
+      "topic": "systemd 生命周期",
+      "refs": [
+        "systemd",
+        "systemdexec"
+      ],
+      "location": "官方 systemd.service.xml 的 Restart；运行目录/身份",
+      "finding": "on-failure 不凭空检测卡死；网络启动顺序不等于 Broker 已就绪。权限应按实际设备和目标环境核实。"
+    },
+    {
+      "topic": "队列与平均关系",
+      "refs": [
+        "little",
+        "condvar",
+        "rtqueueapi"
+      ],
+      "location": "MIT 2026 排队模型 Stationary analysis / Little’s law",
+      "finding": "Little 定律描述稳定平均关系，容量还需最坏突发与停顿；有限内存不能接纳任意持续超载。"
+    },
+    {
+      "topic": "固定优先级响应时间",
+      "refs": [
+        "rta",
+        "rtbook4",
+        "rtbook8"
+      ],
+      "location": "York 2009 论文 §2.2.2，式 2.3–2.5",
+      "finding": "迭代上界需要明确单核、优先级、周期/间隔、截止期与阻塞假设；持锁自挂起不能未经建模直接当普通 CPU 计算代入。"
+    },
+    {
+      "topic": "可观测性与测试层次",
+      "refs": [
+        "gdb",
+        "strace",
+        "perf",
+        "cmakedoc",
+        "sanitizers"
+      ],
+      "location": "官方工具手册；协议和驱动边界的本地分析",
+      "finding": "工具用于获得可重复证据；文档验证、主机逻辑测试、构建和上板时序是不同层次，不虚构本次性能结果。"
+    },
+    {
+      "topic": "FreeRTOS 手动移植到 Cortex-M3",
+      "refs": [
+        "rtisr",
+        "rtportonline",
+        "rtheapdoc",
+        "pm0056"
+      ],
+      "location": "官方 Cortex-M 中断优先级说明、ARM_CM3 port.c、STM32F103 启动向量表；本地 cmake/freertos.cmake、FreeRTOSConfig.h、TIM4 HAL 时基及 app_start",
+      "finding": "GCC/ARM_CM3 port、heap_4、SVC/PendSV/SysTick 入口、4 位 NVIC 优先级换算与 72 MHz/1 kHz 时基均按当前工程源码核对；构建与符号检查不能代替板上调度、Tickless 睡眠或功耗验证。"
+    },
+    {
+      "topic": "多事件循环与共享业务状态所有者",
+      "refs": [
+        "asioimpl",
+        "asiorun",
+        "eventfd"
+      ],
+      "location": "Asio implementation / io_context::run；GatewayApp 与 GatewayCore 源码快照",
+      "finding": "区分单进程、I/O 循环数量和业务线程数量；多个通信循环共用一个业务线程属于多循环多线程布局。Asio 完成接口与 Linux 就绪后端分层描述。队列负责数据与顺序，eventfd 或 post 只承担调度通知。"
+    },
+    {
+      "topic": "Boost.Beast HTTP 与异步结果寿命",
+      "refs": [
+        "beastasync",
+        "http11",
+        "asiorun"
+      ],
+      "location": "官方异步服务示例 listener/session；HTTP/1.1 消息定界；HttpServer 源码快照",
+      "finding": "采用第三方 HTTP 解析与异步收发；应用仍负责资源上限、路由、数据库任务与停机。业务不能直接写 socket；完成回调投递回连接执行器，并在异步写期间保持响应存活。"
+    }
+  ]
+}

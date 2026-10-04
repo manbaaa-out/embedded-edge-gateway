@@ -1,0 +1,87 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>网关 / src/gateway/cloud/CommandTranslator.cpp · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>网关 / src/gateway/cloud/CommandTranslator.cpp</h1><p class="meta">源码基线：2026-10-04 · SHA-256 2951ba05887b69c5db3cbaf5e4f2ff99c3246e6365a787a19ca5be9431c77ce2</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>/** @file 下行命令的无状态翻译与参数校验实现。 */</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code></code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>#include &quot;gateway/cloud/CommandTranslator.h&quot;</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code></code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code>#include &lt;cstdlib&gt;</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code></code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code>namespace gateway {</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code></code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code>namespace {</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code></code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>/**</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code> * 构造失败结果。</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code> * @param why 拒绝原因。</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code> * @return ok=false 且带错误文本的结果。</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code> */</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code>TranslateResult fail(std::string why) {</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>    TranslateResult r;  // 默认 ok=false，只填充错误说明。</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>    r.error = std::move(why);</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>    return r;</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>}</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code></code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>/**</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code> * 构造成功结果。</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code> * @param type 设备协议命令类型。</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code> * @param arg 不含序列号的参数字节。</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code> * @return ok=true 且带完整 DownCmd 的结果。</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code> */</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>TranslateResult ok(uint8_t type, std::vector&lt;uint8_t&gt; arg = {}) {</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code>    TranslateResult r;  // 成功分支同时设置状态和完整命令。</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code>    r.ok  = true;</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>    r.cmd = DownCmd{type, std::move(arg)};</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>    return r;</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code>}</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code></code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code>/**</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code> * 严格解析十进制整数。消息两端可带空白，有效内容不得带非数字后缀。</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code> *</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code> * @param raw MQTT payload 原文。</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code> * @param out 解析成功后写入的整数。</code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code> * @return 是否完整解析出一个整数。</code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code> */</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code>bool parseStrictInt(const std::string&amp; raw, long&amp; out) {</code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code>    const auto begin = raw.find_first_not_of(&quot; \t\r\n&quot;);  // 有效内容起点。</code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code>    if (begin == std::string::npos) return false;</code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code>    const auto end_pos = raw.find_last_not_of(&quot; \t\r\n&quot;);  // 有效内容终点。</code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code>    const std::string s = raw.substr(begin, end_pos - begin + 1);  // 去掉两端空白。</code></span>
+<span class="line" id="L47"><a href="#L47" aria-label="第 47 行">47</a><code></code></span>
+<span class="line" id="L48"><a href="#L48" aria-label="第 48 行">48</a><code>    char*      end = nullptr;  // strtol 停止解析的位置。</code></span>
+<span class="line" id="L49"><a href="#L49" aria-label="第 49 行">49</a><code>    const long v   = std::strtol(s.c_str(), &amp;end, 10);  // 待校验的解析值。</code></span>
+<span class="line" id="L50"><a href="#L50" aria-label="第 50 行">50</a><code>    if (end != s.c_str() + s.size()) return false;</code></span>
+<span class="line" id="L51"><a href="#L51" aria-label="第 51 行">51</a><code>    out = v;</code></span>
+<span class="line" id="L52"><a href="#L52" aria-label="第 52 行">52</a><code>    return true;</code></span>
+<span class="line" id="L53"><a href="#L53" aria-label="第 53 行">53</a><code>}</code></span>
+<span class="line" id="L54"><a href="#L54" aria-label="第 54 行">54</a><code></code></span>
+<span class="line" id="L55"><a href="#L55" aria-label="第 55 行">55</a><code>}  // namespace</code></span>
+<span class="line" id="L56"><a href="#L56" aria-label="第 56 行">56</a><code></code></span>
+<span class="line" id="L57"><a href="#L57" aria-label="第 57 行">57</a><code>TranslateResult translateCommand(const std::string&amp; topic, const std::string&amp; payload) {</code></span>
+<span class="line" id="L58"><a href="#L58" aria-label="第 58 行">58</a><code>    std::string      name = topic;  // 最终用于分派的命令名。</code></span>
+<span class="line" id="L59"><a href="#L59" aria-label="第 59 行">59</a><code>    const std::size_t pos = topic.find_last_of(&#x27;/&#x27;);  // 主题最后一级的分隔位置。</code></span>
+<span class="line" id="L60"><a href="#L60" aria-label="第 60 行">60</a><code>    if (pos != std::string::npos) name = topic.substr(pos + 1);</code></span>
+<span class="line" id="L61"><a href="#L61" aria-label="第 61 行">61</a><code></code></span>
+<span class="line" id="L62"><a href="#L62" aria-label="第 62 行">62</a><code>    if (name == &quot;query_light&quot;) {</code></span>
+<span class="line" id="L63"><a href="#L63" aria-label="第 63 行">63</a><code>        return ok(EDGE_TYPE_QUERY_LIGHT);</code></span>
+<span class="line" id="L64"><a href="#L64" aria-label="第 64 行">64</a><code>    }</code></span>
+<span class="line" id="L65"><a href="#L65" aria-label="第 65 行">65</a><code>    if (name == &quot;query_th&quot;) {</code></span>
+<span class="line" id="L66"><a href="#L66" aria-label="第 66 行">66</a><code>        return ok(EDGE_TYPE_QUERY_TH);</code></span>
+<span class="line" id="L67"><a href="#L67" aria-label="第 67 行">67</a><code>    }</code></span>
+<span class="line" id="L68"><a href="#L68" aria-label="第 68 行">68</a><code>    if (name == &quot;set_period&quot;) {</code></span>
+<span class="line" id="L69"><a href="#L69" aria-label="第 69 行">69</a><code>        long period = 0;  // 设备采集周期，单位为秒。</code></span>
+<span class="line" id="L70"><a href="#L70" aria-label="第 70 行">70</a><code>        if (!parseStrictInt(payload, period)) {</code></span>
+<span class="line" id="L71"><a href="#L71" aria-label="第 71 行">71</a><code>            return fail(&quot;set_period 参数不是合法整数: &#x27;&quot; + payload + &quot;&#x27;&quot;);</code></span>
+<span class="line" id="L72"><a href="#L72" aria-label="第 72 行">72</a><code>        }</code></span>
+<span class="line" id="L73"><a href="#L73" aria-label="第 73 行">73</a><code>        if (period &lt; static_cast&lt;long&gt;(EDGE_PERIOD_MIN_S) ||</code></span>
+<span class="line" id="L74"><a href="#L74" aria-label="第 74 行">74</a><code>            period &gt; static_cast&lt;long&gt;(EDGE_PERIOD_MAX_S)) {</code></span>
+<span class="line" id="L75"><a href="#L75" aria-label="第 75 行">75</a><code>            return fail(&quot;set_period 超范围: &quot; + payload + &quot; (允许 &quot; +</code></span>
+<span class="line" id="L76"><a href="#L76" aria-label="第 76 行">76</a><code>                        std::to_string(EDGE_PERIOD_MIN_S) + &quot;..&quot; +</code></span>
+<span class="line" id="L77"><a href="#L77" aria-label="第 77 行">77</a><code>                        std::to_string(EDGE_PERIOD_MAX_S) + &quot; 秒)&quot;);</code></span>
+<span class="line" id="L78"><a href="#L78" aria-label="第 78 行">78</a><code>        }</code></span>
+<span class="line" id="L79"><a href="#L79" aria-label="第 79 行">79</a><code>        std::vector&lt;uint8_t&gt; arg(2);  // 协议规定的 uint16 大端周期字段。</code></span>
+<span class="line" id="L80"><a href="#L80" aria-label="第 80 行">80</a><code>        edge_u16_be_write(arg.data(), static_cast&lt;uint16_t&gt;(period));</code></span>
+<span class="line" id="L81"><a href="#L81" aria-label="第 81 行">81</a><code>        return ok(EDGE_TYPE_SET_PERIOD, std::move(arg));</code></span>
+<span class="line" id="L82"><a href="#L82" aria-label="第 82 行">82</a><code>    }</code></span>
+<span class="line" id="L83"><a href="#L83" aria-label="第 83 行">83</a><code></code></span>
+<span class="line" id="L84"><a href="#L84" aria-label="第 84 行">84</a><code>    return fail(&quot;未知命令: &#x27;&quot; + name + &quot;&#x27;&quot;);</code></span>
+<span class="line" id="L85"><a href="#L85" aria-label="第 85 行">85</a><code>}</code></span>
+<span class="line" id="L86"><a href="#L86" aria-label="第 86 行">86</a><code></code></span>
+<span class="line" id="L87"><a href="#L87" aria-label="第 87 行">87</a><code>}  // namespace gateway</code></span></div></html>

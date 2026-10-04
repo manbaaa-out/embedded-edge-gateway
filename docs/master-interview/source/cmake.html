@@ -1,0 +1,82 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>网关 / CMakeLists.txt · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>网关 / CMakeLists.txt</h1><p class="meta">源码基线：2026-10-04 · SHA-256 5c56cc244f4e88b24cbbfcc42bcc0caf9fd1bf24b1e03fa009033d278b894717</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code># 顶层构建入口负责选择构建形态、装配模块并定义可重定位的安装布局。</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code>cmake_minimum_required(VERSION 3.21)   # CMakePresets.json 使用版本 3 格式。</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>project(gateway VERSION 1.0.0 LANGUAGES C CXX)   # 网关使用 C++，共享 edge_proto 使用 C。</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code></code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code># 单配置生成器未指定构建类型时采用适合调试的默认值；多配置生成器自行选择配置。</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code>    set(CMAKE_BUILD_TYPE Debug)</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code>    message(STATUS &quot;BUILD_TYPE 未指定,默认 Debug&quot;)</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code>endif()</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code></code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code># 所有 C++ 目标严格使用标准 C++17，不退回旧标准，也不依赖 GNU 扩展。</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>set(CMAKE_CXX_STANDARD 17)</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>set(CMAKE_CXX_STANDARD_REQUIRED ON)</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code>set(CMAKE_CXX_EXTENSIONS OFF)</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code></code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code># 两个开关控制开发期目标，生产或交叉构建可只保留 gateway。</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>option(GATEWAY_BUILD_TESTS &quot;构建单元测试(树莓派/交叉编译可关)&quot; ON)</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>option(GATEWAY_BUILD_TOOLS &quot;构建开发工具(node-sim 节点模拟器)&quot; ON)</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code></code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code># gateway_options 集中承载项目代码的警告与 sanitizer 选项。</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>include(CompilerWarnings)</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code></code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code>message(STATUS &quot;Project name: ${PROJECT_NAME} ${PROJECT_VERSION}&quot;)</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code>message(STATUS &quot;Build type  : ${CMAKE_BUILD_TYPE}&quot;)</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>message(STATUS &quot;Compiler    : ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}&quot;)</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code>message(STATUS &quot;C++ standard: ${CMAKE_CXX_STANDARD}&quot;)</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>message(STATUS &quot;Tests/Tools : ${GATEWAY_BUILD_TESTS} / ${GATEWAY_BUILD_TOOLS}&quot;)</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code></code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code># protocol 定义 edge_proto；它必须保持独立，供网关与 STM32 固件使用同一份实现。</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>add_subdirectory(protocol)</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code></code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code># 共享 C 核心也必须被插桩，才能在 asan preset 中检查缓存数组的读写边界。</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code>if(GATEWAY_ENABLE_ASAN)</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code>    target_compile_options(edge_proto PRIVATE</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code>        -fsanitize=address,undefined -fno-omit-frame-pointer -g)</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code>    target_link_options(edge_proto INTERFACE -fsanitize=address,undefined)</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>endif()</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code></code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code># src 定义按职责分层的网关静态库，不在此处展开层间依赖。</code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>add_subdirectory(src)</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code></code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code># gateway 是部署产物。main.cpp 只负责进程入口，其余模块通过 gw_app 的 PUBLIC 依赖引入。</code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code>add_executable(gateway src/gateway/app/main.cpp)</code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code>target_link_libraries(gateway PRIVATE</code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code>    gateway_options</code></span>
+<span class="line" id="L47"><a href="#L47" aria-label="第 47 行">47</a><code>    gw_app</code></span>
+<span class="line" id="L48"><a href="#L48" aria-label="第 48 行">48</a><code>)</code></span>
+<span class="line" id="L49"><a href="#L49" aria-label="第 49 行">49</a><code></code></span>
+<span class="line" id="L50"><a href="#L50" aria-label="第 50 行">50</a><code># tools 包含 node-sim，仅供本地和 CI 联调。</code></span>
+<span class="line" id="L51"><a href="#L51" aria-label="第 51 行">51</a><code>if(GATEWAY_BUILD_TOOLS)</code></span>
+<span class="line" id="L52"><a href="#L52" aria-label="第 52 行">52</a><code>    add_subdirectory(tools)</code></span>
+<span class="line" id="L53"><a href="#L53" aria-label="第 53 行">53</a><code>endif()</code></span>
+<span class="line" id="L54"><a href="#L54" aria-label="第 54 行">54</a><code></code></span>
+<span class="line" id="L55"><a href="#L55" aria-label="第 55 行">55</a><code># 开启 CTest 后由 tests/CMakeLists.txt 将每个 GoogleTest 用例自动发现为独立条目。</code></span>
+<span class="line" id="L56"><a href="#L56" aria-label="第 56 行">56</a><code>if(GATEWAY_BUILD_TESTS)</code></span>
+<span class="line" id="L57"><a href="#L57" aria-label="第 57 行">57</a><code>    enable_testing()</code></span>
+<span class="line" id="L58"><a href="#L58" aria-label="第 58 行">58</a><code>    add_subdirectory(tests)</code></span>
+<span class="line" id="L59"><a href="#L59" aria-label="第 59 行">59</a><code>endif()</code></span>
+<span class="line" id="L60"><a href="#L60" aria-label="第 60 行">60</a><code></code></span>
+<span class="line" id="L61"><a href="#L61" aria-label="第 61 行">61</a><code># GNUInstallDirs 提供 bindir/sysconfdir 等平台惯例目录变量。</code></span>
+<span class="line" id="L62"><a href="#L62" aria-label="第 62 行">62</a><code>include(GNUInstallDirs)</code></span>
+<span class="line" id="L63"><a href="#L63" aria-label="第 63 行">63</a><code></code></span>
+<span class="line" id="L64"><a href="#L64" aria-label="第 64 行">64</a><code># GATEWAY_CONFIG_FILE 写入 systemd unit，必须是目标机上的绝对运行路径；默认值与</code></span>
+<span class="line" id="L65"><a href="#L65" aria-label="第 65 行">65</a><code># install_rpi.sh 的生产布局一致。`cmake --install --prefix` 只改安装目的地，不会重写</code></span>
+<span class="line" id="L66"><a href="#L66" aria-label="第 66 行">66</a><code># unit 内路径，因此改变安装前缀的打包方也应在配置阶段同步覆盖此变量。</code></span>
+<span class="line" id="L67"><a href="#L67" aria-label="第 67 行">67</a><code>set(GATEWAY_CONFIG_FILE &quot;/etc/gateway.conf&quot; CACHE FILEPATH</code></span>
+<span class="line" id="L68"><a href="#L68" aria-label="第 68 行">68</a><code>    &quot;网关运行配置的绝对路径&quot;)</code></span>
+<span class="line" id="L69"><a href="#L69" aria-label="第 69 行">69</a><code></code></span>
+<span class="line" id="L70"><a href="#L70" aria-label="第 70 行">70</a><code># 仅替换 @VAR@ 占位符，避免 systemd 的 `$MAINPID` 被 CMake 当作变量处理。</code></span>
+<span class="line" id="L71"><a href="#L71" aria-label="第 71 行">71</a><code>configure_file(</code></span>
+<span class="line" id="L72"><a href="#L72" aria-label="第 72 行">72</a><code>    deploy/gateway.service.in</code></span>
+<span class="line" id="L73"><a href="#L73" aria-label="第 73 行">73</a><code>    ${CMAKE_CURRENT_BINARY_DIR}/gateway.service</code></span>
+<span class="line" id="L74"><a href="#L74" aria-label="第 74 行">74</a><code>    @ONLY</code></span>
+<span class="line" id="L75"><a href="#L75" aria-label="第 75 行">75</a><code>)</code></span>
+<span class="line" id="L76"><a href="#L76" aria-label="第 76 行">76</a><code></code></span>
+<span class="line" id="L77"><a href="#L77" aria-label="第 77 行">77</a><code># 分别安装可执行文件、默认配置和配置阶段生成的 unit；DESTINATION 保持相对路径。</code></span>
+<span class="line" id="L78"><a href="#L78" aria-label="第 78 行">78</a><code>install(TARGETS gateway RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})</code></span>
+<span class="line" id="L79"><a href="#L79" aria-label="第 79 行">79</a><code>install(FILES deploy/gateway.conf</code></span>
+<span class="line" id="L80"><a href="#L80" aria-label="第 80 行">80</a><code>        DESTINATION ${CMAKE_INSTALL_SYSCONFDIR} RENAME gateway.conf)</code></span>
+<span class="line" id="L81"><a href="#L81" aria-label="第 81 行">81</a><code>install(FILES ${CMAKE_CURRENT_BINARY_DIR}/gateway.service</code></span>
+<span class="line" id="L82"><a href="#L82" aria-label="第 82 行">82</a><code>        DESTINATION lib/systemd/system)</code></span></div></html>

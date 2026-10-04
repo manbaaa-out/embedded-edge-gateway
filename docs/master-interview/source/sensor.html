@@ -1,0 +1,66 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>节点 / App/sensor_hub.c · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>节点 / App/sensor_hub.c</h1><p class="meta">源码基线：2026-10-04 · SHA-256 97edfaadf711b94bb5261f391ca64d3e8e572292a266bbb5aa4cbc0634089200</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>#include &quot;sensor_hub.h&quot;</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code>#include &quot;semphr.h&quot;</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>#include &quot;bh1750.h&quot;</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code>#include &quot;dht11.h&quot;</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code></code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>/* 本模块独占: 互斥量 + 采样周期。整个 App 层只有这个文件 include 传感器驱动。 */</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code>static SemaphoreHandle_t s_sensor_mutex;</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code>static volatile uint32_t s_sample_period_ms = 5UL*60*1000;</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code></code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code>BaseType_t sensor_hub_init(void)</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>{</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>    BH1750_Init();   /* 上电+设连续高分辨率模式(原来漏调,芯片处于不确定态) */</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code></code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code>    s_sensor_mutex = xSemaphoreCreateMutex();</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>    return (s_sensor_mutex != NULL) ? pdPASS : pdFAIL;</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code>}</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code></code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>/* 三个入口共用锁与结果解析; 全量采样仍在一次持锁期间完成。 */</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>static void read_selected(SensorData_t *out, uint8_t read_light, uint8_t read_th)</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>{</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>    SensorData_t s = {0};                              // 本次局部快照, 两 valid 默认 0</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>    float lux = -1.0f;</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>    uint8_t dht[5];</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code>    uint8_t ok = 1;</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code></code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>    xSemaphoreTake(s_sensor_mutex, portMAX_DELAY);</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code>    if (read_light) lux = BH1750_ReadLux();</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>    if (read_th)    ok  = DHT11_Read(dht);</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code>    xSemaphoreGive(s_sensor_mutex);                    // 读完立刻放锁, 解析在锁外</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code></code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>    /* 小数字节以 0.1 为单位，先合成整数十分位，再转为业务值。</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>     * dht[3] 的 bit7 是负温符号；当前线上温度为 u16，无法表达负温。</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code>     * 仅接受 0..9 的小数字节，同时拒绝负温和格式异常，避免错误上报。 */</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code>    if (ok == 0 &amp;&amp; dht[1] &lt;= 9U &amp;&amp; dht[3] &lt;= 9U) {</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code>        s.temperature = (dht[2] * 10U + dht[3]) / 10.0f;</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code>        s.humidity = (dht[0] * 10U + dht[1]) / 10.0f;</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code>        s.th_valid = 1;</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>    }</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code>    if (lux &gt;= 0.0f) { s.lux = lux; s.lux_valid = 1; }</code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code>    *out = s;</code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>}</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code></code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code>void sensor_hub_read_light(SensorData_t *out)</code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code>{</code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code>    read_selected(out, 1, 0);</code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code>}</code></span>
+<span class="line" id="L47"><a href="#L47" aria-label="第 47 行">47</a><code></code></span>
+<span class="line" id="L48"><a href="#L48" aria-label="第 48 行">48</a><code>void sensor_hub_read_th(SensorData_t *out)</code></span>
+<span class="line" id="L49"><a href="#L49" aria-label="第 49 行">49</a><code>{</code></span>
+<span class="line" id="L50"><a href="#L50" aria-label="第 50 行">50</a><code>    read_selected(out, 0, 1);</code></span>
+<span class="line" id="L51"><a href="#L51" aria-label="第 51 行">51</a><code>}</code></span>
+<span class="line" id="L52"><a href="#L52" aria-label="第 52 行">52</a><code></code></span>
+<span class="line" id="L53"><a href="#L53" aria-label="第 53 行">53</a><code>void sensor_hub_read_all(SensorData_t *out)</code></span>
+<span class="line" id="L54"><a href="#L54" aria-label="第 54 行">54</a><code>{</code></span>
+<span class="line" id="L55"><a href="#L55" aria-label="第 55 行">55</a><code>    read_selected(out, 1, 1);</code></span>
+<span class="line" id="L56"><a href="#L56" aria-label="第 56 行">56</a><code>}</code></span>
+<span class="line" id="L57"><a href="#L57" aria-label="第 57 行">57</a><code></code></span>
+<span class="line" id="L58"><a href="#L58" aria-label="第 58 行">58</a><code>void sensor_hub_set_period_ms(uint32_t ms)</code></span>
+<span class="line" id="L59"><a href="#L59" aria-label="第 59 行">59</a><code>{</code></span>
+<span class="line" id="L60"><a href="#L60" aria-label="第 60 行">60</a><code>    s_sample_period_ms = ms;</code></span>
+<span class="line" id="L61"><a href="#L61" aria-label="第 61 行">61</a><code>}</code></span>
+<span class="line" id="L62"><a href="#L62" aria-label="第 62 行">62</a><code></code></span>
+<span class="line" id="L63"><a href="#L63" aria-label="第 63 行">63</a><code>uint32_t sensor_hub_get_period_ms(void)</code></span>
+<span class="line" id="L64"><a href="#L64" aria-label="第 64 行">64</a><code>{</code></span>
+<span class="line" id="L65"><a href="#L65" aria-label="第 65 行">65</a><code>    return s_sample_period_ms;</code></span>
+<span class="line" id="L66"><a href="#L66" aria-label="第 66 行">66</a><code>}</code></span></div></html>

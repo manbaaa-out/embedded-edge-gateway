@@ -1,0 +1,57 @@
+{
+  "reviewed_on": "2026-10-04",
+  "method": "实际查看本轮 Chromium P004 桌面截图、P014 手机整题截图，以及 pdftoppm 导出的 P004/P014 与 T016 PDF 起始和续页；全书逐段完整性、章节布局和交互另由 render.mjs 检查。",
+  "artifacts": {
+    "第一部分_纯八股.pdf": "a4589152734e4a2d2a7ae4021d50374577ed422e6b795cee66270ea031546187",
+    "第二部分_项目面经.pdf": "296922e19e342a744255a97149a84753e02286f68921f0c1f47e1eea800ac54b",
+    "网关与节点总面经.pdf": "ffd8c58e777bceb6636f866ad7a5307614d8cf9d22b56caefdb19f9c0f75a6f2"
+  },
+  "web": [
+    "P004 多事件循环/线程所有权表桌面截图",
+    "P014 Boost.Beast/业务/查询交接手机整题截图"
+  ],
+  "pdf_samples": [
+    {
+      "file": "第二部分_项目面经.pdf",
+      "question": "P004",
+      "pages": [
+        5,
+        6
+      ],
+      "images": [
+        "/tmp/master-interview-review-P004.png",
+        "/tmp/master-interview-review-P004-table.png"
+      ]
+    },
+    {
+      "file": "第二部分_项目面经.pdf",
+      "question": "P014",
+      "pages": [
+        17,
+        18
+      ],
+      "images": [
+        "/tmp/master-interview-review-P014.png",
+        "/tmp/master-interview-review-P014-boundary.png"
+      ]
+    },
+    {
+      "file": "第一部分_纯八股.pdf",
+      "question": "T016",
+      "pages": [
+        21,
+        22
+      ],
+      "images": [
+        "/tmp/master-interview-review-T016.png",
+        "/tmp/master-interview-review-T016-models.png"
+      ]
+    }
+  ],
+  "findings": [
+    "线程表、HTTP 调用链与手机纵向流程均清晰，长代码名正常换行，没有横向裁切。",
+    "P004/P014 的口述回答、源码回指和边界分区可读；PDF 表格和流程图没有跨页截断或与页脚重叠。",
+    "T016 新增线程模式分类和 Asio 接口/底层实现说明在续页完整可读；全书正文机器校验没有缺失段落。"
+  ],
+  "limitations": "人工查看上述样页与截图，未逐页人工审查全书；文档验证不代表应用性能测量、上板验证或端到端持久交付。PDF 跨文件跳转取决于阅读器支持。"
+}

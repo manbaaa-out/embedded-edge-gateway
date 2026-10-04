@@ -1,0 +1,1423 @@
+{
+  "local_links_checked": 31257,
+  "broken_local_links": [],
+  "duplicate_id_pages": [],
+  "html_files_checked": 87,
+  "source_files_checked": 60,
+  "source_drift": [],
+  "cross_part_references": 249,
+  "parts_independent": true,
+  "protocol_sync": "== 校验本仓库协议核心自洽 ==\n✓ protocol/ 与 MANIFEST.sha256 一致\n\n== 跨仓库比对:/home/jinjie/CPPProjects/STM32Project/Protocol/edge_proto ==\n✓ 两端协议核心逐字节一致",
+  "pdfs": {
+    "第一部分_纯八股.pdf": {
+      "pages": 177,
+      "all_question_headers_in_order": true,
+      "question_page_map": [
+        {
+          "question": "T001",
+          "page": 2
+        },
+        {
+          "question": "T002",
+          "page": 3
+        },
+        {
+          "question": "T003",
+          "page": 4
+        },
+        {
+          "question": "T004",
+          "page": 5
+        },
+        {
+          "question": "T005",
+          "page": 6
+        },
+        {
+          "question": "T006",
+          "page": 7
+        },
+        {
+          "question": "T007",
+          "page": 8
+        },
+        {
+          "question": "T008",
+          "page": 10
+        },
+        {
+          "question": "T009",
+          "page": 11
+        },
+        {
+          "question": "T010",
+          "page": 13
+        },
+        {
+          "question": "T011",
+          "page": 14
+        },
+        {
+          "question": "T012",
+          "page": 15
+        },
+        {
+          "question": "T013",
+          "page": 17
+        },
+        {
+          "question": "T014",
+          "page": 18
+        },
+        {
+          "question": "T015",
+          "page": 20
+        },
+        {
+          "question": "T016",
+          "page": 21
+        },
+        {
+          "question": "T017",
+          "page": 23
+        },
+        {
+          "question": "T018",
+          "page": 24
+        },
+        {
+          "question": "T019",
+          "page": 26
+        },
+        {
+          "question": "T020",
+          "page": 27
+        },
+        {
+          "question": "T021",
+          "page": 29
+        },
+        {
+          "question": "T022",
+          "page": 30
+        },
+        {
+          "question": "T023",
+          "page": 32
+        },
+        {
+          "question": "T024",
+          "page": 33
+        },
+        {
+          "question": "T025",
+          "page": 35
+        },
+        {
+          "question": "T026",
+          "page": 37
+        },
+        {
+          "question": "T027",
+          "page": 38
+        },
+        {
+          "question": "T028",
+          "page": 40
+        },
+        {
+          "question": "T029",
+          "page": 41
+        },
+        {
+          "question": "T030",
+          "page": 43
+        },
+        {
+          "question": "T031",
+          "page": 44
+        },
+        {
+          "question": "T032",
+          "page": 46
+        },
+        {
+          "question": "T033",
+          "page": 47
+        },
+        {
+          "question": "T034",
+          "page": 48
+        },
+        {
+          "question": "T035",
+          "page": 50
+        },
+        {
+          "question": "T036",
+          "page": 52
+        },
+        {
+          "question": "T037",
+          "page": 53
+        },
+        {
+          "question": "T038",
+          "page": 54
+        },
+        {
+          "question": "T039",
+          "page": 56
+        },
+        {
+          "question": "T040",
+          "page": 58
+        },
+        {
+          "question": "T041",
+          "page": 59
+        },
+        {
+          "question": "T042",
+          "page": 61
+        },
+        {
+          "question": "T043",
+          "page": 62
+        },
+        {
+          "question": "T044",
+          "page": 63
+        },
+        {
+          "question": "T045",
+          "page": 65
+        },
+        {
+          "question": "T046",
+          "page": 67
+        },
+        {
+          "question": "T047",
+          "page": 68
+        },
+        {
+          "question": "T048",
+          "page": 70
+        },
+        {
+          "question": "T049",
+          "page": 71
+        },
+        {
+          "question": "T050",
+          "page": 72
+        },
+        {
+          "question": "T051",
+          "page": 74
+        },
+        {
+          "question": "T052",
+          "page": 75
+        },
+        {
+          "question": "T053",
+          "page": 77
+        },
+        {
+          "question": "T054",
+          "page": 79
+        },
+        {
+          "question": "T055",
+          "page": 80
+        },
+        {
+          "question": "T056",
+          "page": 82
+        },
+        {
+          "question": "T057",
+          "page": 83
+        },
+        {
+          "question": "T058",
+          "page": 84
+        },
+        {
+          "question": "T059",
+          "page": 86
+        },
+        {
+          "question": "T060",
+          "page": 87
+        },
+        {
+          "question": "T061",
+          "page": 89
+        },
+        {
+          "question": "T062",
+          "page": 91
+        },
+        {
+          "question": "T063",
+          "page": 92
+        },
+        {
+          "question": "T064",
+          "page": 94
+        },
+        {
+          "question": "T065",
+          "page": 95
+        },
+        {
+          "question": "T066",
+          "page": 97
+        },
+        {
+          "question": "T067",
+          "page": 98
+        },
+        {
+          "question": "T068",
+          "page": 100
+        },
+        {
+          "question": "T069",
+          "page": 101
+        },
+        {
+          "question": "T070",
+          "page": 103
+        },
+        {
+          "question": "T071",
+          "page": 104
+        },
+        {
+          "question": "T072",
+          "page": 107
+        },
+        {
+          "question": "T073",
+          "page": 108
+        },
+        {
+          "question": "T074",
+          "page": 110
+        },
+        {
+          "question": "T075",
+          "page": 111
+        },
+        {
+          "question": "T076",
+          "page": 113
+        },
+        {
+          "question": "T077",
+          "page": 114
+        },
+        {
+          "question": "T078",
+          "page": 115
+        },
+        {
+          "question": "T079",
+          "page": 117
+        },
+        {
+          "question": "T080",
+          "page": 118
+        },
+        {
+          "question": "T081",
+          "page": 120
+        },
+        {
+          "question": "T082",
+          "page": 121
+        },
+        {
+          "question": "T083",
+          "page": 122
+        },
+        {
+          "question": "T084",
+          "page": 125
+        },
+        {
+          "question": "T085",
+          "page": 126
+        },
+        {
+          "question": "T086",
+          "page": 127
+        },
+        {
+          "question": "T087",
+          "page": 129
+        },
+        {
+          "question": "T088",
+          "page": 130
+        },
+        {
+          "question": "T089",
+          "page": 132
+        },
+        {
+          "question": "T090",
+          "page": 133
+        },
+        {
+          "question": "T091",
+          "page": 134
+        },
+        {
+          "question": "T092",
+          "page": 136
+        },
+        {
+          "question": "T093",
+          "page": 137
+        },
+        {
+          "question": "T094",
+          "page": 139
+        },
+        {
+          "question": "T095",
+          "page": 140
+        },
+        {
+          "question": "T096",
+          "page": 142
+        },
+        {
+          "question": "T097",
+          "page": 143
+        },
+        {
+          "question": "T098",
+          "page": 145
+        },
+        {
+          "question": "T099",
+          "page": 146
+        },
+        {
+          "question": "T100",
+          "page": 147
+        },
+        {
+          "question": "T101",
+          "page": 149
+        },
+        {
+          "question": "T102",
+          "page": 150
+        },
+        {
+          "question": "T103",
+          "page": 152
+        },
+        {
+          "question": "T104",
+          "page": 154
+        },
+        {
+          "question": "T105",
+          "page": 155
+        },
+        {
+          "question": "T106",
+          "page": 157
+        },
+        {
+          "question": "T107",
+          "page": 158
+        },
+        {
+          "question": "T108",
+          "page": 159
+        },
+        {
+          "question": "T109",
+          "page": 161
+        },
+        {
+          "question": "T110",
+          "page": 162
+        },
+        {
+          "question": "T111",
+          "page": 165
+        },
+        {
+          "question": "T112",
+          "page": 166
+        },
+        {
+          "question": "T113",
+          "page": 167
+        },
+        {
+          "question": "T114",
+          "page": 168
+        },
+        {
+          "question": "T115",
+          "page": 169
+        },
+        {
+          "question": "T116",
+          "page": 170
+        },
+        {
+          "question": "T117",
+          "page": 172
+        },
+        {
+          "question": "T118",
+          "page": 173
+        },
+        {
+          "question": "T119",
+          "page": 174
+        },
+        {
+          "question": "T120",
+          "page": 176
+        }
+      ]
+    },
+    "第二部分_项目面经.pdf": {
+      "pages": 62,
+      "all_question_headers_in_order": true,
+      "question_page_map": [
+        {
+          "question": "P001",
+          "page": 2
+        },
+        {
+          "question": "P002",
+          "page": 3
+        },
+        {
+          "question": "P003",
+          "page": 4
+        },
+        {
+          "question": "P004",
+          "page": 5
+        },
+        {
+          "question": "P005",
+          "page": 7
+        },
+        {
+          "question": "P006",
+          "page": 8
+        },
+        {
+          "question": "P007",
+          "page": 10
+        },
+        {
+          "question": "P008",
+          "page": 11
+        },
+        {
+          "question": "P009",
+          "page": 12
+        },
+        {
+          "question": "P010",
+          "page": 13
+        },
+        {
+          "question": "P011",
+          "page": 14
+        },
+        {
+          "question": "P012",
+          "page": 15
+        },
+        {
+          "question": "P013",
+          "page": 16
+        },
+        {
+          "question": "P014",
+          "page": 17
+        },
+        {
+          "question": "P015",
+          "page": 19
+        },
+        {
+          "question": "P016",
+          "page": 20
+        },
+        {
+          "question": "P017",
+          "page": 21
+        },
+        {
+          "question": "P018",
+          "page": 22
+        },
+        {
+          "question": "P019",
+          "page": 23
+        },
+        {
+          "question": "P020",
+          "page": 24
+        },
+        {
+          "question": "P021",
+          "page": 25
+        },
+        {
+          "question": "P022",
+          "page": 26
+        },
+        {
+          "question": "P023",
+          "page": 27
+        },
+        {
+          "question": "P024",
+          "page": 28
+        },
+        {
+          "question": "P025",
+          "page": 30
+        },
+        {
+          "question": "P026",
+          "page": 31
+        },
+        {
+          "question": "P027",
+          "page": 32
+        },
+        {
+          "question": "P028",
+          "page": 33
+        },
+        {
+          "question": "P029",
+          "page": 34
+        },
+        {
+          "question": "P030",
+          "page": 35
+        },
+        {
+          "question": "P031",
+          "page": 36
+        },
+        {
+          "question": "P032",
+          "page": 37
+        },
+        {
+          "question": "P033",
+          "page": 38
+        },
+        {
+          "question": "P034",
+          "page": 39
+        },
+        {
+          "question": "P035",
+          "page": 40
+        },
+        {
+          "question": "P036",
+          "page": 41
+        },
+        {
+          "question": "P037",
+          "page": 42
+        },
+        {
+          "question": "P038",
+          "page": 43
+        },
+        {
+          "question": "P039",
+          "page": 44
+        },
+        {
+          "question": "P040",
+          "page": 45
+        },
+        {
+          "question": "P041",
+          "page": 46
+        },
+        {
+          "question": "P042",
+          "page": 47
+        },
+        {
+          "question": "P043",
+          "page": 48
+        },
+        {
+          "question": "P044",
+          "page": 49
+        },
+        {
+          "question": "P045",
+          "page": 50
+        },
+        {
+          "question": "P046",
+          "page": 51
+        },
+        {
+          "question": "P047",
+          "page": 52
+        },
+        {
+          "question": "P048",
+          "page": 53
+        },
+        {
+          "question": "P049",
+          "page": 54
+        },
+        {
+          "question": "P050",
+          "page": 55
+        },
+        {
+          "question": "P051",
+          "page": 56
+        },
+        {
+          "question": "P052",
+          "page": 57
+        },
+        {
+          "question": "P053",
+          "page": 59
+        },
+        {
+          "question": "P054",
+          "page": 61
+        }
+      ]
+    },
+    "网关与节点总面经.pdf": {
+      "pages": 238,
+      "all_question_headers_in_order": true,
+      "question_page_map": [
+        {
+          "question": "T001",
+          "page": 2
+        },
+        {
+          "question": "T002",
+          "page": 3
+        },
+        {
+          "question": "T003",
+          "page": 4
+        },
+        {
+          "question": "T004",
+          "page": 5
+        },
+        {
+          "question": "T005",
+          "page": 6
+        },
+        {
+          "question": "T006",
+          "page": 7
+        },
+        {
+          "question": "T007",
+          "page": 8
+        },
+        {
+          "question": "T008",
+          "page": 10
+        },
+        {
+          "question": "T009",
+          "page": 11
+        },
+        {
+          "question": "T010",
+          "page": 13
+        },
+        {
+          "question": "T011",
+          "page": 14
+        },
+        {
+          "question": "T012",
+          "page": 15
+        },
+        {
+          "question": "T013",
+          "page": 17
+        },
+        {
+          "question": "T014",
+          "page": 18
+        },
+        {
+          "question": "T015",
+          "page": 20
+        },
+        {
+          "question": "T016",
+          "page": 21
+        },
+        {
+          "question": "T017",
+          "page": 23
+        },
+        {
+          "question": "T018",
+          "page": 24
+        },
+        {
+          "question": "T019",
+          "page": 26
+        },
+        {
+          "question": "T020",
+          "page": 27
+        },
+        {
+          "question": "T021",
+          "page": 29
+        },
+        {
+          "question": "T022",
+          "page": 30
+        },
+        {
+          "question": "T023",
+          "page": 32
+        },
+        {
+          "question": "T024",
+          "page": 33
+        },
+        {
+          "question": "T025",
+          "page": 35
+        },
+        {
+          "question": "T026",
+          "page": 37
+        },
+        {
+          "question": "T027",
+          "page": 38
+        },
+        {
+          "question": "T028",
+          "page": 40
+        },
+        {
+          "question": "T029",
+          "page": 41
+        },
+        {
+          "question": "T030",
+          "page": 43
+        },
+        {
+          "question": "T031",
+          "page": 44
+        },
+        {
+          "question": "T032",
+          "page": 46
+        },
+        {
+          "question": "T033",
+          "page": 47
+        },
+        {
+          "question": "T034",
+          "page": 48
+        },
+        {
+          "question": "T035",
+          "page": 50
+        },
+        {
+          "question": "T036",
+          "page": 52
+        },
+        {
+          "question": "T037",
+          "page": 53
+        },
+        {
+          "question": "T038",
+          "page": 54
+        },
+        {
+          "question": "T039",
+          "page": 56
+        },
+        {
+          "question": "T040",
+          "page": 58
+        },
+        {
+          "question": "T041",
+          "page": 59
+        },
+        {
+          "question": "T042",
+          "page": 61
+        },
+        {
+          "question": "T043",
+          "page": 62
+        },
+        {
+          "question": "T044",
+          "page": 63
+        },
+        {
+          "question": "T045",
+          "page": 65
+        },
+        {
+          "question": "T046",
+          "page": 67
+        },
+        {
+          "question": "T047",
+          "page": 68
+        },
+        {
+          "question": "T048",
+          "page": 70
+        },
+        {
+          "question": "T049",
+          "page": 71
+        },
+        {
+          "question": "T050",
+          "page": 72
+        },
+        {
+          "question": "T051",
+          "page": 74
+        },
+        {
+          "question": "T052",
+          "page": 75
+        },
+        {
+          "question": "T053",
+          "page": 77
+        },
+        {
+          "question": "T054",
+          "page": 79
+        },
+        {
+          "question": "T055",
+          "page": 80
+        },
+        {
+          "question": "T056",
+          "page": 82
+        },
+        {
+          "question": "T057",
+          "page": 83
+        },
+        {
+          "question": "T058",
+          "page": 84
+        },
+        {
+          "question": "T059",
+          "page": 86
+        },
+        {
+          "question": "T060",
+          "page": 87
+        },
+        {
+          "question": "T061",
+          "page": 89
+        },
+        {
+          "question": "T062",
+          "page": 91
+        },
+        {
+          "question": "T063",
+          "page": 92
+        },
+        {
+          "question": "T064",
+          "page": 94
+        },
+        {
+          "question": "T065",
+          "page": 95
+        },
+        {
+          "question": "T066",
+          "page": 97
+        },
+        {
+          "question": "T067",
+          "page": 98
+        },
+        {
+          "question": "T068",
+          "page": 100
+        },
+        {
+          "question": "T069",
+          "page": 101
+        },
+        {
+          "question": "T070",
+          "page": 103
+        },
+        {
+          "question": "T071",
+          "page": 104
+        },
+        {
+          "question": "T072",
+          "page": 107
+        },
+        {
+          "question": "T073",
+          "page": 108
+        },
+        {
+          "question": "T074",
+          "page": 110
+        },
+        {
+          "question": "T075",
+          "page": 111
+        },
+        {
+          "question": "T076",
+          "page": 113
+        },
+        {
+          "question": "T077",
+          "page": 114
+        },
+        {
+          "question": "T078",
+          "page": 115
+        },
+        {
+          "question": "T079",
+          "page": 117
+        },
+        {
+          "question": "T080",
+          "page": 118
+        },
+        {
+          "question": "T081",
+          "page": 120
+        },
+        {
+          "question": "T082",
+          "page": 121
+        },
+        {
+          "question": "T083",
+          "page": 122
+        },
+        {
+          "question": "T084",
+          "page": 125
+        },
+        {
+          "question": "T085",
+          "page": 126
+        },
+        {
+          "question": "T086",
+          "page": 127
+        },
+        {
+          "question": "T087",
+          "page": 129
+        },
+        {
+          "question": "T088",
+          "page": 130
+        },
+        {
+          "question": "T089",
+          "page": 132
+        },
+        {
+          "question": "T090",
+          "page": 133
+        },
+        {
+          "question": "T091",
+          "page": 134
+        },
+        {
+          "question": "T092",
+          "page": 136
+        },
+        {
+          "question": "T093",
+          "page": 137
+        },
+        {
+          "question": "T094",
+          "page": 139
+        },
+        {
+          "question": "T095",
+          "page": 140
+        },
+        {
+          "question": "T096",
+          "page": 142
+        },
+        {
+          "question": "T097",
+          "page": 143
+        },
+        {
+          "question": "T098",
+          "page": 145
+        },
+        {
+          "question": "T099",
+          "page": 146
+        },
+        {
+          "question": "T100",
+          "page": 147
+        },
+        {
+          "question": "T101",
+          "page": 149
+        },
+        {
+          "question": "T102",
+          "page": 150
+        },
+        {
+          "question": "T103",
+          "page": 152
+        },
+        {
+          "question": "T104",
+          "page": 154
+        },
+        {
+          "question": "T105",
+          "page": 155
+        },
+        {
+          "question": "T106",
+          "page": 157
+        },
+        {
+          "question": "T107",
+          "page": 158
+        },
+        {
+          "question": "T108",
+          "page": 159
+        },
+        {
+          "question": "T109",
+          "page": 161
+        },
+        {
+          "question": "T110",
+          "page": 162
+        },
+        {
+          "question": "T111",
+          "page": 165
+        },
+        {
+          "question": "T112",
+          "page": 166
+        },
+        {
+          "question": "T113",
+          "page": 167
+        },
+        {
+          "question": "T114",
+          "page": 168
+        },
+        {
+          "question": "T115",
+          "page": 169
+        },
+        {
+          "question": "T116",
+          "page": 170
+        },
+        {
+          "question": "T117",
+          "page": 172
+        },
+        {
+          "question": "T118",
+          "page": 173
+        },
+        {
+          "question": "T119",
+          "page": 174
+        },
+        {
+          "question": "T120",
+          "page": 176
+        },
+        {
+          "question": "P001",
+          "page": 178
+        },
+        {
+          "question": "P002",
+          "page": 179
+        },
+        {
+          "question": "P003",
+          "page": 180
+        },
+        {
+          "question": "P004",
+          "page": 181
+        },
+        {
+          "question": "P005",
+          "page": 183
+        },
+        {
+          "question": "P006",
+          "page": 184
+        },
+        {
+          "question": "P007",
+          "page": 186
+        },
+        {
+          "question": "P008",
+          "page": 187
+        },
+        {
+          "question": "P009",
+          "page": 188
+        },
+        {
+          "question": "P010",
+          "page": 189
+        },
+        {
+          "question": "P011",
+          "page": 190
+        },
+        {
+          "question": "P012",
+          "page": 191
+        },
+        {
+          "question": "P013",
+          "page": 192
+        },
+        {
+          "question": "P014",
+          "page": 193
+        },
+        {
+          "question": "P015",
+          "page": 195
+        },
+        {
+          "question": "P016",
+          "page": 196
+        },
+        {
+          "question": "P017",
+          "page": 197
+        },
+        {
+          "question": "P018",
+          "page": 198
+        },
+        {
+          "question": "P019",
+          "page": 199
+        },
+        {
+          "question": "P020",
+          "page": 200
+        },
+        {
+          "question": "P021",
+          "page": 201
+        },
+        {
+          "question": "P022",
+          "page": 202
+        },
+        {
+          "question": "P023",
+          "page": 203
+        },
+        {
+          "question": "P024",
+          "page": 204
+        },
+        {
+          "question": "P025",
+          "page": 206
+        },
+        {
+          "question": "P026",
+          "page": 207
+        },
+        {
+          "question": "P027",
+          "page": 208
+        },
+        {
+          "question": "P028",
+          "page": 209
+        },
+        {
+          "question": "P029",
+          "page": 210
+        },
+        {
+          "question": "P030",
+          "page": 211
+        },
+        {
+          "question": "P031",
+          "page": 212
+        },
+        {
+          "question": "P032",
+          "page": 213
+        },
+        {
+          "question": "P033",
+          "page": 214
+        },
+        {
+          "question": "P034",
+          "page": 215
+        },
+        {
+          "question": "P035",
+          "page": 216
+        },
+        {
+          "question": "P036",
+          "page": 217
+        },
+        {
+          "question": "P037",
+          "page": 218
+        },
+        {
+          "question": "P038",
+          "page": 219
+        },
+        {
+          "question": "P039",
+          "page": 220
+        },
+        {
+          "question": "P040",
+          "page": 221
+        },
+        {
+          "question": "P041",
+          "page": 222
+        },
+        {
+          "question": "P042",
+          "page": 223
+        },
+        {
+          "question": "P043",
+          "page": 224
+        },
+        {
+          "question": "P044",
+          "page": 225
+        },
+        {
+          "question": "P045",
+          "page": 226
+        },
+        {
+          "question": "P046",
+          "page": 227
+        },
+        {
+          "question": "P047",
+          "page": 228
+        },
+        {
+          "question": "P048",
+          "page": 229
+        },
+        {
+          "question": "P049",
+          "page": 230
+        },
+        {
+          "question": "P050",
+          "page": 231
+        },
+        {
+          "question": "P051",
+          "page": 232
+        },
+        {
+          "question": "P052",
+          "page": 233
+        },
+        {
+          "question": "P053",
+          "page": 235
+        },
+        {
+          "question": "P054",
+          "page": 237
+        }
+      ]
+    }
+  }
+}

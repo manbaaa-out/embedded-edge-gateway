@@ -1,0 +1,316 @@
+{
+  "parts": [
+    {
+      "file": "theory.html",
+      "questions": 120,
+      "chapters": 13,
+      "theory": 120,
+      "project": 0,
+      "duplicateIds": [],
+      "overflow": false,
+      "externalAssets": [],
+      "brokenAnchors": []
+    },
+    {
+      "file": "project.html",
+      "questions": 54,
+      "chapters": 7,
+      "theory": 0,
+      "project": 54,
+      "duplicateIds": [],
+      "overflow": false,
+      "externalAssets": [],
+      "brokenAnchors": []
+    },
+    {
+      "file": "full.html",
+      "questions": 174,
+      "chapters": 20,
+      "theory": 120,
+      "project": 54,
+      "duplicateIds": [],
+      "overflow": false,
+      "externalAssets": [],
+      "brokenAnchors": []
+    }
+  ],
+  "chapterPages": [
+    {
+      "file": "theory-01.html",
+      "questions": 12,
+      "overflow": false
+    },
+    {
+      "file": "theory-02.html",
+      "questions": 13,
+      "overflow": false
+    },
+    {
+      "file": "theory-03.html",
+      "questions": 10,
+      "overflow": false
+    },
+    {
+      "file": "theory-04.html",
+      "questions": 10,
+      "overflow": false
+    },
+    {
+      "file": "theory-05.html",
+      "questions": 8,
+      "overflow": false
+    },
+    {
+      "file": "theory-06.html",
+      "questions": 8,
+      "overflow": false
+    },
+    {
+      "file": "theory-07.html",
+      "questions": 10,
+      "overflow": false
+    },
+    {
+      "file": "theory-08.html",
+      "questions": 12,
+      "overflow": false
+    },
+    {
+      "file": "theory-09.html",
+      "questions": 12,
+      "overflow": false
+    },
+    {
+      "file": "theory-10.html",
+      "questions": 8,
+      "overflow": false
+    },
+    {
+      "file": "theory-11.html",
+      "questions": 7,
+      "overflow": false
+    },
+    {
+      "file": "theory-12.html",
+      "questions": 6,
+      "overflow": false
+    },
+    {
+      "file": "theory-13.html",
+      "questions": 4,
+      "overflow": false
+    },
+    {
+      "file": "project-01.html",
+      "questions": 6,
+      "overflow": false
+    },
+    {
+      "file": "project-02.html",
+      "questions": 8,
+      "overflow": false
+    },
+    {
+      "file": "project-03.html",
+      "questions": 10,
+      "overflow": false
+    },
+    {
+      "file": "project-04.html",
+      "questions": 9,
+      "overflow": false
+    },
+    {
+      "file": "project-05.html",
+      "questions": 10,
+      "overflow": false
+    },
+    {
+      "file": "project-06.html",
+      "questions": 9,
+      "overflow": false
+    },
+    {
+      "file": "project-07.html",
+      "questions": 2,
+      "overflow": false
+    }
+  ],
+  "pdfs": {
+    "第一部分_纯八股.pdf": {
+      "pages": 177,
+      "bodyParagraphs": 1019,
+      "searchableParagraphs": 1019,
+      "missing": [],
+      "sparsePages": []
+    },
+    "第二部分_项目面经.pdf": {
+      "pages": 62,
+      "bodyParagraphs": 283,
+      "searchableParagraphs": 283,
+      "missing": [],
+      "sparsePages": []
+    },
+    "网关与节点总面经.pdf": {
+      "pages": 238,
+      "bodyParagraphs": 1302,
+      "searchableParagraphs": 1302,
+      "missing": [],
+      "sparsePages": []
+    }
+  },
+  "artifacts": {
+    "index.html": "2a7d2808467b03891187491a0afd38cc2fdf029dcad1a0e1632fe1bacc550fe7",
+    "theory.html": "a8052bb906c30aef0a3db9d5236af4337d0b7e6e64d62d2acf84f0d20ae98dd1",
+    "project.html": "55c21c07b07fda16eb261d0d7e5f0c9c2f931e174a9cf54da06d64072f789602",
+    "full.html": "c001dd0a2788838a2af289c0ecfb14f2d3df66c03fde231752a98dd949a80413",
+    "第一部分_纯八股.pdf": "a4589152734e4a2d2a7ae4021d50374577ed422e6b795cee66270ea031546187",
+    "第二部分_项目面经.pdf": "296922e19e342a744255a97149a84753e02286f68921f0c1f47e1eea800ac54b",
+    "网关与节点总面经.pdf": "ffd8c58e777bceb6636f866ad7a5307614d8cf9d22b56caefdb19f9c0f75a6f2"
+  },
+  "pdfLinks": {
+    "theory_page_map": {
+      "T001": 2,
+      "T002": 3,
+      "T003": 4,
+      "T004": 5,
+      "T005": 6,
+      "T006": 7,
+      "T007": 8,
+      "T008": 10,
+      "T009": 11,
+      "T010": 13,
+      "T011": 14,
+      "T012": 15,
+      "T013": 17,
+      "T014": 18,
+      "T015": 20,
+      "T016": 21,
+      "T017": 23,
+      "T018": 24,
+      "T019": 26,
+      "T020": 27,
+      "T021": 29,
+      "T022": 30,
+      "T023": 32,
+      "T024": 33,
+      "T025": 35,
+      "T026": 37,
+      "T027": 38,
+      "T028": 40,
+      "T029": 41,
+      "T030": 43,
+      "T031": 44,
+      "T032": 46,
+      "T033": 47,
+      "T034": 48,
+      "T035": 50,
+      "T036": 52,
+      "T037": 53,
+      "T038": 54,
+      "T039": 56,
+      "T040": 58,
+      "T041": 59,
+      "T042": 61,
+      "T043": 62,
+      "T044": 63,
+      "T045": 65,
+      "T046": 67,
+      "T047": 68,
+      "T048": 70,
+      "T049": 71,
+      "T050": 72,
+      "T051": 74,
+      "T052": 75,
+      "T053": 77,
+      "T054": 79,
+      "T055": 80,
+      "T056": 82,
+      "T057": 83,
+      "T058": 84,
+      "T059": 86,
+      "T060": 87,
+      "T061": 89,
+      "T062": 91,
+      "T063": 92,
+      "T064": 94,
+      "T065": 95,
+      "T066": 97,
+      "T067": 98,
+      "T068": 100,
+      "T069": 101,
+      "T070": 103,
+      "T071": 104,
+      "T072": 107,
+      "T073": 108,
+      "T074": 110,
+      "T075": 111,
+      "T076": 113,
+      "T077": 114,
+      "T078": 115,
+      "T079": 117,
+      "T080": 118,
+      "T081": 120,
+      "T082": 121,
+      "T083": 122,
+      "T084": 125,
+      "T085": 126,
+      "T086": 127,
+      "T087": 129,
+      "T088": 130,
+      "T089": 132,
+      "T090": 133,
+      "T091": 134,
+      "T092": 136,
+      "T093": 137,
+      "T094": 139,
+      "T095": 140,
+      "T096": 142,
+      "T097": 143,
+      "T098": 145,
+      "T099": 146,
+      "T100": 147,
+      "T101": 149,
+      "T102": 150,
+      "T103": 152,
+      "T104": 154,
+      "T105": 155,
+      "T106": 157,
+      "T107": 158,
+      "T108": 159,
+      "T109": 161,
+      "T110": 162,
+      "T111": 165,
+      "T112": 166,
+      "T113": 167,
+      "T114": 168,
+      "T115": 169,
+      "T116": 170,
+      "T117": 172,
+      "T118": 173,
+      "T119": 174,
+      "T120": 176
+    },
+    "files": {
+      "第一部分_纯八股.pdf": {
+        "theory_cross_file_links": 0,
+        "relative_local_links": 0,
+        "pages": 177
+      },
+      "第二部分_项目面经.pdf": {
+        "theory_cross_file_links": 249,
+        "relative_local_links": 262,
+        "pages": 62
+      },
+      "网关与节点总面经.pdf": {
+        "theory_cross_file_links": 0,
+        "relative_local_links": 262,
+        "pages": 238
+      }
+    }
+  },
+  "crossPartNavigation": "P037 → theory.html#T072 passed",
+  "browserExceptions": [],
+  "interactions": "Question/text search, no results, chapter filter, reset, self-test/reveal, exact theory backlinks and mobile layout passed.",
+  "scope": "Document only; no new application, hardware or performance tests."
+}

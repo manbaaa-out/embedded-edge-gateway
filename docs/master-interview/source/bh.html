@@ -1,0 +1,79 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>节点 / BSP/bh1750.c · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>节点 / BSP/bh1750.c</h1><p class="meta">源码基线：2026-10-04 · SHA-256 9c322ebc2558e1132426e19bebc03d3e45cc95b30d64a62b6bbaec15169857af</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>#include &quot;bh1750.h&quot;</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code>#include &quot;dwt_delay.h&quot;   /* delay_us:总线恢复时手动翻转 SCL 用 */</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>#include &lt;stdint.h&gt;</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code>#include &lt;stdio.h&gt;</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code>#include &quot;FreeRTOS.h&quot;   /* 必须在 task.h 之前: 它带入 FreeRTOSConfig.h + portmacro.h */</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>#include &quot;task.h&quot;</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code></code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code>/* ===== I2C 总线/外设恢复 =====</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code>   STM32F1 硬件 I2C 容易进异常态(BUSY 卡死、从机半路拽住 SDA)。出错后:</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code>   1) DeInit 释放外设;2) 把 PB6/PB7 临时当 GPIO,松开 SDA、手动拍 9 个 SCL,</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>   把可能停在 ACK/数据位的从机移位寄存器走完;3) 补一个 STOP;4) 重建外设。</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>   这是单总线/I2C 解锁的标准手法,能把&quot;时好时坏&quot;里那类外设级卡死解开。 */</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>static void bh1750_bus_recover(void)</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code>{</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>    HAL_I2C_DeInit(&amp;hi2c1);                 /* MspDeInit 会把 PB6/PB7 退出 AF */</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code></code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>    __HAL_RCC_GPIOB_CLK_ENABLE();</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>    GPIO_InitTypeDef g = {0};</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>    g.Pin   = GPIO_PIN_6 | GPIO_PIN_7;      /* PB6=SCL, PB7=SDA */</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>    g.Mode  = GPIO_MODE_OUTPUT_OD;          /* 开漏,松手靠外部上拉回高 */</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>    g.Pull  = GPIO_NOPULL;</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>    g.Speed = GPIO_SPEED_FREQ_HIGH;</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>    HAL_GPIO_Init(GPIOB, &amp;g);</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code></code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code>    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);   /* 先松开 SDA */</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>    for (int i = 0; i &lt; 9; i++) {                          /* 9 个时钟把从机拍出来 */</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code>        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET); delay_us(5);</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);   delay_us(5);</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code>    }</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code>    /* 补 STOP:SCL 高电平期间 SDA 由低拉高 */</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET); delay_us(5);</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);   delay_us(5);</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code>    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);   delay_us(5);</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code></code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code>    MX_I2C1_Init();                          /* 重建外设(MspInit 把 PB6/7 复原成 AF-OD) */</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code>}</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code></code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>/* 上电 + 设连续高分辨率模式。开机调一次(原来漏调了),让芯片处于确定状态。 */</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code>void BH1750_Init(void)</code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code>{</code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>    uint8_t cmd;</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code>    cmd = BH1750_POWER_ON;      HAL_I2C_Master_Transmit(&amp;hi2c1, BH1750_ADDR, &amp;cmd, 1, 100);</code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code>    cmd = BH1750_CONT_HIGH_RES; HAL_I2C_Master_Transmit(&amp;hi2c1, BH1750_ADDR, &amp;cmd, 1, 100);</code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code>}</code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code></code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code>/* 单次测量:发模式 -&gt; 等转换 -&gt; 读 2 字节。任一步 I2C 不 OK 返回错误码。 */</code></span>
+<span class="line" id="L47"><a href="#L47" aria-label="第 47 行">47</a><code>static HAL_StatusTypeDef bh1750_read_once(uint16_t *raw)</code></span>
+<span class="line" id="L48"><a href="#L48" aria-label="第 48 行">48</a><code>{</code></span>
+<span class="line" id="L49"><a href="#L49" aria-label="第 49 行">49</a><code>    uint8_t cmd = BH1750_CONT_HIGH_RES;</code></span>
+<span class="line" id="L50"><a href="#L50" aria-label="第 50 行">50</a><code>    uint8_t buf[2] = {0};                   // 初始化,避免失败时读到垃圾</code></span>
+<span class="line" id="L51"><a href="#L51" aria-label="第 51 行">51</a><code>    HAL_StatusTypeDef st;</code></span>
+<span class="line" id="L52"><a href="#L52" aria-label="第 52 行">52</a><code></code></span>
+<span class="line" id="L53"><a href="#L53" aria-label="第 53 行">53</a><code>    st = HAL_I2C_Master_Transmit(&amp;hi2c1, BH1750_ADDR, &amp;cmd, 1, 100);</code></span>
+<span class="line" id="L54"><a href="#L54" aria-label="第 54 行">54</a><code>    if (st != HAL_OK) return st;</code></span>
+<span class="line" id="L55"><a href="#L55" aria-label="第 55 行">55</a><code></code></span>
+<span class="line" id="L56"><a href="#L56" aria-label="第 56 行">56</a><code>    vTaskDelay(180);                        // 高分辨率转换最长 ~180ms</code></span>
+<span class="line" id="L57"><a href="#L57" aria-label="第 57 行">57</a><code></code></span>
+<span class="line" id="L58"><a href="#L58" aria-label="第 58 行">58</a><code>    st = HAL_I2C_Master_Receive(&amp;hi2c1, BH1750_ADDR, buf, 2, 100);</code></span>
+<span class="line" id="L59"><a href="#L59" aria-label="第 59 行">59</a><code>    if (st != HAL_OK) return st;</code></span>
+<span class="line" id="L60"><a href="#L60" aria-label="第 60 行">60</a><code></code></span>
+<span class="line" id="L61"><a href="#L61" aria-label="第 61 行">61</a><code>    *raw = (uint16_t)((buf[0] &lt;&lt; 8) | buf[1]);</code></span>
+<span class="line" id="L62"><a href="#L62" aria-label="第 62 行">62</a><code>    return HAL_OK;</code></span>
+<span class="line" id="L63"><a href="#L63" aria-label="第 63 行">63</a><code>}</code></span>
+<span class="line" id="L64"><a href="#L64" aria-label="第 64 行">64</a><code></code></span>
+<span class="line" id="L65"><a href="#L65" aria-label="第 65 行">65</a><code>float BH1750_ReadLux(void)</code></span>
+<span class="line" id="L66"><a href="#L66" aria-label="第 66 行">66</a><code>{</code></span>
+<span class="line" id="L67"><a href="#L67" aria-label="第 67 行">67</a><code>    uint16_t raw;</code></span>
+<span class="line" id="L68"><a href="#L68" aria-label="第 68 行">68</a><code></code></span>
+<span class="line" id="L69"><a href="#L69" aria-label="第 69 行">69</a><code>    /* 先正常读一次;失败就恢复总线 + 重新上电,再试一次(自愈一次瞬时毛刺,</code></span>
+<span class="line" id="L70"><a href="#L70" aria-label="第 70 行">70</a><code>       这样偶发 I2C 错误不会直接把这一轮判成&quot;故障&quot;,消掉时好时坏的抖动)。 */</code></span>
+<span class="line" id="L71"><a href="#L71" aria-label="第 71 行">71</a><code>    if (bh1750_read_once(&amp;raw) != HAL_OK) {</code></span>
+<span class="line" id="L72"><a href="#L72" aria-label="第 72 行">72</a><code>        bh1750_bus_recover();</code></span>
+<span class="line" id="L73"><a href="#L73" aria-label="第 73 行">73</a><code>        BH1750_Init();</code></span>
+<span class="line" id="L74"><a href="#L74" aria-label="第 74 行">74</a><code>        if (bh1750_read_once(&amp;raw) != HAL_OK) {</code></span>
+<span class="line" id="L75"><a href="#L75" aria-label="第 75 行">75</a><code>            return -1.0f;                   // 恢复后仍失败,才真判故障(多半是物理接线/上拉问题)</code></span>
+<span class="line" id="L76"><a href="#L76" aria-label="第 76 行">76</a><code>        }</code></span>
+<span class="line" id="L77"><a href="#L77" aria-label="第 77 行">77</a><code>    }</code></span>
+<span class="line" id="L78"><a href="#L78" aria-label="第 78 行">78</a><code>    return raw / 1.2f;</code></span>
+<span class="line" id="L79"><a href="#L79" aria-label="第 79 行">79</a><code>}</code></span></div></html>

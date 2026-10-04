@@ -1,0 +1,793 @@
+{
+  "interview": {
+    "title": "牛客：大疆嵌入式工程师面经（作者复盘）",
+    "url": "https://ac.nowcoder.com/discuss/794763",
+    "scope": "题目覆盖与项目追问方式；经验帖不作为技术标准或公司必问题库。",
+    "kind": "面经选题",
+    "status": "已访问"
+  },
+  "xiaolin": {
+    "title": "小林 coding：操作系统面试题",
+    "url": "https://www.xiaolincoding.com/interview/os.html",
+    "scope": "章节组织和高频问题检索；技术结论另以官方手册核对。",
+    "kind": "面经选题",
+    "status": "已访问"
+  },
+  "epoll": {
+    "title": "epoll(7)",
+    "url": "https://man7.org/linux/man-pages/man7/epoll.7.html",
+    "scope": "就绪集合、ET/LT、EAGAIN 与事件生命周期。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "eventfd": {
+    "title": "eventfd(2)",
+    "url": "https://man7.org/linux/man-pages/man2/eventfd.2.html",
+    "scope": "计数器、非阻塞读写与合并通知。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "timerfd": {
+    "title": "timerfd_create(2)",
+    "url": "https://man7.org/linux/man-pages/man2/timerfd_create.2.html",
+    "scope": "时钟选择、到期计数与 fd 通知。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "signalfd": {
+    "title": "signalfd(2)",
+    "url": "https://man7.org/linux/man-pages/man2/signalfd.2.html",
+    "scope": "信号掩码、线程继承与 fd 读取。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "pthreads": {
+    "title": "pthreads(7)",
+    "url": "https://man7.org/linux/man-pages/man7/pthreads.7.html",
+    "scope": "进程内共享与线程独立状态。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "process": {
+    "title": "fork(2)：进程资源",
+    "url": "https://man7.org/linux/man-pages/man2/fork.2.html",
+    "scope": "进程隔离与继承。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "syscalls": {
+    "title": "syscalls(2)",
+    "url": "https://man7.org/linux/man-pages/man2/syscalls.2.html",
+    "scope": "系统调用接口与内核边界。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "read": {
+    "title": "read(2)",
+    "url": "https://man7.org/linux/man-pages/man2/read.2.html",
+    "scope": "读取返回值、EINTR、EAGAIN。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "write": {
+    "title": "write(2)",
+    "url": "https://man7.org/linux/man-pages/man2/write.2.html",
+    "scope": "短写、错误与完成边界。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "mmap": {
+    "title": "mmap(2)",
+    "url": "https://man7.org/linux/man-pages/man2/mmap.2.html",
+    "scope": "虚拟内存与文件映射。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "proc": {
+    "title": "proc(5)",
+    "url": "https://man7.org/linux/man-pages/man5/proc.5.html",
+    "scope": "进程、内存与运行期诊断入口。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "condvar": {
+    "title": "pthread_cond_wait(3p)",
+    "url": "https://man7.org/linux/man-pages/man3/pthread_cond_wait.3p.html",
+    "scope": "谓词、原子解锁等待与虚假唤醒。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "mutex": {
+    "title": "pthread_mutex_lock(3p)",
+    "url": "https://man7.org/linux/man-pages/man3/pthread_mutex_lock.3p.html",
+    "scope": "锁所有者、阻塞和错误语义。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "sched": {
+    "title": "sched(7)",
+    "url": "https://man7.org/linux/man-pages/man7/sched.7.html",
+    "scope": "普通与实时调度策略。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "select": {
+    "title": "select(2)",
+    "url": "https://man7.org/linux/man-pages/man2/select.2.html",
+    "scope": "集合、描述符表示限制。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "poll": {
+    "title": "poll(2)",
+    "url": "https://man7.org/linux/man-pages/man2/poll.2.html",
+    "scope": "就绪查询与接口差别。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "termios": {
+    "title": "termios(3)",
+    "url": "https://man7.org/linux/man-pages/man3/termios.3.html",
+    "scope": "串口原始模式、VMIN/VTIME 和 tcdrain。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "signal": {
+    "title": "signal(7)",
+    "url": "https://man7.org/linux/man-pages/man7/signal.7.html",
+    "scope": "信号上下文与屏蔽。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "tcpman": {
+    "title": "tcp(7)",
+    "url": "https://man7.org/linux/man-pages/man7/tcp.7.html",
+    "scope": "Linux TCP 状态、缓冲与选项。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "fork": {
+    "title": "fork(2)",
+    "url": "https://man7.org/linux/man-pages/man2/fork.2.html",
+    "scope": "写时复制和多线程 fork 限制。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "exec": {
+    "title": "exec(3)",
+    "url": "https://man7.org/linux/man-pages/man3/exec.3.html",
+    "scope": "进程映像替换。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "ipc": {
+    "title": "sysvipc(7)",
+    "url": "https://man7.org/linux/man-pages/man7/sysvipc.7.html",
+    "scope": "IPC 家族；与管道/socket 选型结合。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "open": {
+    "title": "open(2)",
+    "url": "https://man7.org/linux/man-pages/man2/open.2.html",
+    "scope": "fd 与 open file description。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "dup": {
+    "title": "dup(2)",
+    "url": "https://man7.org/linux/man-pages/man2/dup.2.html",
+    "scope": "共享打开状态与 fd 标志。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "close": {
+    "title": "close(2)",
+    "url": "https://man7.org/linux/man-pages/man2/close.2.html",
+    "scope": "关闭、fd 复用和错误处理。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "eevdf": {
+    "title": "Linux Kernel：EEVDF Scheduler",
+    "url": "https://docs.kernel.org/scheduler/sched-eevdf.html",
+    "scope": "调度实现版本边界，不预设目标机内核。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "irq": {
+    "title": "Linux Kernel：Generic IRQ handling",
+    "url": "https://docs.kernel.org/core-api/genericirq.html",
+    "scope": "硬中断与延后处理的上下文。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "kernelmemory": {
+    "title": "Linux Kernel：Memory barriers",
+    "url": "https://docs.kernel.org/core-api/wrappers/memory-barriers.html",
+    "scope": "缓存、访问排序与设备交互的层次。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "cppguide": {
+    "title": "C++ Core Guidelines",
+    "url": "https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines",
+    "scope": "R.1/资源管理、CP/并发与接口生命周期。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "cppatomics": {
+    "title": "C++ 工作草案：原子内存序",
+    "url": "https://eel.is/c++draft/atomics.order",
+    "scope": "release/acquire/relaxed 与可见性。 项目按 C++17，未引入新标准专属特性。",
+    "kind": "标准草案",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "cppmemory": {
+    "title": "C++ 工作草案：shared_ptr",
+    "url": "https://eel.is/c++draft/util.smartptr.shared",
+    "scope": "共享所有权及线程安全边界。 项目按 C++17，未引入新标准专属特性。",
+    "kind": "标准草案",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "cppmove": {
+    "title": "C++ 工作草案：move / forward",
+    "url": "https://eel.is/c++draft/forward",
+    "scope": "值类别转换与移动语义。 项目按 C++17，未引入新标准专属特性。",
+    "kind": "标准草案",
+    "status": "已访问"
+  },
+  "cppvector": {
+    "title": "C++ 工作草案：vector modifiers",
+    "url": "https://eel.is/c++draft/vector.modifiers",
+    "scope": "扩容、擦除和失效规则。 项目按 C++17，未引入新标准专属特性。",
+    "kind": "标准草案",
+    "status": "2026-09-21 已复核 vector.modifiers 的失效与异常条件"
+  },
+  "cpplambda": {
+    "title": "C++ 工作草案：lambda capture",
+    "url": "https://eel.is/c++draft/expr.prim.lambda.capture",
+    "scope": "捕获形式与生命周期。 项目按 C++17，未引入新标准专属特性。",
+    "kind": "标准草案",
+    "status": "已访问"
+  },
+  "cppnew": {
+    "title": "C++ 工作草案：new",
+    "url": "https://eel.is/c++draft/expr.new",
+    "scope": "对象构造和存储分配。 项目按 C++17，未引入新标准专属特性。",
+    "kind": "标准草案",
+    "status": "已访问"
+  },
+  "cppinline": {
+    "title": "C++ 工作草案：inline",
+    "url": "https://eel.is/c++draft/dcl.inline",
+    "scope": "语言定义与优化内联的区别。 项目按 C++17，未引入新标准专属特性。",
+    "kind": "标准草案",
+    "status": "已访问"
+  },
+  "cppvirtual": {
+    "title": "C++ 工作草案：virtual functions",
+    "url": "https://eel.is/c++draft/class.virtual",
+    "scope": "运行期多态与覆盖。 项目按 C++17，未引入新标准专属特性。",
+    "kind": "标准草案",
+    "status": "已访问"
+  },
+  "cstandard": {
+    "title": "WG14 N1570：C11 委员会草案",
+    "url": "https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf",
+    "scope": "6.2/对象表示和链接、6.5/表达式、7.24/字符串内存接口。",
+    "kind": "标准草案",
+    "status": "已访问"
+  },
+  "volatile": {
+    "title": "GCC：Volatiles",
+    "url": "https://gcc.gnu.org/onlinedocs/gcc/Volatiles.html",
+    "scope": "volatile 的访问约束，不提供普通内存同步。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "gccstages": {
+    "title": "GCC：Overall Options",
+    "url": "https://gcc.gnu.org/onlinedocs/gcc/Overall-Options.html",
+    "scope": "预处理、编译、汇编与链接阶段。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "gnuld": {
+    "title": "GNU ld：Linker Scripts",
+    "url": "https://sourceware.org/binutils/docs/ld/Scripts.html",
+    "scope": "段布局、装载地址与运行地址。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "sanitizers": {
+    "title": "GCC：Instrumentation Options",
+    "url": "https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html",
+    "scope": "ASan/UBSan/TSan 的用途与限制。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "tcp": {
+    "title": "RFC 9293：TCP",
+    "url": "https://datatracker.ietf.org/doc/html/rfc9293",
+    "scope": "握手、序号、字节流和关闭；§3.4–3.8。",
+    "kind": "协议标准",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "tcpcc": {
+    "title": "RFC 5681：TCP Congestion Control",
+    "url": "https://datatracker.ietf.org/doc/html/rfc5681",
+    "scope": "拥塞窗口、慢启动与拥塞避免。",
+    "kind": "协议标准",
+    "status": "已访问"
+  },
+  "http11": {
+    "title": "RFC 9112：HTTP/1.1",
+    "url": "https://datatracker.ietf.org/doc/html/rfc9112",
+    "scope": "消息定界、正文长度和连接管理；§6–§9。",
+    "kind": "协议标准",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "tls": {
+    "title": "RFC 8446：TLS 1.3",
+    "url": "https://datatracker.ietf.org/doc/html/rfc8446",
+    "scope": "认证、完整性与传输保护的边界。",
+    "kind": "协议标准",
+    "status": "已访问"
+  },
+  "rfc1982": {
+    "title": "RFC 1982：Serial Number Arithmetic",
+    "url": "https://datatracker.ietf.org/doc/html/rfc1982",
+    "scope": "通用模序号比较背景；项目 SR 具体策略以源码为准。",
+    "kind": "协议标准",
+    "status": "已访问"
+  },
+  "mqttspec": {
+    "title": "OASIS MQTT 3.1.1",
+    "url": "https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html",
+    "scope": "§3.1.2 会话/遗嘱/Keep Alive、§3.3 Retain、§4.3 QoS。",
+    "kind": "协议标准",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "mosquitto": {
+    "title": "Eclipse Mosquitto：C API",
+    "url": "https://mosquitto.org/api/files/mosquitto-h.html",
+    "scope": "publish 返回值、网络线程、回调与重连。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "modbus": {
+    "title": "Modbus Organization：Serial Line V1.02",
+    "url": "https://www.modbus.org/file/secure/modbusoverserial.pdf",
+    "scope": "串行 CRC 附录；本项目只使用 CRC 变体，不是 Modbus 协议。",
+    "kind": "协议标准",
+    "status": "已访问"
+  },
+  "sqlitewal": {
+    "title": "SQLite：Write-Ahead Logging",
+    "url": "https://www.sqlite.org/wal.html",
+    "scope": "读写并发、checkpoint 与 WAL 保留。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "sqlitethread": {
+    "title": "SQLite：Using SQLite in multi-threaded applications",
+    "url": "https://www.sqlite.org/threadsafe.html",
+    "scope": "连接线程模式与应用事务归属。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "sqlitetrans": {
+    "title": "SQLite：Transaction",
+    "url": "https://www.sqlite.org/lang_transaction.html",
+    "scope": "事务边界与提交失败。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "sqlitepragma": {
+    "title": "SQLite：PRAGMA synchronous",
+    "url": "https://www.sqlite.org/pragma.html#pragma_synchronous",
+    "scope": "WAL/NORMAL 与断电持久性。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "sqlitequery": {
+    "title": "SQLite：Query Planning",
+    "url": "https://www.sqlite.org/queryplanner.html",
+    "scope": "组合索引、过滤与排序。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "sqlitebind": {
+    "title": "SQLite：Binding values to prepared statements",
+    "url": "https://www.sqlite.org/c3ref/bind_blob.html",
+    "scope": "绑定数据与语句执行。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "rm0008": {
+    "title": "ST RM0008：STM32F1 参考手册",
+    "url": "https://www.st.com/resource/en/reference_manual/rm0008-stm32f101xx-stm32f102xx-stm32f103xx-stm32f105xx-and-stm32f107xx-advanced-armbased-32bit-mcus-stmicroelectronics.pdf",
+    "scope": "RCC、GPIO、DMA、TIM、USART、I2C、IWDG/WWDG 等章节；配置同时核对本地 HAL。",
+    "kind": "芯片手册",
+    "status": "官方检索已核对；全文超过浏览抓取大小限制"
+  },
+  "pm0056": {
+    "title": "ST PM0056：Cortex-M3 编程手册",
+    "url": "https://www.st.com/resource/en/programming_manual/pm0056-stm32f10xxx20xxx21xxxl1xxxx-cortexm3-programming-manual-stmicroelectronics.pdf",
+    "scope": "异常、寄存器、NVIC、SysTick 和故障状态；Rev 7。",
+    "kind": "芯片手册",
+    "status": "2026-09-20 已读取 Rev 7（2024-12），156 页"
+  },
+  "stm32ds": {
+    "title": "ST STM32F103x8/xB 数据手册",
+    "url": "https://www.st.com/resource/en/datasheet/stm32f103c8.pdf",
+    "scope": "存储规格、时钟与电气参数范围。",
+    "kind": "芯片手册",
+    "status": "已访问"
+  },
+  "stboot": {
+    "title": "ST AN2606：System memory boot mode",
+    "url": "https://www.st.com/resource/en/application_note/an2606-stm32-microcontroller-system-memory-boot-mode-stmicroelectronics.pdf",
+    "scope": "启动模式背景；自定义 OTA 回滚是本文设计扩展，并非引用本手册宣称已实现。",
+    "kind": "应用笔记",
+    "status": "已访问"
+  },
+  "sthal": {
+    "title": "ST 官方 stm32f1xx HAL UART 源码",
+    "url": "https://github.com/STMicroelectronics/stm32f1xx-hal-driver/blob/master/Src/stm32f1xx_hal_uart.c",
+    "scope": "HAL_UART_IRQHandler / ReceiveToIdle 与驱动状态；项目结论以离线本地版本为准。",
+    "kind": "原厂源码",
+    "status": "已访问"
+  },
+  "i2cspec": {
+    "title": "NXP UM10204：I2C-bus specification",
+    "url": "https://community.nxp.com/pwmxy87654/attachments/pwmxy87654/nxp-designs/931/1/UM10204.pdf",
+    "scope": "§3.1 信号、ACK/时钟拉伸/总线清理，§7 上拉计算。",
+    "kind": "总线规范",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "dht11": {
+    "title": "奥松 DHT11 V1.3 产品手册",
+    "url": "https://www.aosong.com/userfiles/files/media/DHT11-V1_3%E8%AF%B4%E6%98%8E%E4%B9%A6%EF%BC%88%E8%AF%A6%E7%BB%86%E7%89%88%EF%BC%89.pdf",
+    "scope": "V1.3_20170331：表 4/图 3–6 时序；§6 读取间隔与前次测量值；§7 温度小数及负号、湿度小数为 0。实物版本应核对。",
+    "kind": "原厂手册",
+    "status": "2026-09-21 已复核 V1.3 的读取间隔、前次测量、温度小数与符号"
+  },
+  "bh1750": {
+    "title": "ROHM BH1750FVI 原厂手册（DFRobot 镜像）",
+    "url": "https://dfimg.dfrobot.com/enshop/image/data/SEN0097/BH1750FVI.pdf",
+    "scope": "原厂 PDF，电气特性表及 I2C Bus Access / measurement adjustment；120 ms 典型、180 ms 最大值与默认系数。镜像为较早修订，实物版本应核对。",
+    "kind": "原厂手册镜像",
+    "status": "2026-09-21 已读取 ROHM Rev.B 原厂 PDF 镜像并复核参数"
+  },
+  "rtisr": {
+    "title": "FreeRTOS：Cortex-M interrupt priorities",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/03-Supported-devices/04-Demos/ARM-Cortex/RTOS-Cortex-M3-M4",
+    "scope": "优先级编码、BASEPRI 与可调用 ISR 范围。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rtstreamdoc": {
+    "title": "FreeRTOS：Stream / message buffers",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/02-Kernel-features/04-Stream-and-message-buffers/02-Stream-buffer-example",
+    "scope": "单写者单读者与字节流语义。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rtnotify": {
+    "title": "FreeRTOS：Task notifications",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/02-Kernel-features/03-Direct-to-task-notifications/01-Task-notifications",
+    "scope": "通知槽、计数/事件语义和接收者。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rtheapdoc": {
+    "title": "FreeRTOS：Memory management",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/02-Kernel-features/09-Memory-management/01-Memory-management",
+    "scope": "heap_1..5 与静态分配。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rtmutex": {
+    "title": "FreeRTOS：Mutexes",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/02-Kernel-features/02-Queues-mutexes-and-semaphores/04-Mutexes",
+    "scope": "优先级继承及任务上下文。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rtdelay": {
+    "title": "FreeRTOS：vTaskDelayUntil",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/04-API-references/02-Task-control/02-vTaskDelayUntil",
+    "scope": "相对与绝对周期延时。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rtstack": {
+    "title": "FreeRTOS：Stack high-water mark",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/04-API-references/03-Task-utilities/04-uxTaskGetStackHighWaterMark",
+    "scope": "水位单位与观测范围。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rttimerdoc": {
+    "title": "FreeRTOS：Software timers",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/02-Kernel-features/05-Software-timers/01-Software-timers",
+    "scope": "定时器服务任务与回调约束。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rteventdoc": {
+    "title": "FreeRTOS：Event groups",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/02-Kernel-features/06-Event-groups",
+    "scope": "事件位与等待任意/全部。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rtkernel": {
+    "title": "FreeRTOS：Tasks",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/02-Kernel-features/01-Tasks-and-co-routines/01-Tasks-overview",
+    "scope": "任务状态与调度。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rtlowpower": {
+    "title": "FreeRTOS：Low power support",
+    "url": "https://www.freertos.org/Documentation/02-Kernel/02-Kernel-features/07-Lower-power-support",
+    "scope": "Tickless 进入、唤醒与 Tick 补偿。",
+    "kind": "内核官方文档",
+    "status": "官方页面已访问；页面动态渲染，机制另核对本地内核源码"
+  },
+  "rtqueueapi": {
+    "title": "FreeRTOS 官方 queue.h 接口契约",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel/blob/main/include/queue.h",
+    "scope": "队列元素复制、发送等待与 ISR 接口。",
+    "kind": "内核官方源码",
+    "status": "已访问"
+  },
+  "rtcritical": {
+    "title": "FreeRTOS 官方 task.h 接口契约",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel/blob/main/include/task.h",
+    "scope": "临界区、调度器挂起与阻塞限制。",
+    "kind": "内核官方源码",
+    "status": "已访问"
+  },
+  "systemd": {
+    "title": "systemd 官方 systemd.service 手册源码",
+    "url": "https://github.com/systemd/systemd/blob/main/man/systemd.service.xml",
+    "scope": "重启、停止超时与服务状态；官网手册访问受限时采用官方源码。",
+    "kind": "官方资料",
+    "status": "2026-09-21 已复核官方手册源码 Restart 条件"
+  },
+  "systemdexec": {
+    "title": "systemd 官方 systemd.exec 手册源码",
+    "url": "https://github.com/systemd/systemd/blob/main/man/systemd.exec.xml",
+    "scope": "运行身份、目录权限和沙箱配置。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "perf": {
+    "title": "Linux Kernel：Perf events",
+    "url": "https://www.kernel.org/doc/html/latest/admin-guide/perf-security.html",
+    "scope": "性能事件采样与权限；性能诊断方案由本文组织。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "strace": {
+    "title": "strace 官方文档入口",
+    "url": "https://strace.io/",
+    "scope": "系统调用、信号与进程跟踪。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "gdb": {
+    "title": "GNU GDB 官方手册",
+    "url": "https://sourceware.org/gdb/current/onlinedocs/gdb.html/",
+    "scope": "断点、栈、寄存器、远程调试与目标现场。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "cmakedoc": {
+    "title": "CMake：cmake-buildsystem",
+    "url": "https://cmake.org/cmake/help/latest/manual/cmake-buildsystem.7.html",
+    "scope": "构建目标、依赖与使用要求。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "rtbook3": {
+    "title": "FreeRTOS 官方内核书：Heap Memory Management",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel-Book/blob/main/ch03.md",
+    "scope": "第 3 章；用于通用机制。具体节点实现另对照随包内核源码，不推定与上游 main 完全相同。",
+    "kind": "内核官方教材",
+    "status": "2026-09-21 已访问官方教材；调度、堆和定时器命令机制已复核，项目细节以本地内核为准"
+  },
+  "rtbook4": {
+    "title": "FreeRTOS 官方内核书：Task Management",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel-Book/blob/main/ch04.md",
+    "scope": "第 4 章；用于通用机制。具体节点实现另对照随包内核源码，不推定与上游 main 完全相同。",
+    "kind": "内核官方教材",
+    "status": "2026-09-21 已访问官方教材；调度、堆和定时器命令机制已复核，项目细节以本地内核为准"
+  },
+  "rtbook5": {
+    "title": "FreeRTOS 官方内核书：Queue Management",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel-Book/blob/main/ch05.md",
+    "scope": "第 5 章；用于通用机制。具体节点实现另对照随包内核源码，不推定与上游 main 完全相同。",
+    "kind": "内核官方教材",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "rtbook6": {
+    "title": "FreeRTOS 官方内核书：Software Timer Management",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel-Book/blob/main/ch06.md",
+    "scope": "第 6 章；用于通用机制。具体节点实现另对照随包内核源码，不推定与上游 main 完全相同。",
+    "kind": "内核官方教材",
+    "status": "2026-09-21 已访问官方教材；调度、堆和定时器命令机制已复核，项目细节以本地内核为准"
+  },
+  "rtbook7": {
+    "title": "FreeRTOS 官方内核书：Interrupt Management",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel-Book/blob/main/ch07.md",
+    "scope": "第 7 章；用于通用机制。具体节点实现另对照随包内核源码，不推定与上游 main 完全相同。",
+    "kind": "内核官方教材",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "rtbook8": {
+    "title": "FreeRTOS 官方内核书：Resource Management",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel-Book/blob/main/ch08.md",
+    "scope": "第 8 章；用于通用机制。具体节点实现另对照随包内核源码，不推定与上游 main 完全相同。",
+    "kind": "内核官方教材",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "rtbook9": {
+    "title": "FreeRTOS 官方内核书：Event Groups",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel-Book/blob/main/ch09.md",
+    "scope": "第 9 章；用于通用机制。具体节点实现另对照随包内核源码，不推定与上游 main 完全相同。",
+    "kind": "内核官方教材",
+    "status": "2026-09-21 已访问官方教材；调度、堆和定时器命令机制已复核，项目细节以本地内核为准"
+  },
+  "rtbook10": {
+    "title": "FreeRTOS 官方内核书：Task Notifications",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel-Book/blob/main/ch10.md",
+    "scope": "第 10 章；用于通用机制。具体节点实现另对照随包内核源码，不推定与上游 main 完全相同。",
+    "kind": "内核官方教材",
+    "status": "2026-09-21 已访问官方教材；调度、堆和定时器命令机制已复核，项目细节以本地内核为准"
+  },
+  "cmsisnvic": {
+    "title": "Arm CMSIS：NVIC 接口与优先级",
+    "url": "https://arm-software.github.io/CMSIS_6/main/Core/group__NVIC__gr.html",
+    "scope": "Priority Grouping、NVIC_SetPriority、__NVIC_PRIO_BITS；CMSIS 逻辑值与寄存器编码。",
+    "kind": "官方资料",
+    "status": "已访问"
+  },
+  "cmsisreg": {
+    "title": "Arm CMSIS：内核寄存器",
+    "url": "https://arm-software.github.io/CMSIS_6/main/Core/group__Core__Register__gr.html",
+    "scope": "__get_MSP / __get_PSP / __set_BASEPRI / __set_PRIMASK；具体 M3 异常帧对照 PM0056。",
+    "kind": "官方资料",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "dmaapp": {
+    "title": "ST AN2548：DMA 控制器原理",
+    "url": "https://www.st.com/resource/en/application_note/cd00160362.pdf",
+    "scope": "DMA 请求、总线争用与传输模式；具体通道和完成语义对照 RM0008 及本地 HAL。",
+    "kind": "应用笔记",
+    "status": "2026-09-18 官方索引可检索；PDF 直接抓取超时"
+  },
+  "adcapp": {
+    "title": "ST AN2834：ADC 精度",
+    "url": "https://www.st.com/resource/en/application_note/an2834-how-to-get-the-best-adc-accuracy-in-stm32-microcontrollers-stmicroelectronics.pdf",
+    "scope": "Rev 10，采样电容、源阻抗、参考电压与噪声；适用参数按具体芯片数据手册。",
+    "kind": "原厂应用笔记",
+    "status": "2026-09-18 已读取"
+  },
+  "canintro": {
+    "title": "TI SLOA101B：CAN 总线原理",
+    "url": "https://www.ti.com/lit/an/sloa101b/sloa101b.pdf",
+    "scope": "§4.1 仲裁、§4.4 故障限制、§5 物理总线；用于经典 CAN，不套用 CAN FD 的数据长度。",
+    "kind": "原厂应用笔记",
+    "status": "2026-09-18 已读取"
+  },
+  "canarb": {
+    "title": "CiA：CAN 数据链路层",
+    "url": "https://www.can-cia.org/can-knowledge/can-cc",
+    "scope": "经典 CAN 的消息、仲裁和错误处理；CAN 控制器与应用层完成边界分开。",
+    "kind": "行业组织资料",
+    "status": "2026-09-18 已访问并核对对应内容"
+  },
+  "falsesharing": {
+    "title": "Linux Kernel：False Sharing",
+    "url": "https://docs.kernel.org/kernel-hacking/false-sharing.html",
+    "scope": "What is false sharing、How to detect、Possible Mitigations；缓存行争用与测量。",
+    "kind": "内核官方文档",
+    "status": "2026-09-18 已读取"
+  },
+  "httpsem": {
+    "title": "RFC 9110：HTTP 幂等语义",
+    "url": "https://www.rfc-editor.org/rfc/rfc9110.html#section-9.2.2",
+    "scope": "§9.2.2 Idempotent Methods，约束预期效果，并非要求所有响应内容相同。",
+    "kind": "协议标准",
+    "status": "2026-09-18 已读取"
+  },
+  "tcprto": {
+    "title": "RFC 6298：TCP RTO 计算",
+    "url": "https://www.rfc-editor.org/rfc/rfc6298.html",
+    "scope": "§2 RTT/波动估计、§3 重传样本、§5 定时器管理；作为重试基础，自定义 SR 参数以项目为准。",
+    "kind": "协议标准",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "arq": {
+    "title": "MIT 6.02：可靠传输与 ARQ 课程原稿",
+    "url": "https://web.mit.edu/6.02/www/f2011/handouts/20.pdf",
+    "scope": "第 20 章 Stop-and-Wait、Sliding Window 与 ACK；项目窗口与缓存寿命由本地实现给出。",
+    "kind": "高校课程原稿",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "mcuboot": {
+    "title": "MCUboot 官方设计文档",
+    "url": "https://docs.mcuboot.com/design.html",
+    "scope": "Image validation、Image trailers、Test images / image confirmation；用于解释掉电恢复和试运行，节点未实现 OTA。",
+    "kind": "项目官方设计文档",
+    "status": "2026-09-18 已访问并核对对应内容"
+  },
+  "rtportonline": {
+    "title": "FreeRTOS 官方 ARM_CM3 移植源码",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel/blob/main/portable/GCC/ARM_CM3/port.c",
+    "scope": "SVC/PendSV、xPortSysTickHandler、vPortSuppressTicksAndSleep；上游参考，当前行为以本地快照为准。",
+    "kind": "内核官方源码",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "rtstreamonline": {
+    "title": "FreeRTOS 官方 StreamBuffer 接口契约",
+    "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel/blob/main/include/stream_buffer.h",
+    "scope": "单写者/单读者、trigger level 与 Send/Receive 返回值；以版本适用性为前提。",
+    "kind": "内核官方源码",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "arqsr": {
+    "title": "MIT 16.36：GBN 与 Selective Repeat",
+    "url": "https://ocw.mit.edu/courses/16-36-communication-systems-engineering-spring-2009/9b06e175ee2b383dc35490581a45267a_MIT16_36s09_lec18.pdf",
+    "scope": "Lecture 18，SRP Rules：M≥2W；区分一般循环序号与具体应用的会话内不复用策略。",
+    "kind": "高校课程原稿",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "futex": {
+    "title": "Linux futex(7)：用户态快速路径与内核等待",
+    "url": "https://man7.org/linux/man-pages/man7/futex.7.html",
+    "scope": "用户态原子操作、竞争时等待/唤醒；futex 是基础机制，并非完整互斥量接口。",
+    "kind": "官方接口手册",
+    "status": "2026-09-20 检索并核对机制；具体校对点见 research-notes.json"
+  },
+  "little": {
+    "title": "MIT 1.041/1.200：排队模型与 Little 定律",
+    "url": "https://web.mit.edu/1.041/www/lectures/L8-queuing-models-2026sp.pdf",
+    "scope": "Spring 2026，Stationary analysis and Little’s law；平均关系不能代替最坏突发容量证明。",
+    "kind": "高校课程原稿",
+    "status": "2026-09-21 已检索并读取"
+  },
+  "rta": {
+    "title": "University of York：固定优先级响应时间分析",
+    "url": "https://www.cs.york.ac.uk/rts/documents/thesis/emberson09.pdf",
+    "scope": "Paul Emberson 博士论文，2009，§2.2.2，式 2.3–2.5；本文示例采用单核固定优先级、无释放抖动的受限模型。",
+    "kind": "研究论文",
+    "status": "2026-09-21 已读取并核对公式与适用条件"
+  },
+  "asioimpl": {
+    "title": "Boost.Asio：平台实现与事件分派",
+    "url": "https://www.boost.org/latest/doc/html/boost_asio/overview/implementation.html",
+    "scope": "Linux 的 epoll 后端与可选 io_uring；仅说明上游机制，具体配置以本地编译为准。",
+    "kind": "库官方文档",
+    "status": "2026-10-04 已检索并核对"
+  },
+  "asiorun": {
+    "title": "Boost.Asio：io_context::run",
+    "url": "https://www.boost.org/doc/libs/latest/doc/html/boost_asio/reference/io_context/run.html",
+    "scope": "只有执行 run/poll 系列接口的线程分派处理函数；多个 run 调用者构成线程池。",
+    "kind": "库官方文档",
+    "status": "2026-10-04 已检索并核对"
+  },
+  "beastasync": {
+    "title": "Boost.Beast：异步 HTTP 服务端示例",
+    "url": "https://github.com/boostorg/beast/blob/develop/example/http/server/async/http_server_async.cpp",
+    "scope": "listener/session、异步 accept/read/write 与响应对象寿命；这是库示例，不代表应用已实现所有示例功能。",
+    "kind": "库官方源码",
+    "status": "2026-10-04 已检索并核对"
+  }
+}

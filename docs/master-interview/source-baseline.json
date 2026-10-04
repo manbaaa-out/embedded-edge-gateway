@@ -1,0 +1,496 @@
+{
+  "verified_on": "2026-10-04",
+  "captured_at": "2026-10-04T14:50:40.030582+00:00",
+  "gateway": {
+    "commit": "8776875f54b162db4be253b32a1eb722cbc35dd3",
+    "branch": "codex/multi-reactor-beast-20261004"
+  },
+  "node": {
+    "commit": "09044002d70213b4bbfa0c864a8be438e19eb6a1",
+    "branch": "main"
+  },
+  "files": {
+    "app": {
+      "repository": "gateway",
+      "path": "src/gateway/app/GatewayApp.cpp",
+      "sha256": "79e3c38cf0a228620530dc8f905139dd9b3faa9efe9f8844ae2d98f4270ab16a",
+      "line": 113,
+      "lines": 528,
+      "token": "GatewayApp::run()"
+    },
+    "apph": {
+      "repository": "gateway",
+      "path": "src/gateway/app/GatewayApp.h",
+      "sha256": "e6ba695558de82afadddc25cc497404e34a3b8db659e67df437eec95a7bef361",
+      "line": 21,
+      "lines": 80,
+      "token": "class GatewayApp"
+    },
+    "core": {
+      "repository": "gateway",
+      "path": "src/gateway/app/GatewayCore.cpp",
+      "sha256": "53235ea987828f2ff39085fa72258d702c56f8d2f9f5fb22b93ce8054ceb2dba",
+      "line": 118,
+      "lines": 222,
+      "token": "void GatewayCore::handleMqtt("
+    },
+    "coreh": {
+      "repository": "gateway",
+      "path": "src/gateway/app/GatewayCore.h",
+      "sha256": "3ba846f7a43ded90673594346f915756d432a087fe65824bd4bcf7161910764c",
+      "line": 20,
+      "lines": 69,
+      "token": "class GatewayCore"
+    },
+    "executor": {
+      "repository": "gateway",
+      "path": "src/gateway/core/concurrent/TaskExecutor.h",
+      "sha256": "c3b53274996529599346dd437afa66566e394ce9ad612e60986def3e5351e520",
+      "line": 19,
+      "lines": 76,
+      "token": "class TaskExecutor"
+    },
+    "main": {
+      "repository": "gateway",
+      "path": "src/gateway/app/main.cpp",
+      "sha256": "229347ee5d617c18dec648e34165a20bd05180de42034b81668580af5507dd83",
+      "line": 21,
+      "lines": 53,
+      "token": "int main("
+    },
+    "loop": {
+      "repository": "gateway",
+      "path": "src/gateway/io/event/EventLoop.cpp",
+      "sha256": "4d639a4ba882525f1ce672e19372448bdbc6b1c201a665a0564bd0cb160e4560",
+      "line": 58,
+      "lines": 129,
+      "token": "void EventLoop::loop()"
+    },
+    "link": {
+      "repository": "gateway",
+      "path": "src/gateway/link/NodeLink.cpp",
+      "sha256": "000dcbb9f46212b3ef653ed3f31e717a511aa8a8aa0eeaff938119e2fc34e391",
+      "line": 92,
+      "lines": 133,
+      "token": "void NodeLink::flushOutput()"
+    },
+    "serial": {
+      "repository": "gateway",
+      "path": "src/gateway/io/serial/SerialPort.cpp",
+      "sha256": "1b08ddf500c24f6c8cc93f742b2d67526e4a0e9646449fdc992a470e213278e2",
+      "line": 93,
+      "lines": 130,
+      "token": "void SerialPort::configure"
+    },
+    "tracker": {
+      "repository": "gateway",
+      "path": "src/gateway/link/CommandTracker.cpp",
+      "sha256": "3281ac63e98ad05e1336474baae1ef2af0fa60da32c1d2a04ed091a5f3108634",
+      "line": 78,
+      "lines": 240,
+      "token": "bool CommandTracker::canSubmit"
+    },
+    "proto": {
+      "repository": "gateway",
+      "path": "protocol/include/edge_proto/edge_proto.h",
+      "sha256": "70ac40a3505f664836c0af837a6fd5fa8f47370eb4dc600c44d5f1bfd498b040",
+      "line": 110,
+      "lines": 233,
+      "token": "#define EDGE_ACK_TIMEOUT_MS"
+    },
+    "sr": {
+      "repository": "gateway",
+      "path": "protocol/src/edge_sr.c",
+      "sha256": "ece07e872650b00edd53832eae7c9eb1ee46871c33144482bd76a870b3ee300f",
+      "line": 62,
+      "lines": 166,
+      "token": "static void deliver("
+    },
+    "frame": {
+      "repository": "gateway",
+      "path": "protocol/src/edge_frame.c",
+      "sha256": "3908d289b3b3dd38469cd6fc7f27bacdda2dd23984017dd3b17c35eb13b2db01",
+      "line": 101,
+      "lines": 181,
+      "token": "edge_parser_feed"
+    },
+    "crc": {
+      "repository": "gateway",
+      "path": "protocol/src/edge_crc16.c",
+      "sha256": "1ced4017eea7ea8440a824a9bc780751c5563c3f827b4ba73549db373156abc5",
+      "line": 10,
+      "lines": 57,
+      "token": "uint16_t"
+    },
+    "queue": {
+      "repository": "gateway",
+      "path": "src/gateway/core/concurrent/ThreadSafeQueue.h",
+      "sha256": "897c2f93b3f09706c30e1c2e4c9d2075cc690ffc4ef4318d3b4d2ea41f1971da",
+      "line": 94,
+      "lines": 162,
+      "token": "std::optional<T> pop()"
+    },
+    "pipe": {
+      "repository": "gateway",
+      "path": "src/gateway/pipeline/TelemetryPipeline.cpp",
+      "sha256": "a06487d2675b9b7487c5d537b970c75b70f441b8a74e965359ec9bae0b0c4151",
+      "line": 45,
+      "lines": 90,
+      "token": "void TelemetryPipeline::writerLoop"
+    },
+    "pipeh": {
+      "repository": "gateway",
+      "path": "src/gateway/pipeline/TelemetryPipeline.h",
+      "sha256": "563e7356718dbe84130c371c9092f7ff552f73d66fd7f58a3f545cf90a5fadd9",
+      "line": 30,
+      "lines": 98,
+      "token": "kQueueCapacity ="
+    },
+    "db": {
+      "repository": "gateway",
+      "path": "src/gateway/storage/Database.h",
+      "sha256": "7f417ec37d1a6242b747bede24cab2206fdd3774edc7af0fa77b8f7f3d5ad280",
+      "line": 110,
+      "lines": 197,
+      "token": "void insertBatch("
+    },
+    "mqtt": {
+      "repository": "gateway",
+      "path": "src/gateway/cloud/MqttClient.cpp",
+      "sha256": "4067b4c48219f15121e045e15f8b582ddd0a7ac0e998e1988c4ba92f92f07545",
+      "line": 21,
+      "lines": 119,
+      "token": "mosquitto_new("
+    },
+    "translator": {
+      "repository": "gateway",
+      "path": "src/gateway/cloud/CommandTranslator.cpp",
+      "sha256": "2951ba05887b69c5db3cbaf5e4f2ff99c3246e6365a787a19ca5be9431c77ce2",
+      "line": 57,
+      "lines": 87,
+      "token": "translateCommand("
+    },
+    "http": {
+      "repository": "gateway",
+      "path": "src/gateway/io/http/HttpServer.cpp",
+      "sha256": "0a7992fbc369e10e4f11278c663285be79515dce0a7be482b73acadbeab88fd1",
+      "line": 99,
+      "lines": 314,
+      "token": "class Session :"
+    },
+    "httph": {
+      "repository": "gateway",
+      "path": "src/gateway/io/http/HttpServer.h",
+      "sha256": "05f1cbd2722e83febb6422361ae848a2ed76ba06c51e507b97c31e11351e151d",
+      "line": 19,
+      "lines": 54,
+      "token": "struct HttpRequest"
+    },
+    "config": {
+      "repository": "gateway",
+      "path": "src/gateway/core/config/Config.cpp",
+      "sha256": "614a5414768e3881614af85fe4df23e24fb410ac99c144a2e6a37ef90af6f6dc",
+      "line": 134,
+      "lines": 166,
+      "token": "ConfigManager::reload("
+    },
+    "log": {
+      "repository": "gateway",
+      "path": "src/gateway/core/log/AsyncLogger.cpp",
+      "sha256": "d40764a21102f259cd2c60eef42de43bbcd0ed82b8838110390b9974b0c3102f",
+      "line": 89,
+      "lines": 227,
+      "token": "void AsyncLogger::append("
+    },
+    "cmake": {
+      "repository": "gateway",
+      "path": "CMakeLists.txt",
+      "sha256": "5c56cc244f4e88b24cbbfcc42bcc0caf9fd1bf24b1e03fa009033d278b894717",
+      "line": 2,
+      "lines": 82,
+      "token": "cmake_minimum_required"
+    },
+    "deploy": {
+      "repository": "gateway",
+      "path": "deploy/gateway.service.in",
+      "sha256": "fedca8a64c2f59f45a41e76d1ac17ed483f86e078bb80ffa7132a0686e5d6456",
+      "line": 8,
+      "lines": 38,
+      "token": "[Service]"
+    },
+    "nodeapp": {
+      "repository": "node",
+      "path": "App/app.c",
+      "sha256": "eaf40aa2d6ca0061186ee9661c5c418c8910a637b4cb940225b4810824399506",
+      "line": 13,
+      "lines": 41,
+      "token": "void app_start("
+    },
+    "uart": {
+      "repository": "node",
+      "path": "App/uart_link.c",
+      "sha256": "70ad798e2addd70e197b99cff102c69deddf6bff67a27fef5b706453211b77ca",
+      "line": 41,
+      "lines": 82,
+      "token": "void HAL_UARTEx_RxEventCallback("
+    },
+    "tx": {
+      "repository": "node",
+      "path": "App/tx_service.c",
+      "sha256": "0a7c5af075c8a9c7d983aa073d401ab0e79b08ceba961bf302e4c0a65c559608",
+      "line": 22,
+      "lines": 32,
+      "token": "void vTxTask("
+    },
+    "txh": {
+      "repository": "node",
+      "path": "App/tx_service.h",
+      "sha256": "1095a9fb8ba237c9e104c5110fe9458c1123f617aa251f4363ec24fd0c409f36",
+      "line": 4,
+      "lines": 38,
+      "token": "#include"
+    },
+    "cmd": {
+      "repository": "node",
+      "path": "App/cmd_service.c",
+      "sha256": "45d62a8dcca7c2f38da19b977ddbf0a73c84315ed03341e2c208a9f6b6b0de0b",
+      "line": 77,
+      "lines": 91,
+      "token": "void vCmdTask("
+    },
+    "sensor": {
+      "repository": "node",
+      "path": "App/sensor_hub.c",
+      "sha256": "97edfaadf711b94bb5261f391ca64d3e8e572292a266bbb5aa4cbc0634089200",
+      "line": 19,
+      "lines": 66,
+      "token": "static void read_selected("
+    },
+    "report": {
+      "repository": "node",
+      "path": "App/report_task.c",
+      "sha256": "0714cfaf6708c187c18adc8be0104127e969e6042e4459e44862917d0fb9c9a3",
+      "line": 55,
+      "lines": 78,
+      "token": "void vSampleReportTask("
+    },
+    "watch": {
+      "repository": "node",
+      "path": "App/watchdog.c",
+      "sha256": "d36f1fe1228f8997ef189225e7dec881403a78b8e6125737561da80f1d95f34c",
+      "line": 19,
+      "lines": 26,
+      "token": "void watchdog_kick_if_all_checked_in("
+    },
+    "dht": {
+      "repository": "node",
+      "path": "BSP/dht11.c",
+      "sha256": "035ba67c3f32b80598609f20535b90a868b615dfc5c617f2b90b85f28dbfe0d9",
+      "line": 51,
+      "lines": 104,
+      "token": "uint8_t DHT11_Read("
+    },
+    "bh": {
+      "repository": "node",
+      "path": "BSP/bh1750.c",
+      "sha256": "9c322ebc2558e1132426e19bebc03d3e45cc95b30d64a62b6bbaec15169857af",
+      "line": 47,
+      "lines": 79,
+      "token": "static HAL_StatusTypeDef bh1750_read_once("
+    },
+    "bhh": {
+      "repository": "node",
+      "path": "BSP/bh1750.h",
+      "sha256": "258b30526508c1cf4c94f03810a2c4a8148f166282e8d8b1bcf3474ae711de89",
+      "line": 8,
+      "lines": 18,
+      "token": "#define BH1750_ADDR"
+    },
+    "dwt": {
+      "repository": "node",
+      "path": "BSP/dwt_delay.c",
+      "sha256": "2d0451aa768459680e6478f6b650e3c820dd69a29df6d94cce102a11061d09f3",
+      "line": 7,
+      "lines": 30,
+      "token": "void DWT_Init("
+    },
+    "nmain": {
+      "repository": "node",
+      "path": "Core/Src/main.c",
+      "sha256": "e4b099a77d6753ae23e44f8ca407935c1a963c743a20902ef440ddbd471a035b",
+      "line": 116,
+      "lines": 206,
+      "token": "void SystemClock_Config(void)\n{"
+    },
+    "nioc": {
+      "repository": "node",
+      "path": "N6_freertos.ioc",
+      "sha256": "cfda7caaf1a2641b9f57b1ad4a44900d435955f722a2d04a6b3dcc63078c976f",
+      "line": 60,
+      "lines": 157,
+      "token": "NVIC.PriorityGroup=NVIC_PRIORITYGROUP_4"
+    },
+    "halcfg": {
+      "repository": "node",
+      "path": "Core/Inc/stm32f1xx_hal_conf.h",
+      "sha256": "1fbddda4d38cd7d5691fba84405bc4d12f635c21d98c36ba87f5684718fa4288",
+      "line": 133,
+      "lines": 391,
+      "token": "#define  USE_RTOS"
+    },
+    "nirq": {
+      "repository": "node",
+      "path": "Core/Src/stm32f1xx_it.c",
+      "sha256": "310136b2aec3f87e962f674806d950163d79c3a29580d3f588b1bccbcbe1d2d0",
+      "line": 87,
+      "lines": 258,
+      "token": "void HardFault_Handler("
+    },
+    "dma": {
+      "repository": "node",
+      "path": "Core/Src/dma.c",
+      "sha256": "154efef4ffc6d6416c62135e6fb16f07c3ae4edf2eec1b181d00e06eae6aed86",
+      "line": 39,
+      "lines": 55,
+      "token": "void MX_DMA_Init("
+    },
+    "usart": {
+      "repository": "node",
+      "path": "Core/Src/usart.c",
+      "sha256": "21f7e4807efe77b5c8d6207d0bbd0466752638f494852757628edff199673b23",
+      "line": 32,
+      "lines": 144,
+      "token": "void MX_USART1_UART_Init("
+    },
+    "gpio": {
+      "repository": "node",
+      "path": "Core/Src/gpio.c",
+      "sha256": "c2b090f0a779685ebae74fdb471b9acf4f601a7d1eb9cedcdbe0bd6dc2755373",
+      "line": 42,
+      "lines": 77,
+      "token": "void MX_GPIO_Init("
+    },
+    "i2c": {
+      "repository": "node",
+      "path": "Core/Src/i2c.c",
+      "sha256": "c4a1f5019e86452335979391f577472b9a427eb7ede364eb3b4fcfe94b7d2df8",
+      "line": 30,
+      "lines": 115,
+      "token": "void MX_I2C1_Init("
+    },
+    "iwdg": {
+      "repository": "node",
+      "path": "Core/Src/iwdg.c",
+      "sha256": "56af1e3506bb89867414a272d06c1bab1a1eea1865abb07d46885515e8e0c67b",
+      "line": 41,
+      "lines": 56,
+      "token": "hiwdg.Init.Prescaler"
+    },
+    "haltick": {
+      "repository": "node",
+      "path": "Core/Src/stm32f1xx_hal_timebase_tim.c",
+      "sha256": "43b0a6aa279c84404e75356fcd256a73564a269e1c92919425859d0362b18ee2",
+      "line": 42,
+      "lines": 139,
+      "token": "HAL_StatusTypeDef HAL_InitTick("
+    },
+    "haluart": {
+      "repository": "node",
+      "path": "Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_uart.c",
+      "sha256": "0baff878faf8551e43ad63959f04bae08d61ee94e686e56a56cd97d02535c4d9",
+      "line": 2350,
+      "lines": 3771,
+      "token": "void HAL_UART_IRQHandler("
+    },
+    "rtcfg": {
+      "repository": "node",
+      "path": "Core/Inc/FreeRTOSConfig.h",
+      "sha256": "05403479a852c2a28c4896bdf897947e1d3d46bc952d2b09244aaf16c2b80dae",
+      "line": 42,
+      "lines": 504,
+      "token": "#define configTICK_RATE_HZ"
+    },
+    "rtport": {
+      "repository": "node",
+      "path": "Middlewares/Third_Party/FreeRTOS-Kernel/portable/GCC/ARM_CM3/port.c",
+      "sha256": "93bf85385a2679aa1b4e3086db909ed078835d89d359b82b7db6c74f4a2a67e3",
+      "line": 455,
+      "lines": 822,
+      "token": "void xPortPendSVHandler( void )\n{"
+    },
+    "rttasks": {
+      "repository": "node",
+      "path": "Middlewares/Third_Party/FreeRTOS-Kernel/tasks.c",
+      "sha256": "bb6baa487a4b45345d312878ac50e47b0279c557ff2de8fd7bc83ba87ef554b7",
+      "line": 4745,
+      "lines": 8883,
+      "token": "BaseType_t xTaskIncrementTick("
+    },
+    "rtqueue": {
+      "repository": "node",
+      "path": "Middlewares/Third_Party/FreeRTOS-Kernel/queue.c",
+      "sha256": "e01fac8dedcc94f73306ffbd1f8f50211e0205143dffdf557069966eb9e6658e",
+      "line": 949,
+      "lines": 3389,
+      "token": "BaseType_t xQueueGenericSend("
+    },
+    "rtstream": {
+      "repository": "node",
+      "path": "Middlewares/Third_Party/FreeRTOS-Kernel/stream_buffer.c",
+      "sha256": "f346b602ef7e10babc3d1e7092940f5c404697d07228873e0584ccc86f93c44b",
+      "line": 952,
+      "lines": 1757,
+      "token": "size_t xStreamBufferSendFromISR("
+    },
+    "rtheap": {
+      "repository": "node",
+      "path": "Middlewares/Third_Party/FreeRTOS-Kernel/portable/MemMang/heap_4.c",
+      "sha256": "9ebd81dd8d3fadf499cfc2fd76061e7f510424ef57c07c1ef98acdb50a90040d",
+      "line": 173,
+      "lines": 638,
+      "token": "void * pvPortMalloc("
+    },
+    "rttimers": {
+      "repository": "node",
+      "path": "Middlewares/Third_Party/FreeRTOS-Kernel/timers.c",
+      "sha256": "cde859c947d9a2915ea69de2fc525d84579f1353549d171812aa344e39300ba7",
+      "line": 744,
+      "lines": 1343,
+      "token": "static portTASK_FUNCTION( prvTimerTask,"
+    },
+    "rtevents": {
+      "repository": "node",
+      "path": "Middlewares/Third_Party/FreeRTOS-Kernel/event_groups.c",
+      "sha256": "3ae3a8fc6abfa055be34f791a52ba98f2c8c2839cd4c184d2562f76faba36c45",
+      "line": 547,
+      "lines": 887,
+      "token": "EventBits_t xEventGroupSetBits("
+    },
+    "rtcmake": {
+      "repository": "node",
+      "path": "cmake/freertos.cmake",
+      "sha256": "85876e6a7a83809fdd960b1098c70ec9c9b00a2a0256bb7a8e75c7f4a6139776",
+      "line": 17,
+      "lines": 39,
+      "token": "target_sources("
+    },
+    "startup": {
+      "repository": "node",
+      "path": "startup_stm32f103xb.s",
+      "sha256": "a9a5fc7ed5ff617527dd98b3092830f4d17ed4bf57c99eac2c53bdb514ce138c",
+      "line": 61,
+      "lines": 364,
+      "token": "Reset_Handler:\n"
+    },
+    "ld": {
+      "repository": "node",
+      "path": "STM32F103XX_FLASH.ld",
+      "sha256": "e5154fa3682aa9fe8cda1bb914e8b6b510cd25a3ffccdc812d406035275aa00a",
+      "line": 56,
+      "lines": 250,
+      "token": "MEMORY"
+    }
+  },
+  "scope": "Working-tree contents; unrelated resume modifications are excluded.",
+  "freertos": "Vendored development snapshot, not a verified release tag; see kernel-version.txt."
+}

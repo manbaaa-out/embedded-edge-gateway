@@ -1,0 +1,104 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>节点 / BSP/dht11.c · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>节点 / BSP/dht11.c</h1><p class="meta">源码基线：2026-10-04 · SHA-256 035ba67c3f32b80598609f20535b90a868b615dfc5c617f2b90b85f28dbfe0d9</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>#include &quot;dht11.h&quot;</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code>#include &quot;dwt_delay.h&quot;</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>#include &quot;FreeRTOS.h&quot;   /* 必须在 task.h 之前: 它带入 FreeRTOSConfig.h + portmacro.h */</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code>#include &quot;task.h&quot;</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code></code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>#define CPU_FREQ_MHZ  72U   /* 与 dwt_delay.c 保持一致, 用于超时换算 */</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code></code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code>/* ===== 方向切换零件 ===== */</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code></code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code>/* 把 DATA 引脚配成【开漏输出】: 只主动拉低, 输出高时松手靠外部上拉回高。</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>   单总线必须开漏 + 上拉, 实现&quot;线与&quot;, 杜绝多设备同时驱动的总线竞争。 */</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>static void dht11_set_output(void)</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>{</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code>    GPIO_InitTypeDef gpio = {0};</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>    gpio.Pin   = DHT11_Pin;</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code>    gpio.Mode  = GPIO_MODE_OUTPUT_OD;     /* OD = Open-Drain 开漏 */</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>    gpio.Pull  = GPIO_NOPULL;             /* 模块自带上拉, 不用内部上拉 */</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>    gpio.Speed = GPIO_SPEED_FREQ_HIGH;</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>    HAL_GPIO_Init(DHT11_GPIO_Port, &amp;gpio);</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>}</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code></code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>/* 把 DATA 引脚配成【输入】: 既&quot;释放总线&quot;(松手, 上拉拉回高), 又能读 DHT11 电平。 */</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>static void dht11_set_input(void)</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code>{</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code>    GPIO_InitTypeDef gpio = {0};</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>    gpio.Pin  = DHT11_Pin;</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code>    gpio.Mode = GPIO_MODE_INPUT;</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>    gpio.Pull = GPIO_NOPULL;              /* 同样靠模块外部上拉 */</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code>    HAL_GPIO_Init(DHT11_GPIO_Port, &amp;gpio);</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code>}</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code></code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>/* ===== 等翻转 + 超时 零件 =====</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code>   等待 DATA 引脚变成 target 电平, 最多等 timeout_us 微秒。</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code>   返回 0=等到了  1=超时(防止传感器掉线导致死循环卡死)。 */</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code>static uint8_t dht11_wait_level(GPIO_PinState target, uint32_t timeout_us)</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code>{</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code>    uint32_t start = DWT-&gt;CYCCNT;</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>    uint32_t ticks = timeout_us * CPU_FREQ_MHZ;</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code></code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code>    while (HAL_GPIO_ReadPin(DHT11_GPIO_Port, DHT11_Pin) != target)</code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>    {</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code>        if ((DWT-&gt;CYCCNT - start) &gt; ticks)</code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code>        {</code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code>            return 1;   /* 超时, 放弃 */</code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code>        }</code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code>    }</code></span>
+<span class="line" id="L47"><a href="#L47" aria-label="第 47 行">47</a><code>    return 0;           /* 等到了目标电平 */</code></span>
+<span class="line" id="L48"><a href="#L48" aria-label="第 48 行">48</a><code>}</code></span>
+<span class="line" id="L49"><a href="#L49" aria-label="第 49 行">49</a><code></code></span>
+<span class="line" id="L50"><a href="#L50" aria-label="第 50 行">50</a><code>/* ===== 主函数: 完整四段时序 ===== */</code></span>
+<span class="line" id="L51"><a href="#L51" aria-label="第 51 行">51</a><code>uint8_t DHT11_Read(uint8_t *data)</code></span>
+<span class="line" id="L52"><a href="#L52" aria-label="第 52 行">52</a><code>{</code></span>
+<span class="line" id="L53"><a href="#L53" aria-label="第 53 行">53</a><code>    uint8_t i, j;</code></span>
+<span class="line" id="L54"><a href="#L54" aria-label="第 54 行">54</a><code>    uint8_t byte;</code></span>
+<span class="line" id="L55"><a href="#L55" aria-label="第 55 行">55</a><code>    uint8_t ret = 0;</code></span>
+<span class="line" id="L56"><a href="#L56" aria-label="第 56 行">56</a><code></code></span>
+<span class="line" id="L57"><a href="#L57" aria-label="第 57 行">57</a><code>    /* ---- (1) 主机起始信号 ---- */</code></span>
+<span class="line" id="L58"><a href="#L58" aria-label="第 58 行">58</a><code>    dht11_set_output();</code></span>
+<span class="line" id="L59"><a href="#L59" aria-label="第 59 行">59</a><code>    HAL_GPIO_WritePin(DHT11_GPIO_Port, DHT11_Pin, GPIO_PIN_RESET); /* 拉低 */</code></span>
+<span class="line" id="L60"><a href="#L60" aria-label="第 60 行">60</a><code>    HAL_Delay(18);</code></span>
+<span class="line" id="L61"><a href="#L61" aria-label="第 61 行">61</a><code>    </code></span>
+<span class="line" id="L62"><a href="#L62" aria-label="第 62 行">62</a><code>    taskENTER_CRITICAL(); /* &gt;=18ms, 粗延时用 HAL */</code></span>
+<span class="line" id="L63"><a href="#L63" aria-label="第 63 行">63</a><code>    HAL_GPIO_WritePin(DHT11_GPIO_Port, DHT11_Pin, GPIO_PIN_SET);   /* 松手 */</code></span>
+<span class="line" id="L64"><a href="#L64" aria-label="第 64 行">64</a><code>    delay_us(30);                                                  /* 拉高 20~40us 等 DHT11 反应 */</code></span>
+<span class="line" id="L65"><a href="#L65" aria-label="第 65 行">65</a><code>    dht11_set_input();                                             /* 切输入: 既松手又准备读 */</code></span>
+<span class="line" id="L66"><a href="#L66" aria-label="第 66 行">66</a><code></code></span>
+<span class="line" id="L67"><a href="#L67" aria-label="第 67 行">67</a><code>    /* ---- (2) 等 DHT11 响应: 低 80us -&gt; 高 80us ---- */</code></span>
+<span class="line" id="L68"><a href="#L68" aria-label="第 68 行">68</a><code>    if (dht11_wait_level(GPIO_PIN_RESET, 100)) { ret = 1; goto out; };  /* 等变低(响应来了) */</code></span>
+<span class="line" id="L69"><a href="#L69" aria-label="第 69 行">69</a><code>    if (dht11_wait_level(GPIO_PIN_SET,  100)) { ret = 1; goto out; };   /* 等变高(80us 低结束) */</code></span>
+<span class="line" id="L70"><a href="#L70" aria-label="第 70 行">70</a><code>    if (dht11_wait_level(GPIO_PIN_RESET, 100)) { ret = 1; goto out; };  /* 等再变低(80us 高结束, 数据要来) */</code></span>
+<span class="line" id="L71"><a href="#L71" aria-label="第 71 行">71</a><code></code></span>
+<span class="line" id="L72"><a href="#L72" aria-label="第 72 行">72</a><code>    /* ---- (3) 读 40 位 = 5 字节, 高位先出 ---- */</code></span>
+<span class="line" id="L73"><a href="#L73" aria-label="第 73 行">73</a><code>    for (i = 0; i &lt; 5; i++)</code></span>
+<span class="line" id="L74"><a href="#L74" aria-label="第 74 行">74</a><code>    {</code></span>
+<span class="line" id="L75"><a href="#L75" aria-label="第 75 行">75</a><code>        byte = 0;</code></span>
+<span class="line" id="L76"><a href="#L76" aria-label="第 76 行">76</a><code>        for (j = 0; j &lt; 8; j++)</code></span>
+<span class="line" id="L77"><a href="#L77" aria-label="第 77 行">77</a><code>        {</code></span>
+<span class="line" id="L78"><a href="#L78" aria-label="第 78 行">78</a><code>            /* 每位以 50us 低开始: 先等低结束, 高电平开始 */</code></span>
+<span class="line" id="L79"><a href="#L79" aria-label="第 79 行">79</a><code>            if (dht11_wait_level(GPIO_PIN_SET, 100)) { ret = 1; goto out; };</code></span>
+<span class="line" id="L80"><a href="#L80" aria-label="第 80 行">80</a><code></code></span>
+<span class="line" id="L81"><a href="#L81" aria-label="第 81 行">81</a><code>            /* 高电平开始后延时 40us 再读一眼: 0(高~28us)已掉回低, 1(高70us)仍是高 */</code></span>
+<span class="line" id="L82"><a href="#L82" aria-label="第 82 行">82</a><code>            delay_us(40);</code></span>
+<span class="line" id="L83"><a href="#L83" aria-label="第 83 行">83</a><code></code></span>
+<span class="line" id="L84"><a href="#L84" aria-label="第 84 行">84</a><code>            byte &lt;&lt;= 1;   /* 高位先出: 先左移腾出最低位 */</code></span>
+<span class="line" id="L85"><a href="#L85" aria-label="第 85 行">85</a><code>            if (HAL_GPIO_ReadPin(DHT11_GPIO_Port, DHT11_Pin) == GPIO_PIN_SET)</code></span>
+<span class="line" id="L86"><a href="#L86" aria-label="第 86 行">86</a><code>            {</code></span>
+<span class="line" id="L87"><a href="#L87" aria-label="第 87 行">87</a><code>                byte |= 1;   /* 这一眼是高 -&gt; 该位为 1 */</code></span>
+<span class="line" id="L88"><a href="#L88" aria-label="第 88 行">88</a><code>            }</code></span>
+<span class="line" id="L89"><a href="#L89" aria-label="第 89 行">89</a><code></code></span>
+<span class="line" id="L90"><a href="#L90" aria-label="第 90 行">90</a><code>            /* 若该位是 1, 此刻仍在高电平里, 等它掉回低, 对齐下一位 */</code></span>
+<span class="line" id="L91"><a href="#L91" aria-label="第 91 行">91</a><code>            if (dht11_wait_level(GPIO_PIN_RESET, 100)) { ret = 1; goto out; };</code></span>
+<span class="line" id="L92"><a href="#L92" aria-label="第 92 行">92</a><code>        }</code></span>
+<span class="line" id="L93"><a href="#L93" aria-label="第 93 行">93</a><code>        data[i] = byte;</code></span>
+<span class="line" id="L94"><a href="#L94" aria-label="第 94 行">94</a><code>    }</code></span>
+<span class="line" id="L95"><a href="#L95" aria-label="第 95 行">95</a><code></code></span>
+<span class="line" id="L96"><a href="#L96" aria-label="第 96 行">96</a><code>out:</code></span>
+<span class="line" id="L97"><a href="#L97" aria-label="第 97 行">97</a><code>    taskEXIT_CRITICAL();</code></span>
+<span class="line" id="L98"><a href="#L98" aria-label="第 98 行">98</a><code>    /* ---- (4) 校验: 前 4 字节之和的末 8 位 == 第 5 字节 ---- */</code></span>
+<span class="line" id="L99"><a href="#L99" aria-label="第 99 行">99</a><code>    if (ret == 0 &amp;&amp;</code></span>
+<span class="line" id="L100"><a href="#L100" aria-label="第 100 行">100</a><code>        (uint8_t)(data[0] + data[1] + data[2] + data[3]) != data[4]) {</code></span>
+<span class="line" id="L101"><a href="#L101" aria-label="第 101 行">101</a><code>        ret = 2;                              // 校验放临界区外</code></span>
+<span class="line" id="L102"><a href="#L102" aria-label="第 102 行">102</a><code>    }</code></span>
+<span class="line" id="L103"><a href="#L103" aria-label="第 103 行">103</a><code>    return ret;</code></span>
+<span class="line" id="L104"><a href="#L104" aria-label="第 104 行">104</a><code>}</code></span></div></html>

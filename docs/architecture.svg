@@ -1,113 +1,66 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="1010" viewBox="0 0 1480 1010" font-family="Helvetica,Arial,sans-serif">
-  <defs>
-    <marker id="ah" markerWidth="10" markerHeight="10" refX="7.5" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L7,3 L0,6 Z" fill="#555"/>
-    </marker>
-    <marker id="ahd" markerWidth="10" markerHeight="10" refX="7.5" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L7,3 L0,6 Z" fill="#8a6d3b"/>
-    </marker>
-  </defs>
-  <rect width="1480" height="1010" fill="#ffffff"/>
-  <text x="60" y="48" font-size="23" fill="#222" font-weight="bold">Edge Gateway — Architecture</text>
-
-  <!-- ================= Panel a : uplink ================= -->
-  <text x="60" y="100" font-size="17" fill="#333" font-weight="bold">a</text>
-  <text x="82" y="100" font-size="15" fill="#777">上行数据通路 (uplink:采集 → 解码扇出 → 落库 / 上云)</text>
-
-  <rect x="60"  y="258" width="140" height="66" rx="8" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
-  <text x="130" y="296" text-anchor="middle" font-size="14.5" fill="#333">STM32 Node</text>
-  <rect x="250" y="260" width="160" height="62" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
-  <text x="330" y="285" text-anchor="middle" font-size="14" fill="#333"><tspan x="330" dy="0">Serial Channel</tspan><tspan x="330" dy="16">EPOLLIN · ET</tspan></text>
-  <rect x="460" y="260" width="168" height="62" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
-  <text x="544" y="285" text-anchor="middle" font-size="14" fill="#333"><tspan x="544" dy="0">FrameParser</tspan><tspan x="544" dy="16">CRC16 校验</tspan></text>
-  <rect x="678" y="258" width="170" height="66" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
-  <text x="763" y="284" text-anchor="middle" font-size="14" fill="#333"><tspan x="763" dy="0">onFrame 扇出</tspan><tspan x="763" dy="16">Reactor 线程内</tspan></text>
-
-  <rect x="912" y="168" width="160" height="60" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
-  <text x="992" y="203" text-anchor="middle" font-size="14" fill="#333">MQTT Client</text>
-  <rect x="912" y="262" width="160" height="62" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
-  <text x="992" y="288" text-anchor="middle" font-size="14" fill="#333"><tspan x="992" dy="0">SQLite · WAL</tspan><tspan x="992" dy="16">写线程 rw + HTTP ro</tspan></text>
-  <rect x="912" y="372" width="186" height="60" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
-  <text x="1005" y="407" text-anchor="middle" font-size="14" fill="#333">HTTP Server :8888</text>
-
-  <rect x="1240" y="168" width="170" height="60" rx="8" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
-  <text x="1325" y="203" text-anchor="middle" font-size="14" fill="#333">MQTT Broker / Cloud</text>
-  <rect x="1240" y="372" width="170" height="60" rx="8" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
-  <text x="1325" y="407" text-anchor="middle" font-size="14" fill="#333">Web Dashboard</text>
-
-  <line x1="200" y1="291" x2="246" y2="291" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <line x1="410" y1="291" x2="456" y2="291" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <line x1="628" y1="291" x2="674" y2="291" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="651" y="280" text-anchor="middle" font-size="12.5" fill="#777">decoded</text>
-  <line x1="848" y1="278" x2="908" y2="200" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <line x1="848" y1="294" x2="908" y2="293" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="862" y="250" font-size="12.5" fill="#777"><tspan>队列 → 写线程</tspan></text>
-  <line x1="992" y1="324" x2="992" y2="368" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="1000" y="352" font-size="12" fill="#777">ro</text>
-  <line x1="1072" y1="198" x2="1236" y2="198" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="1154" y="188" text-anchor="middle" font-size="12.5" fill="#777">publish</text>
-  <line x1="1098" y1="402" x2="1236" y2="402" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="1167" y="392" text-anchor="middle" font-size="12.5" fill="#777">HTTP</text>
-
-  <!-- divider -->
-  <line x1="60" y1="492" x2="1410" y2="492" stroke="#E2E2E2" stroke-width="1.4"/>
-
-  <!-- ================= Panel b : downlink ================= -->
-  <text x="60" y="548" font-size="17" fill="#333" font-weight="bold">b</text>
-  <text x="82" y="548" font-size="15" fill="#777">下行命令通路 (downlink:命令 → 串口 → ACK;单一写者 + 超时重发)</text>
-
-  <!-- forward command path -->
-  <rect x="60"  y="620" width="158" height="62" rx="8" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
-  <text x="139" y="656" text-anchor="middle" font-size="14" fill="#333">MQTT Broker / Cloud</text>
-  <rect x="268" y="620" width="158" height="62" rx="7" fill="#EAF4EC" stroke="#55A868" stroke-width="1.6"/>
-  <text x="347" y="645" text-anchor="middle" font-size="14" fill="#333"><tspan x="347" dy="0">MQTT Client</tspan><tspan x="347" dy="16">subscribe</tspan></text>
-  <rect x="478" y="620" width="176" height="62" rx="7" fill="#FAF4E0" stroke="#B8973A" stroke-width="1.6"/>
-  <text x="566" y="645" text-anchor="middle" font-size="14" fill="#333"><tspan x="566" dy="0">DownCmd 队列</tspan><tspan x="566" dy="16">+ eventfd 通知</tspan></text>
-  <rect x="700" y="616" width="222" height="70" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
-  <text x="811" y="644" text-anchor="middle" font-size="14" fill="#333"><tspan x="811" dy="0">eventfd Channel</tspan><tspan x="811" dy="16">分配 seq · 组帧 · 写串口</tspan></text>
-  <rect x="980" y="620" width="150" height="62" rx="8" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.6"/>
-  <text x="1055" y="656" text-anchor="middle" font-size="14" fill="#333">STM32 Node</text>
-
-  <line x1="218" y1="651" x2="264" y2="651" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="241" y="640" text-anchor="middle" font-size="12" fill="#777">cmd</text>
-  <line x1="426" y1="651" x2="474" y2="651" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="450" y="640" text-anchor="middle" font-size="12" fill="#777">enqueue</text>
-  <line x1="654" y1="651" x2="696" y2="651" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="675" y="640" text-anchor="middle" font-size="12" fill="#777">eventfd 唤醒</text>
-  <line x1="922" y1="651" x2="976" y2="651" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-  <text x="949" y="640" text-anchor="middle" font-size="12" fill="#777">frame out</text>
-
-  <!-- reliability (dashed) -->
-  <rect x="300" y="772" width="178" height="60" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
-  <text x="389" y="797" text-anchor="middle" font-size="14" fill="#333"><tspan x="389" dy="0">timerfd Channel</tspan><tspan x="389" dy="16">超时扫描 200ms</tspan></text>
-  <rect x="558" y="768" width="234" height="66" rx="7" fill="#FAF4E0" stroke="#B8973A" stroke-width="1.6"/>
-  <text x="675" y="796" text-anchor="middle" font-size="14" fill="#333"><tspan x="675" dy="0">inflight 在途表</tspan><tspan x="675" dy="16">seq · 单一写者</tspan></text>
-  <rect x="860" y="772" width="170" height="60" rx="7" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.6"/>
-  <text x="945" y="797" text-anchor="middle" font-size="14" fill="#333"><tspan x="945" dy="0">FrameParser</tspan><tspan x="945" dy="16">ACK 0x05/0x06</tspan></text>
-
-  <line x1="790" y1="688" x2="700" y2="764" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
-  <text x="772" y="724" text-anchor="middle" font-size="12" fill="#8a6d3b">登记 seq</text>
-  <line x1="478" y1="801" x2="554" y2="801" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
-  <text x="516" y="791" text-anchor="middle" font-size="12" fill="#8a6d3b">超时重发</text>
-  <line x1="860" y1="801" x2="796" y2="801" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
-  <text x="828" y="791" text-anchor="middle" font-size="12" fill="#8a6d3b">ACK 配对</text>
-  <line x1="1030" y1="700" x2="968" y2="770" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
-  <text x="1040" y="742" text-anchor="middle" font-size="12" fill="#8a6d3b">ACK frame</text>
-  <text x="558" y="872" font-size="12.5" fill="#8a6d3b">* ACK 配对成功后,经 MQTT 回发 resp/ack 给云端</text>
-
-  <!-- legend -->
-  <g font-size="13" fill="#555">
-    <rect x="60" y="946" width="14" height="14" rx="3" fill="#EAF0F8" stroke="#4C72B0" stroke-width="1.4"/>
-    <text x="80" y="957">主线程 · Reactor / 处理</text>
-    <rect x="250" y="946" width="14" height="14" rx="3" fill="#EAF4EC" stroke="#55A868" stroke-width="1.4"/>
-    <text x="270" y="957">I/O 线程(写线程 / mosquitto / http)</text>
-    <rect x="520" y="946" width="14" height="14" rx="3" fill="#FAF4E0" stroke="#B8973A" stroke-width="1.4"/>
-    <text x="540" y="957">队列 / 在途表</text>
-    <rect x="670" y="946" width="14" height="14" rx="3" fill="#F2F2F2" stroke="#8C8C8C" stroke-width="1.4"/>
-    <text x="690" y="957">外部</text>
-    <line x1="770" y1="953" x2="802" y2="953" stroke="#555" stroke-width="1.6" marker-end="url(#ah)"/>
-    <text x="808" y="957">数据面</text>
-    <line x1="900" y1="953" x2="932" y2="953" stroke="#8a6d3b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#ahd)"/>
-    <text x="938" y="957">控制 / 命令面</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" font-family="Noto Sans CJK SC,Microsoft YaHei,Arial,sans-serif">
+  <defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto-start-reverse"><path d="M0,0 L10,4 L0,8Z" fill="#52647b"/></marker></defs>
+  <rect width="1280" height="820" fill="#f7f9fc"/>
+  <g fill="#20314c"><text x="48" y="52" font-size="26" font-weight="bold">边缘网关 · 多 I/O 事件循环 + 共享业务线程</text>
+    <text x="48" y="83" font-size="15">单进程；连接与协议状态归各自 I/O 线程，应用状态归 GatewayCore，跨线程以有界消息交接。</text></g>
+  <g stroke="#416fa4" fill="#e9f1fc" stroke-width="1.5">
+    <rect x="48" y="126" width="360" height="174" rx="12"/>
+    <rect x="460" y="126" width="360" height="174" rx="12"/>
+    <rect x="872" y="126" width="360" height="174" rx="12"/>
+  </g>
+  <g fill="#20314c" font-size="16" text-anchor="middle">
+    <text x="228" y="160" font-size="20" font-weight="bold">串口 Reactor · 主线程</text>
+    <text x="228" y="192">epoll / eventfd / timerfd</text>
+    <text x="228" y="222">非阻塞收发 · 组帧 / CRC · SR 会话</text>
+    <text x="228" y="252">CommandTracker · 重传 / 确认 / 超时</text>
+    <text x="228" y="280">唯一串口写者与链路状态所有者</text>
+    <text x="640" y="160" font-size="20" font-weight="bold">MQTT 网络循环 · 库线程</text>
+    <text x="640" y="192">libmosquitto loop_start</text>
+    <text x="640" y="222">网络收发 · MQTT 协议与保活</text>
+    <text x="640" y="252">回调复制 topic / payload 后投递</text>
+    <text x="640" y="280">准入失败返回固定 busy 回执</text>
+    <text x="1052" y="160" font-size="20" font-weight="bold">HTTP I/O 循环 · 专用线程</text>
+    <text x="1052" y="192">Boost.Beast + Asio io_context</text>
+    <text x="1052" y="222">连接 / HTTP 解析 / 异步收发 / 超时</text>
+    <text x="1052" y="252">请求投递业务线程，响应 post 回本循环</text>
+    <text x="1052" y="280">每连接限流，迟到回复安全丢弃</text>
+  </g>
+  <g stroke="#52647b" stroke-width="2" fill="none" marker-start="url(#arrow)" marker-end="url(#arrow)">
+    <path d="M228 309 V371"/><path d="M640 309 V371" marker-start="none"/><path d="M1052 309 V371"/>
+  </g>
+  <g font-size="14" fill="#435673" text-anchor="middle">
+    <text x="228" y="341" dx="95">帧 / 终态 ↔ 命令</text>
+    <text x="640" y="341" dx="99">原始消息</text>
+    <text x="1052" y="341" dx="99">请求 ↔ 响应</text>
+  </g>
+  <rect x="48" y="382" width="1184" height="140" rx="12" fill="#e8f4eb" stroke="#48865b" stroke-width="1.5"/>
+  <g fill="#244b31" text-anchor="middle">
+    <text x="640" y="417" font-size="22" font-weight="bold">GatewayCore · 单一业务执行线程</text>
+    <text x="640" y="451" font-size="17">命令翻译与校验 · 遥测解码与分发 · HTTP 路由与 JSON · MQTT 结果格式化</text>
+    <text x="640" y="485" font-size="15">最多 512 条待完成 / 待发布命令；邮箱 1024 个普通位置 + 552 个完成事件预留位置</text>
+    <text x="640" y="508" font-size="14">业务线程不等待 I/O；阻塞资源操作交给下方专用执行器</text>
+  </g>
+  <g stroke="#52647b" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M228 522 V572"/><path d="M640 522 V572" marker-start="url(#arrow)"/><path d="M1052 522 V572"/>
+  </g>
+  <g fill="#fdf3df" stroke="#ae863a" stroke-width="1.5">
+    <rect x="48" y="581" width="360" height="131" rx="12"/>
+    <rect x="460" y="581" width="360" height="131" rx="12"/>
+    <rect x="872" y="581" width="360" height="131" rx="12"/>
+  </g>
+  <g fill="#654d20" text-anchor="middle" font-size="16">
+    <text x="228" y="614" font-size="20" font-weight="bold">SQLite 写线程</text>
+    <text x="228" y="647">遥测有界队列 · 批量事务 · WAL</text>
+    <text x="228" y="678">按写队列顺序切库，再发布读连接</text>
+    <text x="640" y="614" font-size="20" font-weight="bold">SQLite 查询线程</text>
+    <text x="640" y="647">只读连接快照 · 最多 32 个在途查询</text>
+    <text x="640" y="678">查询完成回 Core，再回 HTTP 循环</text>
+    <text x="1052" y="614" font-size="20" font-weight="bold">控制线程</text>
+    <text x="1052" y="647">MQTT 发布 / 替换 · 配置 / 资源准备</text>
+    <text x="1052" y="678">串口仅预开，由串口 Reactor 激活</text>
+  </g>
+  <g fill="#52647b" font-size="14">
+    <text x="48" y="755">MQTT 发布调用完成后释放命令额度；不等于 broker ACK / 云端业务完成，目前没有持久化 outbox。</text>
+    <text x="48" y="783">Asio 提供异步完成式接口；这里按多个独立 I/O 循环描述架构，不把库 API 与 Linux 内部就绪机制混为一谈。</text>
   </g>
 </svg>

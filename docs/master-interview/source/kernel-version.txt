@@ -1,0 +1,56 @@
+FreeRTOS Kernel — 本工程内嵌副本
+================================
+
+来源
+----
+https://github.com/FreeRTOS/FreeRTOS-Kernel  (main 分支 zip 快照)
+下载时间: 约 2026-06-16 (据原始文件 mtime 推断)
+原始解压目录名: FreeRTOS-Kernel-main
+
+
+版本: 无法给出精确 commit
+--------------------------
+这是 main 分支的快照, **不是任何 tagged release**, 且随包的三处版本标识
+互相不一致:
+
+    include/task.h:57    tskKERNEL_VERSION_NUMBER  "V11.1.0+"
+    manifest.yml:2       version: "V11.0.1+"
+    History.txt:3        Changes between V11.2.0 and V11.3.0 released March 2026
+
+按 FreeRTOS 自己的约定, 版本号末尾的 "+" 即表示"开发中版本"。原始 zip 不含
+.git, 因此无 commit hash 可记。
+
+如需精确可追溯的内核, 应改用 tagged release (如 V11.1.0) 或 git submodule
+指向具体 commit。此处如实记录现状, 不伪造一个看起来精确的版本号。
+
+
+裁剪: 只保留本工程实际编译的部分
+--------------------------------
+上游 22M / 数千文件, 其中 portable/ 占 20M (光 portable/GCC/ 就有 59 个 port)。
+本工程只用 ARM_CM3 一个 port, 故只保留下列 33 个文件 (1.6M):
+
+  核心    tasks.c list.c queue.c timers.c event_groups.c stream_buffer.c
+  port    portable/GCC/ARM_CM3/{port.c, portmacro.h}
+  堆      portable/MemMang/heap_4.c
+  头文件  include/  (23 个, 互相 include, 全量保留)
+  许可    LICENSE.md
+
+未保留: croutine.c (configUSE_CO_ROUTINES=0)、其余 25 个 port 目录、
+examples/、.github/、History.txt、MISRA.md、cspell 配置等。
+
+所有保留文件均为上游原样拷贝, 未做任何修改。
+配置文件 FreeRTOSConfig.h 不在此处, 它属于本工程, 在 Core/Inc/。
+
+
+为什么要内嵌 (vendor-in)
+------------------------
+此前内核放在工程目录之外 (../FreeRTOS-Kernel-main), 且被 .gitignore 排除,
+git 跟踪文件数为 0 —— 任何人 clone 本仓库后都无法构建, 包括未来换机器的作者。
+而同工程的 ST HAL + CMSIS (Drivers/, 4.7M) 一直是内嵌并跟踪的, FreeRTOS 是
+唯一的例外。本次统一策略, 使 `git clone && cmake --preset Debug && cmake --build`
+可一次通过。
+
+
+许可
+----
+MIT。见同目录 LICENSE.md。转发本工程时须保留该许可文件。

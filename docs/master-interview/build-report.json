@@ -1,0 +1,112 @@
+{
+  "theory_questions": 120,
+  "project_questions": 54,
+  "theory_chapters": 13,
+  "project_chapters": 7,
+  "source_files": 60,
+  "cross_references": 249,
+  "research_checks": 37,
+  "characters": 215934,
+  "chapters": [
+    {
+      "file": "theory-01.html",
+      "questions": 12,
+      "part": "theory"
+    },
+    {
+      "file": "theory-02.html",
+      "questions": 13,
+      "part": "theory"
+    },
+    {
+      "file": "theory-03.html",
+      "questions": 10,
+      "part": "theory"
+    },
+    {
+      "file": "theory-04.html",
+      "questions": 10,
+      "part": "theory"
+    },
+    {
+      "file": "theory-05.html",
+      "questions": 8,
+      "part": "theory"
+    },
+    {
+      "file": "theory-06.html",
+      "questions": 8,
+      "part": "theory"
+    },
+    {
+      "file": "theory-07.html",
+      "questions": 10,
+      "part": "theory"
+    },
+    {
+      "file": "theory-08.html",
+      "questions": 12,
+      "part": "theory"
+    },
+    {
+      "file": "theory-09.html",
+      "questions": 12,
+      "part": "theory"
+    },
+    {
+      "file": "theory-10.html",
+      "questions": 8,
+      "part": "theory"
+    },
+    {
+      "file": "theory-11.html",
+      "questions": 7,
+      "part": "theory"
+    },
+    {
+      "file": "theory-12.html",
+      "questions": 6,
+      "part": "theory"
+    },
+    {
+      "file": "theory-13.html",
+      "questions": 4,
+      "part": "theory"
+    },
+    {
+      "file": "project-01.html",
+      "questions": 6,
+      "part": "project"
+    },
+    {
+      "file": "project-02.html",
+      "questions": 8,
+      "part": "project"
+    },
+    {
+      "file": "project-03.html",
+      "questions": 10,
+      "part": "project"
+    },
+    {
+      "file": "project-04.html",
+      "questions": 9,
+      "part": "project"
+    },
+    {
+      "file": "project-05.html",
+      "questions": 10,
+      "part": "project"
+    },
+    {
+      "file": "project-06.html",
+      "questions": 9,
+      "part": "project"
+    },
+    {
+      "file": "project-07.html",
+      "questions": 2,
+      "part": "project"
+    }
+  ]
+}

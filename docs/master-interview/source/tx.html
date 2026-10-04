@@ -1,0 +1,32 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>节点 / App/tx_service.c · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>节点 / App/tx_service.c</h1><p class="meta">源码基线：2026-10-04 · SHA-256 0a7c5af075c8a9c7d983aa073d401ab0e79b08ceba961bf302e4c0a65c559608</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>#include &quot;tx_service.h&quot;</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code>#include &quot;queue.h&quot;</code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>#include &quot;uart_link.h&quot;</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code>#include &quot;watchdog.h&quot;</code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code></code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>/* 本模块独占: 发送队列。深度 8 x 70 字节 = 560 字节。</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code> * 值语义 —— xQueueSend 把整个 TxFrame_t 拷进队列内存, 生产者栈上的局部</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code> * 变量立刻可销毁。没有指针、没有所有权问题、没有生命周期悬案。 */</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code>static QueueHandle_t s_tx_queue;</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code></code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>BaseType_t tx_service_init(void)</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>{</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>    s_tx_queue = xQueueCreate(8, sizeof(TxFrame_t));</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code>    return (s_tx_queue != NULL) ? pdPASS : pdFAIL;</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>}</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code></code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>void tx_send(const TxFrame_t *f)</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>{</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>    xQueueSend(s_tx_queue, f, 0);                 // 满则丢</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>}</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code></code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>void vTxTask(void* pvParameters) {</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>  (void)pvParameters;</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code>  TxFrame_t frame;</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code>  while(1) {</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>    /* 超时 500ms 醒一次: 没东西发也要醒来打卡(&lt;1s 判定窗口, 留余量)。 */</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code>    if (xQueueReceive(s_tx_queue, &amp;frame, pdMS_TO_TICKS(800)) == pdPASS) {</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>      uart_link_send_blocking(frame.data, frame.len);</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code>    }</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code>    watchdog_checkin(WDG_BIT_TX);   // 打卡放 if 外: 任务活着就报到, 不论有没有发</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>  }</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>}</code></span></div></html>

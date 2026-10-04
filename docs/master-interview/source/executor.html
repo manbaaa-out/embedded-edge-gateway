@@ -1,0 +1,76 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>网关 / src/gateway/core/concurrent/TaskExecutor.h · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>网关 / src/gateway/core/concurrent/TaskExecutor.h</h1><p class="meta">源码基线：2026-10-04 · SHA-256 c3b53274996529599346dd437afa66566e394ce9ad612e60986def3e5351e520</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>#pragma once</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code></code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>#include &quot;gateway/core/log/Logger.h&quot;</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code></code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code>#include &lt;condition_variable&gt;</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>#include &lt;cstddef&gt;</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code>#include &lt;deque&gt;</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code>#include &lt;functional&gt;</code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code>#include &lt;mutex&gt;</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code>#include &lt;string&gt;</code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>#include &lt;thread&gt;</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>#include &lt;utility&gt;</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>#include &lt;pthread.h&gt;</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code></code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code>namespace gateway {</code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code></code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>// 一个有界、顺序执行的邮箱。reserve 仅供已接收任务的完成事件使用；生产者不等空位。</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code>// 关闭后拒绝新任务，已接收任务按 FIFO 排空。stop() 由拥有者线程调用，不能在任务内调用。</code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>class TaskExecutor {</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>public:</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>    explicit TaskExecutor(std::string name, std::size_t capacity = 1024,</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>                          std::size_t reserve = 0)</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>        : capacity_(capacity), reserve_(reserve), worker_([this, name = std::move(name)] {</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code>            pthread_setname_np(pthread_self(), name.substr(0, 15).c_str());</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code>            run();</code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>        }) {}</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code>    ~TaskExecutor() { stop(); }</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code>    TaskExecutor(const TaskExecutor&amp;) = delete;</code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code>    TaskExecutor&amp; operator=(const TaskExecutor&amp;) = delete;</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code></code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>    bool post(std::function&lt;void()&gt; task, bool completion = false) {</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>        std::lock_guard&lt;std::mutex&gt; lock(mutex_);</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code>        const auto limit = capacity_ + (completion ? reserve_ : 0);</code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code>        if (closed_ || tasks_.size() &gt;= limit) return false;</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code>        tasks_.push_back(std::move(task));</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code>        ready_.notify_one();</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code>        return true;</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>    }</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code></code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code>    // 不启动/创建额外线程；join 等待当前消费者排空，调用方须先停止外部生产者。</code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>    void stop() {</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code>        {</code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code>            std::lock_guard&lt;std::mutex&gt; lock(mutex_);</code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code>            closed_ = true;</code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code>        }</code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code>        ready_.notify_all();</code></span>
+<span class="line" id="L47"><a href="#L47" aria-label="第 47 行">47</a><code>        if (worker_.joinable()) worker_.join();</code></span>
+<span class="line" id="L48"><a href="#L48" aria-label="第 48 行">48</a><code>    }</code></span>
+<span class="line" id="L49"><a href="#L49" aria-label="第 49 行">49</a><code></code></span>
+<span class="line" id="L50"><a href="#L50" aria-label="第 50 行">50</a><code>private:</code></span>
+<span class="line" id="L51"><a href="#L51" aria-label="第 51 行">51</a><code>    void run() {</code></span>
+<span class="line" id="L52"><a href="#L52" aria-label="第 52 行">52</a><code>        for (;;) {</code></span>
+<span class="line" id="L53"><a href="#L53" aria-label="第 53 行">53</a><code>            std::function&lt;void()&gt; task;</code></span>
+<span class="line" id="L54"><a href="#L54" aria-label="第 54 行">54</a><code>            {</code></span>
+<span class="line" id="L55"><a href="#L55" aria-label="第 55 行">55</a><code>                std::unique_lock&lt;std::mutex&gt; lock(mutex_);</code></span>
+<span class="line" id="L56"><a href="#L56" aria-label="第 56 行">56</a><code>                ready_.wait(lock, [this] { return closed_ || !tasks_.empty(); });</code></span>
+<span class="line" id="L57"><a href="#L57" aria-label="第 57 行">57</a><code>                if (tasks_.empty()) return;</code></span>
+<span class="line" id="L58"><a href="#L58" aria-label="第 58 行">58</a><code>                task = std::move(tasks_.front());</code></span>
+<span class="line" id="L59"><a href="#L59" aria-label="第 59 行">59</a><code>                tasks_.pop_front();</code></span>
+<span class="line" id="L60"><a href="#L60" aria-label="第 60 行">60</a><code>            }</code></span>
+<span class="line" id="L61"><a href="#L61" aria-label="第 61 行">61</a><code>            try { task(); }</code></span>
+<span class="line" id="L62"><a href="#L62" aria-label="第 62 行">62</a><code>            catch (const std::exception&amp; error) { LOG_ERROR(&quot;executor task failed: %s&quot;, error.what()); }</code></span>
+<span class="line" id="L63"><a href="#L63" aria-label="第 63 行">63</a><code>            catch (...) { LOG_ERROR(&quot;%s&quot;, &quot;executor task failed with unknown exception&quot;); }</code></span>
+<span class="line" id="L64"><a href="#L64" aria-label="第 64 行">64</a><code>        }</code></span>
+<span class="line" id="L65"><a href="#L65" aria-label="第 65 行">65</a><code>    }</code></span>
+<span class="line" id="L66"><a href="#L66" aria-label="第 66 行">66</a><code></code></span>
+<span class="line" id="L67"><a href="#L67" aria-label="第 67 行">67</a><code>    std::size_t capacity_;</code></span>
+<span class="line" id="L68"><a href="#L68" aria-label="第 68 行">68</a><code>    std::size_t reserve_;</code></span>
+<span class="line" id="L69"><a href="#L69" aria-label="第 69 行">69</a><code>    std::mutex mutex_;</code></span>
+<span class="line" id="L70"><a href="#L70" aria-label="第 70 行">70</a><code>    std::condition_variable ready_;</code></span>
+<span class="line" id="L71"><a href="#L71" aria-label="第 71 行">71</a><code>    std::deque&lt;std::function&lt;void()&gt;&gt; tasks_;</code></span>
+<span class="line" id="L72"><a href="#L72" aria-label="第 72 行">72</a><code>    bool closed_ = false;</code></span>
+<span class="line" id="L73"><a href="#L73" aria-label="第 73 行">73</a><code>    std::thread worker_;</code></span>
+<span class="line" id="L74"><a href="#L74" aria-label="第 74 行">74</a><code>};</code></span>
+<span class="line" id="L75"><a href="#L75" aria-label="第 75 行">75</a><code></code></span>
+<span class="line" id="L76"><a href="#L76" aria-label="第 76 行">76</a><code>} // namespace gateway</code></span></div></html>
