@@ -30,6 +30,13 @@ message(STATUS "Tests/Tools : ${GATEWAY_BUILD_TESTS} / ${GATEWAY_BUILD_TOOLS}")
 # protocol 定义 edge_proto；它必须保持独立，供网关与 STM32 固件使用同一份实现。
 add_subdirectory(protocol)
 
+# 共享 C 核心也必须被插桩，才能在 asan preset 中检查缓存数组的读写边界。
+if(GATEWAY_ENABLE_ASAN)
+    target_compile_options(edge_proto PRIVATE
+        -fsanitize=address,undefined -fno-omit-frame-pointer -g)
+    target_link_options(edge_proto INTERFACE -fsanitize=address,undefined)
+endif()
+
 # src 定义按职责分层的网关静态库，不在此处展开层间依赖。
 add_subdirectory(src)
 

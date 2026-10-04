@@ -24,7 +24,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build \
-                                  libsqlite3-dev libmosquitto-dev
+                                  libsqlite3-dev libmosquitto-dev libboost-dev libboost-system-dev mosquitto mosquitto-clients
 
       # dev preset 生成带测试和严格告警设置的 build/dev 目录。
       - name: 配置
@@ -37,6 +37,9 @@ jobs:
       # dev test preset 开启失败输出，使远端日志直接包含断言上下文。
       - name: 单测
         run: ctest --preset dev
+
+      - name: PTY 与 MQTT 端到端回归
+        run: ctest --preset e2e
 
       # Release 的优化和 _FORTIFY_SOURCE 会暴露 Debug 看不到的结果未检查等告警；显式把
       # GATEWAY_WARNINGS_AS_ERRORS 设为 ON，确保两种构建都维持零告警基线。
@@ -65,7 +68,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build \
-                                  libsqlite3-dev libmosquitto-dev
+                                  libsqlite3-dev libmosquitto-dev libboost-dev libboost-system-dev
 
       # 配置、构建和测试在同一步执行，任何阶段返回非零都会终止该 job。
       - name: 构建 + 单测

@@ -18,9 +18,9 @@ extern "C" {
 #endif
 
 /** 不兼容的线上格式变更时递增。 */
-#define EDGE_PROTO_VERSION_MAJOR 1
+#define EDGE_PROTO_VERSION_MAJOR 2
 /** 向后兼容的协议能力扩展时递增。 */
-#define EDGE_PROTO_VERSION_MINOR 3
+#define EDGE_PROTO_VERSION_MINOR 0
 
 /*
  * 帧布局：
@@ -55,10 +55,17 @@ typedef enum {
     EDGE_TYPE_QUERY_RESP = 0x05, /* [seq][rc][data...] */
     EDGE_TYPE_ACK = 0x06,        /* [seq][rc] */
 
-    /* gateway -> STM32 */
+    EDGE_TYPE_SR_RECEIVED = 0x07, /* [session:u64be][seq]：仅确认收进窗口。 */
+    EDGE_TYPE_SR_RESULT = 0x08,   /* [session:u64be][seq][command_type][rc][data...] */
+    EDGE_TYPE_SR_OPEN_ACK = 0x09, /* [requested_session:u64be][high_water:u64be][rc] */
+
+    /* gateway -> STM32; 0x20..0x22 仅作为 SR_COMMAND 内的业务操作码。 */
     EDGE_TYPE_QUERY_LIGHT = 0x20, /* [seq] */
     EDGE_TYPE_QUERY_TH = 0x21,    /* [seq] */
-    EDGE_TYPE_SET_PERIOD = 0x22   /* [seq][period_s:u16be] */
+    EDGE_TYPE_SET_PERIOD = 0x22,  /* args = [period_s:u16be] */
+    EDGE_TYPE_SR_OPEN = 0x23, /* [session:u64be]：更高会话取消旧会话的待执行命令。 */
+    EDGE_TYPE_SR_COMMAND = 0x24,   /* [session:u64be][seq][command_type][args...] */
+    EDGE_TYPE_SR_RESULT_ACK = 0x25 /* [session:u64be][seq] */
 } edge_type_t;
 
 /** 低端保留值，不属于任一传输方向。 */
@@ -99,10 +106,43 @@ typedef enum {
 /** STATUS bitmask 中 BH1750 可用标志。 */
 #define EDGE_STATUS_BIT_BH1750 0x02u
 
-/** 网关发送后等待 ACK/QUERY_RESP 的默认时限，单位毫秒。 */
+/** 数据接收确认、握手和结果重传的间隔，单位毫秒。 */
 #define EDGE_ACK_TIMEOUT_MS 500u
-/** 首次发送之外允许的最大重发次数；每次重发复用原 seq。 */
 #define EDGE_MAX_RETRY 3u
+/** SR 发送、接收窗口均为 8；已执行结果另存 16 条，绝不驱逐待执行命令。 */
+#define EDGE_SR_WINDOW_SIZE 8u
+#define EDGE_SR_RESULT_CAPACITY 16u
+#define EDGE_SR_RESULT_TTL_MS 5000u
+/** 缺口或本地发送排队最多等待 4 秒；结果另有包含有序执行等待的时限。 */
+#define EDGE_COMMAND_LIFETIME_MS 4000u
+#define EDGE_SR_RESULT_TIMEOUT_MS 10000u
+#define EDGE_SR_SESSION_LEN 8u
+#define EDGE_SR_SEQ_OFFSET 8u
+#define EDGE_SR_COMMAND_OFFSET 9u
+#define EDGE_SR_BODY_OFFSET 10u
+#define EDGE_SR_ARGS_MAX (EDGE_PAYLOAD_MAX - EDGE_SR_BODY_OFFSET)
+#define EDGE_SR_RESULT_MAX (EDGE_PAYLOAD_MAX - EDGE_SR_BODY_OFFSET)
+
+#if EDGE_SR_WINDOW_SIZE > 128u || EDGE_SR_RESULT_CAPACITY < 2u * EDGE_SR_WINDOW_SIZE
+#error "SR requires a bounded sequence window and space for pending commands plus results"
+#endif
+
+/** 会话在同一节点启动期间严格递增，序号 255 排空后通过新会话回到 0。 */
+static inline uint64_t edge_u64_be_read(const uint8_t* p) {
+    uint64_t v = 0;
+    unsigned i;
+    for (i = 0; i < 8u; ++i)
+        v = (v << 8) | p[i];
+    return v;
+}
+
+static inline void edge_u64_be_write(uint8_t* p, uint64_t v) {
+    unsigned i;
+    for (i = 0; i < 8u; ++i) {
+        p[7u - i] = (uint8_t) v;
+        v >>= 8;
+    }
+}
 
 /**
  * @brief 从 payload 读取一个大端 uint16_t。
@@ -144,6 +184,17 @@ static inline int edge_min_payload_len(uint8_t type) {
         return 2;
     case EDGE_TYPE_ACK:
         return 2;
+    case EDGE_TYPE_SR_RECEIVED:
+    case EDGE_TYPE_SR_RESULT_ACK:
+        return 9;
+    case EDGE_TYPE_SR_RESULT:
+        return 11;
+    case EDGE_TYPE_SR_OPEN_ACK:
+        return 17;
+    case EDGE_TYPE_SR_OPEN:
+        return 8;
+    case EDGE_TYPE_SR_COMMAND:
+        return 10;
     case EDGE_TYPE_QUERY_LIGHT:
         return 1;
     case EDGE_TYPE_QUERY_TH:

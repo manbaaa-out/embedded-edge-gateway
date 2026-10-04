@@ -23,8 +23,8 @@ constexpr tcflag_t clearMask(unsigned int bits) noexcept {
 }
 }  // namespace
 
-SerialPort::SerialPort(const char* path, speed_t baud, bool nonblock) {
-    int flags = O_RDWR | O_NOCTTY;  // 打开模式：读写且不取得控制终端。
+SerialPort::SerialPort(const char* path, speed_t baud, bool nonblock, bool defer_configuration) {
+    int flags = O_RDWR | O_NOCTTY | O_CLOEXEC;  // 打开模式：读写且不取得控制终端。
     if (nonblock) flags |= O_NONBLOCK;
     fd_ = open(path, flags);
     if (fd_ == -1) {
@@ -33,7 +33,7 @@ SerialPort::SerialPort(const char* path, speed_t baud, bool nonblock) {
     }
 
     try {
-        configure(baud);
+        if (!defer_configuration) configure(baud);
     } catch (...) {
         close(fd_);
         throw;

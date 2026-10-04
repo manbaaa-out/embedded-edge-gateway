@@ -5,6 +5,7 @@
 # 这样测试或其他入口可以复用装配逻辑而不引入第二个 main()。
 add_library(gw_app STATIC
     GatewayApp.cpp
+    GatewayCore.cpp
 )
 
 # GatewayApp.h 在成员和方法签名中直接使用这些类型，所以依赖采用 PUBLIC，继续传递给

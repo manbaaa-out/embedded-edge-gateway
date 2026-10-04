@@ -1,61 +1,54 @@
 #pragma once
 
-/**
- * @file
- * 内嵌 HTTP 监控服务的装配接口。
- *
- * I/O 层只接收数据库连接提供器、运行期配置快照提供器和停机判据，不依赖
- * ConfigManager 或信号实现。服务可因此在独立线程内运行，同时按请求/扫描周期看到
- * 热加载后的数据库与配置。
- */
-
-#include "gateway/core/config/Config.h"   // 提供查询点数的统一上限 kMaxReportN。
-#include "gateway/storage/Database.h"
+#include "gateway/core/config/Config.h"
 
 #include <functional>
-#include <memory>
+#include <optional>
 #include <string>
 
 namespace gateway {
 
-/** 每次读取时形成的 HTTP 可热加载配置快照。 */
+/** HTTP 网络循环每次开始读、写或等待业务结果时读取的配置快照。 */
 struct HttpRuntimeConfig {
-    int idle_timeout_s = 5;  ///< 无活动连接的回收阈值，单位为秒。
-    int report_n       = 10; ///< /api/data 未提供 n 时的默认返回点数。
+    int idle_timeout_s = 5;
+    int report_n = 10;
 };
-
-/** 配置快照提供器；由 HTTP 线程调用，返回值应可安全跨线程读取。 */
 using HttpRuntimeConfigProvider = std::function<HttpRuntimeConfig()>;
 
+/** 拥有独立存储的应用请求；不能把 Beast parser 或 socket 借给业务线程。 */
+struct HttpRequest {
+    std::string method;
+    std::string target;
+};
+struct HttpResponse {
+    unsigned status = 200;
+    std::string content_type = "application/json";
+    std::string body;
+};
+using HttpReply = std::function<void(HttpResponse)>;
 /**
- * 当前只读数据库连接的提供器。
- *
- * HTTP 服务只在处理 `/api/data` 时调用；返回的 shared_ptr 必须让连接在本次查询期间
- * 保持存活。提供器可通过原子 shared_ptr 实现热切换，使已经开始的请求继续使用旧连接，
- * 后续请求取得新连接，而不跨线程修改同一个 Database 对象。
+ * HTTP Reactor 调用此入口投递请求，不应在入口执行路由、SQL 或等待结果。
+ * 返回 false 表示业务队列拒绝接收，由 HTTP 层立即响应 503。
+ * 返回 true 后可从任意线程调用 reply；重复、超时或停机后的回复安全丢弃。
  */
-using HttpDatabaseProvider = std::function<std::shared_ptr<Database>()>;
+using HttpRequestHandler = std::function<bool(HttpRequest, HttpReply)>;
 
-/**
- * 解析并限制查询点数。
- * @param raw URL 参数 n 的原文；空字符串表示未提供。
- * @param default_n 配置提供的默认点数，也会夹紧到合法区间。
- * @return [1, kMaxReportN] 内的点数；无法解析数值前缀或越界时回退到默认值。
- * std::stoi 接受的数字前缀会沿用，例如 "12abc" 解析为 12。
- */
+/** 业务层使用的嵌入资源映射；未知路径返回 nullopt。 */
+std::optional<HttpResponse> staticHttpResponse(const std::string& path);
+
+/** 数字前缀沿用 std::stoi 语义，非法/越界值回退到夹紧后的默认值。 */
 int clampReportN(const std::string& raw, int default_n);
 
 /**
- * 在调用线程中阻塞运行监控服务。
- *
- * @param database 每次数据查询时取得当前只读连接的提供器，不得为空或返回空指针。
- * @param port 监听 TCP 端口，范围应已由配置层校验。
- * @param config 运行期配置提供器；扫描连接和处理请求时重新调用。
- * @param should_stop 停机判据；空回调表示持续运行。
- *
- * 初始化失败时记录错误并返回；运行后最多等待下一次 timerfd 扫描观察停机请求。
+ * 在调用线程运行独立的 Boost.Asio / Beast HTTP/1 网络循环。
+ * 连接、解析、收发和超时仅由该线程访问；业务回复通过 post 交回。
+ * header/body 分别限制为 16/64 KiB，同时最多接受 256 个连接。
+ * 每个连接最多有一个业务请求在途，流水线字节留在有界接收缓冲中。
+ * should_stop 每 100ms 检查一次；正常停止返回 true，初始化/运行失败返回 false。
+ * port=0 和 on_listening 供集成测试使用，回调收到实际绑定的端口。
  */
-void runHttpServer(HttpDatabaseProvider database, int port, HttpRuntimeConfigProvider config,
-                   std::function<bool()> should_stop);
+bool runHttpServer(int port, HttpRuntimeConfigProvider config, HttpRequestHandler handler,
+                   std::function<bool()> should_stop,
+                   std::function<void(unsigned short)> on_listening = {});
 
 }  // namespace gateway

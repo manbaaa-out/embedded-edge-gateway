@@ -1,10 +1,12 @@
 # edge_proto 共享文件指纹 —— 由 scripts/gen_proto_manifest.sh 生成,勿手改
 # 校验方式:./scripts/check_proto_sync.sh
-# 协议版本:1.3
-af3970018b1d9757e9e35f7cb459d72e15c0453a8803487c8774c9b8f15739e1  include/edge_proto/edge_proto.h
+# 协议版本:2.0
+70ac40a3505f664836c0af837a6fd5fa8f47370eb4dc600c44d5f1bfd498b040  include/edge_proto/edge_proto.h
 f03608e0cd349b76e20edabf1a7fe8ff1ee90cebb7ef9857fd56ff8099e0fb26  include/edge_proto/edge_crc16.h
 c4487190d3e28854b473b00666f6927cf17cf5b33f014353b99cb78741a60fb4  include/edge_proto/edge_frame.h
+33cd73208e6bbef8e705f1ecad7ca20c452281ee58c49279f9e1e8d54760f937  include/edge_proto/edge_sr.h
 1ced4017eea7ea8440a824a9bc780751c5563c3f827b4ba73549db373156abc5  src/edge_crc16.c
 3908d289b3b3dd38469cd6fc7f27bacdda2dd23984017dd3b17c35eb13b2db01  src/edge_frame.c
+ece07e872650b00edd53832eae7c9eb1ee46871c33144482bd76a870b3ee300f  src/edge_sr.c
 a003c41791f33d36bc9d1aa3482458191650f52d72de7f1607944a462d676d58  vectors/crc16.csv
-87752257e32a42ae9133e2b68d78707c4334979493b6921095b8b048037bef19  vectors/frames.csv
+2bbb2dd89cd49997b3805fef81326b9fb9579d266d3f1a1d3dfb722ad2ba4617  vectors/frames.csv

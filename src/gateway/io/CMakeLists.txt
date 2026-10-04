@@ -36,9 +36,10 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     ${WEB_DIR}/uplot.css
 )
 
-# gw_http：增量请求解析、静态资源路由和只读查询服务。
+# Beast 实现 HTTP/1 解析和序列化，Asio 独立事件循环拥有全部连接。
+find_package(Boost 1.74 REQUIRED COMPONENTS system)
+find_package(Threads REQUIRED)
 add_library(gw_http STATIC
-    http/HttpRequest.cpp
     http/HttpServer.cpp
 )
 # WebAsset.h 仅供 HttpServer.cpp 使用，因此生成目录不向使用方传播。
@@ -46,6 +47,5 @@ target_include_directories(gw_http PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(gw_http
     PUBLIC  gateway_includes                 # 使用方可包含 HttpServer.h。
     PRIVATE gateway_options                  # 本目标统一编译策略。
-    PUBLIC  gw_event                         # 当前构建图向使用方传递事件循环目标。
-    PRIVATE gw_storage gw_log gw_format      # 数据查询、日志和 JSON 数值格式。
+    PRIVATE Boost::system Threads::Threads gw_log
 )

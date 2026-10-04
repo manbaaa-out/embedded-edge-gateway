@@ -4,6 +4,7 @@
 
 #include "edge_proto/edge_frame.h"
 #include "edge_proto/edge_proto.h"
+#include "edge_proto/edge_sr.h"
 
 #include <fcntl.h>
 #include <termios.h>
@@ -36,7 +37,7 @@ struct Options {
 // 输出命令行语法和故障注入示例；argv0 是用户调用程序时使用的可执行文件名。
 void usage(const char* argv0) {
     std::fprintf(stderr,
-                 "STM32 传感节点模拟器 —— 上报遥测 + 响应下行命令(含同 seq 幂等)\n"
+                 "STM32 传感节点模拟器 —— 上报遥测 + 响应下行命令(SR 有序执行)\n"
                  "\n"
                  "用法: %s <串口设备> [选项]\n"
                  "\n"
@@ -132,11 +133,13 @@ int openSerial(const std::string& path) {
 }
 
 // 单线程节点状态机。串口接收和周期上报在同一循环推进，避免测试工具自身引入
-// 跨线程竞态；命令响应缓存提供与固件相同的最近一次 seq 幂等行为。
+// 跨线程竞态；命令响应缓存与固件使用同一份有界 C 实现。
 class NodeSim {
 public:
     // fd 由 main 持有并在 run 返回后关闭；opt 按值保存，以便 set_period 修改运行周期。
-    NodeSim(int fd, const Options& opt) : fd_(fd), opt_(opt), rng_(opt.seed) {}
+    NodeSim(int fd, const Options& opt) : fd_(fd), opt_(opt), rng_(opt.seed) {
+        edge_sr_node_init(&sr_);
+    }
 
     // 持续读取下行字节并按 steady_clock 触发上报，直至串口发生不可恢复的读取错误。
     void run() {
@@ -156,6 +159,7 @@ public:
             }
 
             const auto now = std::chrono::steady_clock::now(); // 单调时钟不受系统时间校准影响。
+            edge_sr_node_tick(&sr_, &hooks_, this);
             if (now >= next_report) {
                 reportOnce();
                 next_report = now + std::chrono::seconds(opt_.period_s);
@@ -178,6 +182,12 @@ private:
     // 编码并发送 type/payload/len 描述的协议帧。可先写入固定噪声序列，使网关解析器
     // 必须在同一字节流中重新同步；payload 可在 len 为 0 时取 nullptr。
     void sendFrame(uint8_t type, const uint8_t* payload, uint8_t len) {
+        uint8_t frame[EDGE_FRAME_MAX];
+        const uint8_t n = edge_frame_encode(type, payload, len, frame);
+        if (n != 0) sendRaw(frame, n);
+    }
+
+    void sendRaw(const uint8_t* frame, uint8_t len) {
         if (roll(opt_.garbage)) {
             // 0xAA 与帧头首字节相同，覆盖解析器等待第二个帧头字节时的自环路径。
             const uint8_t noise[3] = {0xFF, 0xAA, 0x13};
@@ -186,10 +196,7 @@ private:
                 // 已消费返回值；故障注入失败不改变合法帧的发送流程。
             }
         }
-        uint8_t frame[EDGE_FRAME_MAX]; // 足以容纳协议允许的最大编码帧。
-        const uint8_t n = edge_frame_encode(type, payload, len, frame); // 实际编码长度。
-        if (n == 0) return;
-        if (::write(fd_, frame, n) != n) {
+        if (::write(fd_, frame, len) != len) {
             std::fprintf(stderr, "写串口不完整\n");
         }
     }
@@ -222,97 +229,51 @@ private:
                     lux);
     }
 
-    // 处理解析器交付的下行帧。type 标识命令，payload/len 是完整负载，首字节为 seq；
-    // 无 seq 的帧无法构造协议响应，直接丢弃。
     void onFrame(uint8_t type, const uint8_t* payload, uint8_t len) {
-        if (len < 1) return; // 所有下行命令至少需要一个序号字节。
-        const uint8_t seq = payload[EDGE_OFF_SEQ]; // 将请求和后续响应关联起来。
+        edge_sr_node_on_frame(&sr_, type, payload, len, &hooks_, this);
+    }
 
-        // 只缓存最近一条命令：相同 seq 直接补发响应，不重复执行命令。
-        // 若两个重试之间插入另一命令，深度为一的窗口无法识别更早的重复 seq；当前
-        // 命令仅包含查询和绝对值设置，因此即使再次执行也保持业务结果幂等。
-        if (have_last_ && seq == last_seq_) {
-            std::printf("[命令] seq=%u 重发 → 补发上次应答(不重复执行)\n", seq);
-            resendLastResponse();
-            return;
-        }
-
+    static uint8_t execute(uint8_t seq, uint8_t type, const uint8_t* args, uint8_t len,
+                           uint8_t* result, void* user) {
+        auto& self = *static_cast<NodeSim*>(user);
+        result[0] = EDGE_RC_BAD_PARAM;
         switch (type) {
-        case EDGE_TYPE_QUERY_LIGHT: {
-            const uint16_t lux = static_cast<uint16_t>(100 + (tick_ * 7) % 900); // 当前模拟光照值。
-            uint8_t p[4] = {seq, EDGE_RC_OK, 0, 0}; // seq、结果码和两字节光照。
-            edge_u16_be_write(&p[2], lux);
-            std::printf("[命令] seq=%u 查光照 → %u lux\n", seq, lux);
-            respond(EDGE_TYPE_QUERY_RESP, p, 4, seq);
-            break;
-        }
-        case EDGE_TYPE_QUERY_TH: {
-            uint8_t p[6] = {seq, EDGE_RC_OK, 0, 0, 0, 0}; // seq、结果码、温度和湿度。
-            edge_u16_be_write(&p[2], static_cast<uint16_t>(230 + (tick_ % 50)));
-            edge_u16_be_write(&p[4], static_cast<uint16_t>(500 + (tick_ % 200)));
+        case EDGE_TYPE_QUERY_LIGHT:
+            if (len != 0) return 1;
+            result[0] = EDGE_RC_OK;
+            edge_u16_be_write(result + 1, static_cast<uint16_t>(100 + (self.tick_ * 7) % 900));
+            std::printf("[命令] seq=%u 查光照\n", seq);
+            return 3;
+        case EDGE_TYPE_QUERY_TH:
+            if (len != 0) return 1;
+            result[0] = EDGE_RC_OK;
+            edge_u16_be_write(result + 1, static_cast<uint16_t>(230 + self.tick_ % 50));
+            edge_u16_be_write(result + 3, static_cast<uint16_t>(500 + self.tick_ % 200));
             std::printf("[命令] seq=%u 查温湿度\n", seq);
-            respond(EDGE_TYPE_QUERY_RESP, p, 6, seq);
-            break;
-        }
-        case EDGE_TYPE_SET_PERIOD: {
-            uint8_t rc = EDGE_RC_OK; // 最终写入 ACK 的节点处理结果。
-            if (!edge_payload_len_ok(type, len)) {
-                rc = EDGE_RC_BAD_PARAM; // 负载缺少周期的两个字节。
-            } else {
-                const uint16_t period_s = edge_u16_be_read(&payload[1]); // seq 后的大端秒数。
-                if (!edge_period_s_valid(period_s)) {
-                    rc = EDGE_RC_BAD_PARAM; // 协议明确拒绝零周期。
-                } else {
-                    opt_.period_s = period_s; // 下一次调度后按新周期继续上报。
-                    std::printf("[命令] seq=%u 设采样周期 = %u 秒\n", seq, period_s);
-                }
+            return 5;
+        case EDGE_TYPE_SET_PERIOD:
+            if (len == 2 && edge_period_s_valid(edge_u16_be_read(args))) {
+                self.opt_.period_s = edge_u16_be_read(args);
+                result[0] = EDGE_RC_OK;
+                std::printf("[命令] seq=%u 设采样周期 = %u 秒\n", seq,
+                            static_cast<unsigned>(self.opt_.period_s));
             }
-            if (rc != EDGE_RC_OK) {
-                std::printf("[命令] seq=%u 设周期被拒 rc=0x%02X\n", seq, rc);
-            }
-            const uint8_t p[2] = {seq, rc}; // 设置命令只返回序号和结果码。
-            respond(EDGE_TYPE_ACK, p, 2, seq);
-            break;
-        }
-        default: {
-            // 未支持类型统一返回 UNSUPPORTED，包括误送到节点的上行类型。
-            const uint8_t p[2] = {seq, EDGE_RC_UNSUPPORTED};
-            std::printf("[命令] seq=%u 不支持的 TYPE 0x%02X%s\n", seq, type,
-                        EDGE_IS_UPLINK(type) ? " (这是个上行 TYPE)" : "");
-            respond(EDGE_TYPE_ACK, p, 2, seq);
-            break;
-        }
+            return 1;
+        default:
+            result[0] = EDGE_RC_UNSUPPORTED;
+            return 1;
         }
     }
 
-    // 缓存并发送一次响应。type/p/len 描述待发帧，seq 是请求序号；即使本次响应被
-    // 故障注入丢弃，也先完成缓存，以便网关重试相同 seq 时补发完全相同的结果。
-    void respond(uint8_t type, const uint8_t* p, uint8_t len, uint8_t seq) {
-        last_type_ = type;
-        last_len_ = len;
-        std::memcpy(last_payload_, p, len);
-        last_seq_ = seq;
-        have_last_ = true;
-
-        if (opt_.no_ack) {
-            std::printf("       └─ 应答被丢弃(--no-ack)\n");
-            return;
-        }
-        if (roll(opt_.drop_ack)) {
-            std::printf("       └─ 应答被丢弃(--drop-ack),网关应重发\n");
-            return;
-        }
-        sendFrame(type, p, len);
+    static void emit(uint8_t type, const uint8_t* p, uint8_t len, void* user) {
+        auto& self = *static_cast<NodeSim*>(user);
+        if (self.opt_.no_ack || self.roll(self.opt_.drop_ack)) return;
+        self.sendFrame(type, p, len);
     }
 
-    // 对重复 seq 补发缓存响应；no_ack 和 drop_ack 与首次响应使用相同策略。
-    void resendLastResponse() {
-        if (!have_last_ || opt_.no_ack) return;
-        if (roll(opt_.drop_ack)) {
-            std::printf("       └─ 补发的应答又被丢弃\n");
-            return;
-        }
-        sendFrame(last_type_, last_payload_, last_len_);
+    static uint32_t nowMs() {
+        return static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count());
     }
 
     int fd_;            // 已配置的串口描述符，生命周期由 main 管理。
@@ -320,13 +281,9 @@ private:
     std::mt19937 rng_;  // 所有故障注入共用的确定性随机数引擎。
     unsigned tick_ = 0; // 已生成的遥测轮次，也是模拟读数的变化输入。
 
-    // 最近一次请求响应缓存。have_last_ 区分尚无有效缓存的初始状态，其余字段共同
-    // 描述一帧完整响应；last_payload_ 按协议最大负载预分配，避免重试路径动态分配。
-    bool have_last_ = false;
-    uint8_t last_seq_ = 0;                        // 最近请求的关联序号。
-    uint8_t last_type_ = 0;                       // 缓存响应的 TYPE。
-    uint8_t last_len_ = 0;                        // 缓存响应的有效负载长度。
-    uint8_t last_payload_[EDGE_PAYLOAD_MAX] = {}; // 缓存响应负载。
+    edge_sr_node_t sr_{};
+    inline static const edge_sr_hooks_t hooks_{
+        [](void*) { return nowMs(); }, &NodeSim::execute, &NodeSim::emit};
 };
 
 } // namespace

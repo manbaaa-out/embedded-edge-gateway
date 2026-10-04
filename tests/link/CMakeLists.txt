@@ -11,3 +11,11 @@ gateway_add_test(node_link_reopen_test
     LIBS    gw_link
     LABELS  "unit;link"
 )
+
+# node_link_output_test 使用真实 PTY 与 epoll，并在本测试目标内注入确定性的短写预算。
+gateway_add_test(node_link_output_test
+    SOURCES NodeLinkOutputTest.cpp
+    LIBS    gw_link gw_event
+    LABELS  "unit;link"
+)
+target_link_options(node_link_output_test PRIVATE "-Wl,--wrap=write")

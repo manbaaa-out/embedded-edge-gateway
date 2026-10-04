@@ -21,3 +21,9 @@ gateway_add_test(frame_codec_test
     LIBS    gw_protocol
     LABELS  "unit;protocol"
 )
+
+gateway_add_test(sr_receiver_test
+    SOURCES SrReceiverTest.cpp
+    LIBS    edge_proto
+    LABELS  "unit;protocol"
+)

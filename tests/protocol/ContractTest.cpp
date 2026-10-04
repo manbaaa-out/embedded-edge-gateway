@@ -52,9 +52,11 @@ TEST(Contract, UplinkAndDownlinkSegmentsAreDisjoint) {
 TEST(Contract, EveryDefinedTypeSitsInItsOwnSegment) {
     const uint8_t uplink[] = {
         EDGE_TYPE_DHT11,  EDGE_TYPE_BH1750,     EDGE_TYPE_HEARTBEAT, // 节点发往网关。
-        EDGE_TYPE_STATUS, EDGE_TYPE_QUERY_RESP, EDGE_TYPE_ACK};
+        EDGE_TYPE_STATUS, EDGE_TYPE_QUERY_RESP, EDGE_TYPE_ACK,
+        EDGE_TYPE_SR_RECEIVED, EDGE_TYPE_SR_RESULT, EDGE_TYPE_SR_OPEN_ACK};
     const uint8_t downlink[] = {EDGE_TYPE_QUERY_LIGHT, EDGE_TYPE_QUERY_TH,
-                                EDGE_TYPE_SET_PERIOD}; // 网关发往节点。
+                                EDGE_TYPE_SET_PERIOD, EDGE_TYPE_SR_OPEN, EDGE_TYPE_SR_COMMAND,
+        EDGE_TYPE_SR_RESULT_ACK}; // 网关发往节点。
 
     for (uint8_t t : uplink) {
         EXPECT_TRUE(EDGE_IS_UPLINK(t)) << "上行 TYPE 0x" << std::hex << int(t) << " 不在上行段";
@@ -188,7 +190,9 @@ TEST(Parser, EveryTypeSurvivesRoundTrip) {
     const uint8_t types[] = {
         EDGE_TYPE_DHT11,       EDGE_TYPE_BH1750,     EDGE_TYPE_HEARTBEAT, // 完整已定义 TYPE 集。
         EDGE_TYPE_STATUS,      EDGE_TYPE_QUERY_RESP, EDGE_TYPE_ACK,
-        EDGE_TYPE_QUERY_LIGHT, EDGE_TYPE_QUERY_TH,   EDGE_TYPE_SET_PERIOD};
+        EDGE_TYPE_QUERY_LIGHT, EDGE_TYPE_QUERY_TH,   EDGE_TYPE_SET_PERIOD,
+        EDGE_TYPE_SR_OPEN, EDGE_TYPE_SR_OPEN_ACK, EDGE_TYPE_SR_COMMAND,
+        EDGE_TYPE_SR_RECEIVED, EDGE_TYPE_SR_RESULT, EDGE_TYPE_SR_RESULT_ACK};
     for (uint8_t t : types) {
         const int need = edge_min_payload_len(t); // 当前类型满足字典所需的最小负载长度。
         ASSERT_GE(need, 0);

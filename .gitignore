@@ -29,3 +29,7 @@ compile_commands.json
 
 # WebAsset.h 由 WebAsset.h.in 和 assets/ 在 CMake 配置期生成，任意构建树位置都应忽略。
 **/WebAsset.h
+
+# Python 文档与测试脚本的字节码缓存。
+__pycache__/
+*.py[cod]

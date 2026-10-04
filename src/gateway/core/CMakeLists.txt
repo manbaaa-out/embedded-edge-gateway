@@ -15,7 +15,7 @@ target_link_libraries(gw_log
 
 # gw_concurrent 没有源文件；INTERFACE target 传播 include 路径和线程运行库需求。
 add_library(gw_concurrent INTERFACE)
-target_link_libraries(gw_concurrent INTERFACE gateway_includes Threads::Threads)
+target_link_libraries(gw_concurrent INTERFACE gateway_includes Threads::Threads gw_log)
 
 # gw_format 只传播 header-only formatValue()，独立 target 让格式契约的使用者显式可见。
 add_library(gw_format INTERFACE)

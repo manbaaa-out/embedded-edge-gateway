@@ -24,7 +24,8 @@ public:
      * @param nonblock 是否以 O_NONBLOCK 打开。
      * @throws std::runtime_error 打开或 termios 配置失败。
      */
-    explicit SerialPort(const char* path, speed_t baud, bool nonblock = false);
+    explicit SerialPort(const char* path, speed_t baud, bool nonblock = false,
+                        bool defer_configuration = false);
     /** 关闭仍由本对象持有的串口 fd。 */
     ~SerialPort() noexcept;
 
@@ -50,10 +51,10 @@ public:
      */
     ssize_t write(const uint8_t* data, size_t len) noexcept;
 
-private:
-    /** @param baud 要设置到输入和输出方向的 termios 波特率常量。 */
+    /** 由 fd 所属 Reactor 应用属性；热加载准备阶段不得修改同一 tty 的共享属性。 */
     void configure(speed_t baud);
 
+private:
     int fd_ = -1;  ///< 本对象独占的串口 fd；-1 表示已移走或尚未取得。
 };
 

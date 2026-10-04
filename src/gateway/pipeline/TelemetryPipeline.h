@@ -2,9 +2,9 @@
 
 /**
  * @file
- * Reactor 到 SQLite 写线程之间的异步遥测流水线。
+ * 业务线程到 SQLite 写线程之间的异步遥测流水线。
  *
- * 有界队列保护主事件循环不被磁盘 I/O 阻塞；单一消费者独占写连接，并将当前已积压
+ * 有界队列隔离业务线程与磁盘 I/O；单一消费者独占写连接，并将当前已积压
  * 的记录合并为事务。数据库切换与数据批次使用同一条有序队列，从结构上保证换库不会
  * 与写入并发，也不会让一个批次跨越换库边界。
  */
@@ -91,7 +91,7 @@ private:
      */
     void writerLoop(std::shared_ptr<Database> db);
 
-    ThreadSafeQueue<Job> queue_{kQueueCapacity};  ///< Reactor 与写线程之间的有界任务队列。
+    ThreadSafeQueue<Job> queue_{kQueueCapacity};  ///< 业务线程与写线程之间的有界任务队列。
     std::thread writer_;                          ///< 唯一数据库写线程。
 };
 

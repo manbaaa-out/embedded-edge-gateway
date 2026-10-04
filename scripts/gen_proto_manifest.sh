@@ -11,8 +11,10 @@ FILES=(
     include/edge_proto/edge_proto.h
     include/edge_proto/edge_crc16.h
     include/edge_proto/edge_frame.h
+    include/edge_proto/edge_sr.h
     src/edge_crc16.c
     src/edge_frame.c
+    src/edge_sr.c
     vectors/crc16.csv
     vectors/frames.csv
 )

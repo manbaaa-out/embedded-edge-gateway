@@ -22,10 +22,12 @@
 include/edge_proto/
 ├── edge_proto.h     契约单一真相:版本 · TYPE 字典 · 结果码 · payload 布局 · 量纲 · 时序契约
 ├── edge_crc16.h     CRC16-MODBUS
-└── edge_frame.h     组帧 + 逐字节收帧 FSM(8 状态)
+├── edge_frame.h     组帧 + 逐字节收帧 FSM(8 状态)
+└── edge_sr.h        SR 接收窗口 8 / 顺序执行 / 会话隔离 / 结果缓存
 src/
 ├── edge_crc16.c
-└── edge_frame.c
+├── edge_frame.c
+└── edge_sr.c
 vectors/
 ├── crc16.csv        CRC 金标准向量(docs/protocol.md §4.3)
 └── frames.csv       帧编解码金标准向量(§7 全部示例 + 边界 + 错误路径)
@@ -48,7 +50,11 @@ vectors/
     412       0       0   edge_frame.o
 ```
 
-未定义符号只有 `edge_crc16_update` 一个(自己人),对 libc 零依赖。
+上述大小是原 CRC/编解码模块的历史测量。SR 模块同样无堆分配、无 I/O，不依赖 libc；
+调用方持有固定状态，通过回调注入时钟、同步执行器和帧输出。SR 接收窗口为 8，存储池为 16 槽，
+结果保留最多 5 秒并在确认后提前释放。完整流程见 [SR 设计](../docs/command-dedup.md)。
+
+协议主版本已升为 2：旧裸命令和旧 ACK 不再用于命令处理，两端必须一起更新。
 
 ## 两端如何接入
 
@@ -61,17 +67,14 @@ target_link_libraries(<your_target> PRIVATE edge_proto)
 
 ### STM32 侧
 
-固件仓库把本目录 vendored 到 `Protocol/edge_proto/`,并在 `Protocol/CMakeLists.txt` 里直接编译:
+固件仓库把本目录 vendored 到 `Protocol/edge_proto/`,在 `Protocol/CMakeLists.txt` 中加入目标:
 
 ```cmake
-add_library(protocol OBJECT
-    edge_proto/src/edge_crc16.c
-    edge_proto/src/edge_frame.c
-)
-target_include_directories(protocol PUBLIC edge_proto/include)
+add_subdirectory(edge_proto)
+target_link_libraries(protocol PUBLIC edge_proto)
 ```
 
-**为什么是 vendored 副本而不是 git submodule**:submodule 会把整个网关仓库(含 web 资源、SQLite 封装、HTTP 服务)拖进固件工程,为了两个 `.c` 文件付这个代价不值。副本的代价是可能漂移 —— 而漂移正好是可以机器化检测的:
+**为什么是 vendored 副本而不是 git submodule**:submodule 会把整个网关仓库(含 web 资源、SQLite 封装、HTTP 服务)拖进固件工程,为少量协议源码付这个代价不值。副本的代价是可能漂移 —— 而漂移正好是可以机器化检测的:
 
 ```bash
 ./scripts/check_proto_sync.sh            # 两仓共享文件 SHA256 比对,不一致即失败

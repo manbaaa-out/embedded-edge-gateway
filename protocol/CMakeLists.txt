@@ -6,13 +6,14 @@ cmake_minimum_required(VERSION 3.15)
 # 当本目录不是由网关工程 add_subdirectory() 引入时，声明最小独立 C 项目；
 # PROJECT_NAME 已存在时不得覆盖父项目名称、版本或语言集合。
 if(NOT DEFINED PROJECT_NAME)
-    project(edge_proto VERSION 1.2.0 LANGUAGES C)
+    project(edge_proto VERSION 2.0.0 LANGUAGES C)
 endif()
 
 # edge_proto 包含双方必须逐字节一致的 CRC 与帧状态机实现。
 add_library(edge_proto STATIC
     src/edge_crc16.c
     src/edge_frame.c
+    src/edge_sr.c
 )
 
 # PUBLIC include 路径随静态库传给网关、测试和固件侧消费者。
