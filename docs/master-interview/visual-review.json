@@ -1,57 +1,56 @@
 {
-  "reviewed_on": "2026-10-04",
-  "method": "实际查看本轮 Chromium P004 桌面截图、P014 手机整题截图，以及 pdftoppm 导出的 P004/P014 与 T016 PDF 起始和续页；全书逐段完整性、章节布局和交互另由 render.mjs 检查。",
+  "reviewed_on": "2026-10-08",
+  "method": "实际查看本轮 Chromium 渲染的九线程 architecture.svg、P012 桌面与手机整题，以及 pdftoppm 导出的项目 P004 线程表、P012 起始/续页和理论 T031 起始/续页；全书段落、章节布局与交互由 render.mjs 检查。",
   "artifacts": {
-    "第一部分_纯八股.pdf": "a4589152734e4a2d2a7ae4021d50374577ed422e6b795cee66270ea031546187",
-    "第二部分_项目面经.pdf": "296922e19e342a744255a97149a84753e02286f68921f0c1f47e1eea800ac54b",
-    "网关与节点总面经.pdf": "ffd8c58e777bceb6636f866ad7a5307614d8cf9d22b56caefdb19f9c0f75a6f2"
+    "第一部分_纯八股.pdf": "c8dd02d063ac8bf62a7a2ee6bf62c46dbf63e27476e7d7e2c3f86e39e4dba090",
+    "第二部分_项目面经.pdf": "56a8f9260d9e61d0d5c07248d5ff40f5c82e42e31d1dc1b72d7b6d11d920d3ae",
+    "网关与节点总面经.pdf": "4814cf9f91cb3bcd99fb04af5f9346f35f9dd84a345299885fa648c112a624cd"
   },
   "web": [
-    "P004 多事件循环/线程所有权表桌面截图",
-    "P014 Boost.Beast/业务/查询交接手机整题截图"
+    "九线程 architecture.svg 全图",
+    "P012 独立管理 Reactor 与停机屏障桌面整题",
+    "P012 手机整题"
   ],
   "pdf_samples": [
     {
       "file": "第二部分_项目面经.pdf",
       "question": "P004",
       "pages": [
-        5,
         6
       ],
       "images": [
-        "/tmp/master-interview-review-P004.png",
-        "/tmp/master-interview-review-P004-table.png"
+        "/tmp/master-interview-admin-P004-6.png"
       ]
     },
     {
       "file": "第二部分_项目面经.pdf",
-      "question": "P014",
+      "question": "P012",
       "pages": [
-        17,
-        18
+        15,
+        16
       ],
       "images": [
-        "/tmp/master-interview-review-P014.png",
-        "/tmp/master-interview-review-P014-boundary.png"
+        "/tmp/master-interview-admin-P012-15.png",
+        "/tmp/master-interview-admin-P012-16.png"
       ]
     },
     {
       "file": "第一部分_纯八股.pdf",
-      "question": "T016",
+      "question": "T031",
       "pages": [
-        21,
-        22
+        44,
+        45
       ],
       "images": [
-        "/tmp/master-interview-review-T016.png",
-        "/tmp/master-interview-review-T016-models.png"
+        "/tmp/master-interview-admin-T031-44.png",
+        "/tmp/master-interview-admin-T031-45.png"
       ]
     }
   ],
   "findings": [
-    "线程表、HTTP 调用链与手机纵向流程均清晰，长代码名正常换行，没有横向裁切。",
-    "P004/P014 的口述回答、源码回指和边界分区可读；PDF 表格和流程图没有跨页截断或与页脚重叠。",
-    "T016 新增线程模式分类和 Asio 接口/底层实现说明在续页完整可读；全书正文机器校验没有缺失段落。"
+    "九线程图清楚区分 SIGHUP 交工作队列、TERM/INT 经主 eventfd 直接通知串口及 MQTT 发布归属，SVG 文本均在 viewBox 内，无交叠裁切。",
+    "P012 的两段口述、启动阶段等待、管理事件与耗时任务分工、query/Core 屏障和退出时间边界均完整可读，手机布局无横向溢出。",
+    "P004 扩展线程表和 T031 管理线程理论在 PDF 样页完整可读，没有与页脚重叠；全部正文段落机器校验无缺失。"
   ],
-  "limitations": "人工查看上述样页与截图，未逐页人工审查全书；文档验证不代表应用性能测量、上板验证或端到端持久交付。PDF 跨文件跳转取决于阅读器支持。"
+  "limitations": "人工查看上述样页与截图，未逐页人工检查全书；源码线程归属和文档验证不等于网络故障退出时间、性能或上板行为已验证。PDF 跨文件跳转取决于阅读器支持。"
 }

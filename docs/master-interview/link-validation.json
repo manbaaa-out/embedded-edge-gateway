@@ -1,9 +1,9 @@
 {
-  "local_links_checked": 31257,
+  "local_links_checked": 31427,
   "broken_local_links": [],
   "duplicate_id_pages": [],
-  "html_files_checked": 87,
-  "source_files_checked": 60,
+  "html_files_checked": 89,
+  "source_files_checked": 62,
   "source_drift": [],
   "cross_part_references": 249,
   "parts_independent": true,
@@ -147,7 +147,7 @@
         },
         {
           "question": "T034",
-          "page": 48
+          "page": 49
         },
         {
           "question": "T035",
@@ -855,7 +855,7 @@
         },
         {
           "question": "T034",
-          "page": 48
+          "page": 49
         },
         {
           "question": "T035",

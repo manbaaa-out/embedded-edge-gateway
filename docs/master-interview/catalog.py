@@ -17,6 +17,8 @@ SOURCES = {
     'core': ('gateway','src/gateway/app/GatewayCore.cpp','void GatewayCore::handleMqtt('),
     'coreh': ('gateway','src/gateway/app/GatewayCore.h','class GatewayCore'),
     'executor': ('gateway','src/gateway/core/concurrent/TaskExecutor.h','class TaskExecutor'),
+    'admin': ('gateway','src/gateway/app/ManagementReactor.cpp','void ManagementReactor::onSignals('),
+    'adminh': ('gateway','src/gateway/app/ManagementReactor.h','class ManagementReactor'),
     'main': ('gateway','src/gateway/app/main.cpp','int main('),
     'loop': ('gateway','src/gateway/io/event/EventLoop.cpp','void EventLoop::loop()'),
     'link': ('gateway','src/gateway/link/NodeLink.cpp','void NodeLink::flushOutput()'),

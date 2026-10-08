@@ -124,12 +124,19 @@ try{
     await screenshot(mobile,'freertos-port-'+stem+'-mobile','#'+key);
   }
   // Review the current multi-loop and third-party HTTP architecture on both widths.
-  for(const key of ['P004','P014']){
+  for(const key of ['P004','P012','P014']){
     await navigate(desktop,'project.html');await screenshot(desktop,'architecture-'+key,'#'+key);
     await navigate(mobile,'project.html');
     assert.equal(await evaluate(mobile,'document.documentElement.scrollWidth>innerWidth+1'),false);
     await screenshot(mobile,'architecture-'+key+'-mobile','#'+key);
   }
+  // The repository architecture diagram is a code-native SVG, also reviewed offline.
+  await call('Emulation.setDeviceMetricsOverride',{width:1480,height:1100,deviceScaleFactor:1,mobile:false},desktop);
+  await navigate(desktop,'../architecture.svg');
+  const svgTextOverflow=await evaluate(desktop,`[...document.querySelectorAll('text')].filter(e=>{const b=e.getBBox();return b.x<0||b.y<0||b.x+b.width>1480||b.y+b.height>1100}).map(e=>e.textContent)`);
+  assert.deepEqual(svgTextOverflow,[]);await screenshot(desktop,'architecture-overview');
+  report.architectureSvg='Text fits viewBox; offline screenshot captured for visual review.';
+  await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false},desktop);
   // Follow a real project-to-theory link, including the target question anchor.
   await navigate(desktop,'project.html');
   await evaluate(desktop,"document.querySelector('#P037 .theory-backlinks a').click()");

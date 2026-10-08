@@ -139,34 +139,34 @@
   "pdfs": {
     "第一部分_纯八股.pdf": {
       "pages": 177,
-      "bodyParagraphs": 1019,
-      "searchableParagraphs": 1019,
+      "bodyParagraphs": 1020,
+      "searchableParagraphs": 1020,
       "missing": [],
       "sparsePages": []
     },
     "第二部分_项目面经.pdf": {
       "pages": 62,
-      "bodyParagraphs": 283,
-      "searchableParagraphs": 283,
+      "bodyParagraphs": 287,
+      "searchableParagraphs": 287,
       "missing": [],
       "sparsePages": []
     },
     "网关与节点总面经.pdf": {
       "pages": 238,
-      "bodyParagraphs": 1302,
-      "searchableParagraphs": 1302,
+      "bodyParagraphs": 1307,
+      "searchableParagraphs": 1307,
       "missing": [],
       "sparsePages": []
     }
   },
   "artifacts": {
-    "index.html": "2a7d2808467b03891187491a0afd38cc2fdf029dcad1a0e1632fe1bacc550fe7",
-    "theory.html": "a8052bb906c30aef0a3db9d5236af4337d0b7e6e64d62d2acf84f0d20ae98dd1",
-    "project.html": "55c21c07b07fda16eb261d0d7e5f0c9c2f931e174a9cf54da06d64072f789602",
-    "full.html": "c001dd0a2788838a2af289c0ecfb14f2d3df66c03fde231752a98dd949a80413",
-    "第一部分_纯八股.pdf": "a4589152734e4a2d2a7ae4021d50374577ed422e6b795cee66270ea031546187",
-    "第二部分_项目面经.pdf": "296922e19e342a744255a97149a84753e02286f68921f0c1f47e1eea800ac54b",
-    "网关与节点总面经.pdf": "ffd8c58e777bceb6636f866ad7a5307614d8cf9d22b56caefdb19f9c0f75a6f2"
+    "index.html": "f59d1dbb6e3aced5b62f781cd1033ff77d9918d57476d7ac826738947697fbfd",
+    "theory.html": "551b269749f29c2bb71379185a3b6a751192458d3d09afee364802e245b22bec",
+    "project.html": "726143c9d8fabbcc47756901a14fee425df62b96092ee52ac5a1f90b6b418ba8",
+    "full.html": "5d0bfc304a9a92002ef16df28152b6cf887990f9bb6538dd5ca207bbadd607ad",
+    "第一部分_纯八股.pdf": "c8dd02d063ac8bf62a7a2ee6bf62c46dbf63e27476e7d7e2c3f86e39e4dba090",
+    "第二部分_项目面经.pdf": "56a8f9260d9e61d0d5c07248d5ff40f5c82e42e31d1dc1b72d7b6d11d920d3ae",
+    "网关与节点总面经.pdf": "4814cf9f91cb3bcd99fb04af5f9346f35f9dd84a345299885fa648c112a624cd"
   },
   "pdfLinks": {
     "theory_page_map": {
@@ -203,7 +203,7 @@
       "T031": 44,
       "T032": 46,
       "T033": 47,
-      "T034": 48,
+      "T034": 49,
       "T035": 50,
       "T036": 52,
       "T037": 53,
@@ -299,16 +299,17 @@
       },
       "第二部分_项目面经.pdf": {
         "theory_cross_file_links": 249,
-        "relative_local_links": 262,
+        "relative_local_links": 269,
         "pages": 62
       },
       "网关与节点总面经.pdf": {
         "theory_cross_file_links": 0,
-        "relative_local_links": 262,
+        "relative_local_links": 269,
         "pages": 238
       }
     }
   },
+  "architectureSvg": "Text fits viewBox; offline screenshot captured for visual review.",
   "crossPartNavigation": "P037 → theory.html#T072 passed",
   "browserExceptions": [],
   "interactions": "Question/text search, no results, chapter filter, reset, self-test/reveal, exact theory backlinks and mobile layout passed.",

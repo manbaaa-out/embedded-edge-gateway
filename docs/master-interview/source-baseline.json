@@ -1,9 +1,9 @@
 {
-  "verified_on": "2026-10-04",
-  "captured_at": "2026-10-04T14:50:40.030582+00:00",
+  "verified_on": "2026-10-08",
+  "captured_at": "2026-10-08T14:55:51.627107+00:00",
   "gateway": {
-    "commit": "8776875f54b162db4be253b32a1eb722cbc35dd3",
-    "branch": "codex/multi-reactor-beast-20261004"
+    "commit": "f15cd1abc9f46b97249d3b358837010140416de3",
+    "branch": "codex/management-reactor-20261008"
   },
   "node": {
     "commit": "09044002d70213b4bbfa0c864a8be438e19eb6a1",
@@ -13,17 +13,17 @@
     "app": {
       "repository": "gateway",
       "path": "src/gateway/app/GatewayApp.cpp",
-      "sha256": "79e3c38cf0a228620530dc8f905139dd9b3faa9efe9f8844ae2d98f4270ab16a",
-      "line": 113,
-      "lines": 528,
+      "sha256": "def4a1ecb2c91c3b516caab56731ba60ded6d1d40e3a6cbc92596c4b0e33ceb4",
+      "line": 88,
+      "lines": 479,
       "token": "GatewayApp::run()"
     },
     "apph": {
       "repository": "gateway",
       "path": "src/gateway/app/GatewayApp.h",
-      "sha256": "e6ba695558de82afadddc25cc497404e34a3b8db659e67df437eec95a7bef361",
-      "line": 21,
-      "lines": 80,
+      "sha256": "fe764024bae3063efae05deeb23c4524103170e0e285353fcf7e89165969d1ff",
+      "line": 22,
+      "lines": 81,
       "token": "class GatewayApp"
     },
     "core": {
@@ -50,12 +50,28 @@
       "lines": 76,
       "token": "class TaskExecutor"
     },
+    "admin": {
+      "repository": "gateway",
+      "path": "src/gateway/app/ManagementReactor.cpp",
+      "sha256": "ae1f1a84ae1f197780ec070043c5b952cb0b27fc102f4357bfad2ce6d38d5997",
+      "line": 100,
+      "lines": 146,
+      "token": "void ManagementReactor::onSignals("
+    },
+    "adminh": {
+      "repository": "gateway",
+      "path": "src/gateway/app/ManagementReactor.h",
+      "sha256": "19513879c87809f1a70f74aac8ddd1a3d091c6b51ba03486c4e6c9444e44a443",
+      "line": 12,
+      "lines": 46,
+      "token": "class ManagementReactor"
+    },
     "main": {
       "repository": "gateway",
       "path": "src/gateway/app/main.cpp",
-      "sha256": "229347ee5d617c18dec648e34165a20bd05180de42034b81668580af5507dd83",
+      "sha256": "f26437eb91fcb87a8276e8627357f31539baf783749636ea11ca29f07810d2fd",
       "line": 21,
-      "lines": 53,
+      "lines": 52,
       "token": "int main("
     },
     "loop": {

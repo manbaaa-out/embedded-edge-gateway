@@ -1,6 +1,6 @@
 {
-  "revision": 5,
-  "checked_period": "2026-09-20 / 2026-09-21 / 2026-09-24 / 2026-10-04",
+  "revision": 6,
+  "checked_period": "2026-09-20 / 2026-09-21 / 2026-09-24 / 2026-10-04 / 2026-10-08",
   "method": "技术结论采用原始资料交叉核对；原理自行组织和推导。此前基础资料保留原读取日期，访问局限在对应条目标明。项目事实另外核对双端源码，不由上游文档推定。",
   "checks": [
     {
@@ -360,6 +360,16 @@
       ],
       "location": "官方异步服务示例 listener/session；HTTP/1.1 消息定界；HttpServer 源码快照",
       "finding": "采用第三方 HTTP 解析与异步收发；应用仍负责资源上限、路由、数据库任务与停机。业务不能直接写 socket；完成回调投递回连接执行器，并在异步写期间保持响应存活。"
+    },
+    {
+      "topic": "独立管理 Reactor 与专门工作线程",
+      "refs": [
+        "signalfd",
+        "eventfd",
+        "epoll"
+      ],
+      "location": "本地 ManagementReactor / GatewayApp / main 源码；信号掩码继承与停止唤醒契约",
+      "finding": "管理 Reactor 只接收和分派 SIGHUP/TERM/INT，耗时资源工作在独立任务线程；TERM/INT 不依赖慢任务排空即可通知串口停止。统一信号屏蔽失败即中止启动，退出时先停止管理生产者；及时发出退出请求不等于阻塞工作线程已 join。"
     }
   ]
 }

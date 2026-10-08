@@ -20,10 +20,10 @@ def source_links(q,manifest):
 
 def project_diagram(key):
     if key=='P001':
-        rows=[('遥测上行',['节点采样 / TX 队列','串口 Reactor 拆帧','GatewayCore 解码','分别交 control 发布 / writer 写库']),('控制下行',['MQTT 原始消息','GatewayCore 解释','队列 / eventfd','串口链路 / 节点执行','GatewayCore 应答'])]
+        rows=[('遥测上行',['节点采样 / TX 队列','串口 Reactor 拆帧','GatewayCore 解码','分别交 manage 发布 / writer 写库']),('控制下行',['MQTT 原始消息','GatewayCore 解释','队列 / eventfd','串口链路 / 节点执行','GatewayCore 应答'])]
         return '<figure class="flow"><figcaption>先记住这两条数据路径</figcaption>'+''.join('<h5>'+title+'</h5><ol>'+''.join('<li>'+E(v)+'</li>' for v in values)+'</ol>' for title,values in rows)+'</figure>'
     if key=='P004':
-        rows=[('串口 epoll','fd、缓冲、SR 状态','完整帧 / 命令完成'),('MQTT 网络循环','连接收发、MQTT 协议','原始 topic / payload'),('HTTP Asio 循环','连接、HTTP 解析和收发','请求 / 响应完成'),('GatewayCore','应用转换与路由','命令 / 发布 / SQL 任务'),('gateway-control','MQTT 发布/替换、资源准备','串口候选 / 有序切库任务'),('SQLite 读写执行器','各自连接与语句','查询结果 / 写入进度')]
+        rows=[('串口 epoll','fd、缓冲、SR 状态','完整帧 / 命令完成'),('MQTT 网络循环','连接收发、MQTT 协议','原始 topic / payload'),('HTTP Asio 循环','连接、HTTP 解析和收发','请求 / 响应完成'),('GatewayCore','应用转换与路由','命令 / 发布 / SQL 任务'),('gateway-admin','管理 epoll/signalfd 与停止唤醒','SIGHUP 任务 / TERM 停机通知'),('gateway-manage','MQTT 发布/替换、资源准备','串口候选 / 有序切库任务'),('SQLite 读写执行器','各自连接与语句','查询结果 / 写入进度'),('异步日志线程','双缓冲与输出','有界日志行')]
         return '<figure class="flow"><figcaption>同一进程内的线程与消息交接</figcaption><table><thead><tr><th>线程</th><th>独占职责</th><th>跨线程消息</th></tr></thead><tbody>'+''.join('<tr>'+''.join('<td>'+E(v)+'</td>' for v in row)+'</tr>' for row in rows)+'</tbody></table></figure>'
     if key=='P014':
         rows=[('请求与结果',['Beast 完成 HTTP 读取','GatewayCore 校验路由','读执行器执行 SQL','GatewayCore 生成响应','post 回 HTTP / async_write'])]
@@ -71,7 +71,7 @@ def example_html(ex):
 EXAMPLES=json.loads((HERE/'v3/examples.json').read_text())
 
 def cover(title,subtitle,part=''):
-    return '<header class="cover"><p class="eyebrow">嵌入式软件面试 · 2026.10.04</p><h1>'+E(title)+'</h1><p class="lead">'+E(subtitle)+'</p>'+('<p class="cover-note">'+E(part)+'</p>' if part else '')+'</header>'
+    return '<header class="cover"><p class="eyebrow">嵌入式软件面试 · 2026.10.08</p><h1>'+E(title)+'</h1><p class="lead">'+E(subtitle)+'</p>'+('<p class="cover-note">'+E(part)+'</p>' if part else '')+'</header>'
 def controls(chapters):
     return '<div class="tools"><label>检索问题与正文 <input id="search" type="search" placeholder="如 T075、P037、优先级继承"></label><label>章节 <select id="chapter-filter"><option value="">全部章节</option>'+''.join('<option value="'+c['id']+'">'+E(c['title'])+'</option>' for c in chapters)+'</select></label><button id="quiz">自测：隐藏答案</button><button id="reset">重置</button><output id="count"></output></div><p id="empty" hidden>没有匹配的问题，请更换关键词。</p>'
 def toc(chapters,full=False):
@@ -82,7 +82,7 @@ def chapters_html(chapters,manifest,full=False):
 def write_page(name,title,body):
     css=(HERE/'book.css').read_text();js=(HERE/'book.js').read_text()
     nav=''.join(link(p,t) for p,t in [('index.html','总目录'),('theory.html','第一部分 · 纯八股'),('project.html','第二部分 · 项目'),('coverage.html','知识覆盖表'),('references.html','资料校对'),('source-index.html','源码')])
-    page='<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+E(title)+' · 网关与节点面经</title><style>'+css+'</style></head><body><nav class="site-nav">'+nav+'</nav><main>'+body+'</main><footer>源码核对：2026-10-04 · 原理适用条件见各题及资料说明 · 本文不代替硬件测量</footer><script>'+js+'</script></body></html>'
+    page='<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+E(title)+' · 网关与节点面经</title><style>'+css+'</style></head><body><nav class="site-nav">'+nav+'</nav><main>'+body+'</main><footer>源码核对：2026-10-08 · 原理适用条件见各题及资料说明 · 本文不代替硬件测量</footer><script>'+js+'</script></body></html>'
     (HERE/name).write_text(page)
 
 def directory():
@@ -109,7 +109,7 @@ def coverage():
 
 def reference_page(audit):
     out=cover('资料与校对记录','技术结论优先采用标准、原厂手册、官方源码和高校原始材料。')
-    out+='<p>原有机制在 2026-09-20/21 校对，FreeRTOS 移植专题在 2026-09-24 补充，多事件循环与 Boost.Beast 专题在 2026-10-04 核对。以下记录说明实际核对范围，部分基础资料保留 2026-09-18 的读取日期；访问限制单独标明。上游文档与工作区版本可能不同，项目行为以源码快照为准。</p>'
+    out+='<p>原有机制在 2026-09-20/21 校对，FreeRTOS 移植专题在 2026-09-24 补充，多事件循环与 Boost.Beast 专题在 2026-10-04 核对，独立管理 Reactor 与工作线程在 2026-10-08 更新。以下记录说明实际核对范围，部分基础资料保留 2026-09-18 的读取日期；访问限制单独标明。上游文档与工作区版本可能不同，项目行为以源码快照为准。</p>'
     for item in audit['checks']:
         out+='<section class="audit"><h2>'+E(item['topic'])+'</h2>'+para(item['finding'])+'<p class="meta">定位：'+E(item['location'])+'</p><p>'+ ' · '.join(link(REFS[k]['url'],REFS[k]['title']) for k in item['refs'])+'</p></section>'
     out+='<h2>按题使用的资料索引</h2>'

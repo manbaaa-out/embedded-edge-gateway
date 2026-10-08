@@ -1,0 +1,46 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>网关 / src/gateway/app/ManagementReactor.h · 源码快照</title><style>body{margin:24px;font:15px/1.6 system-ui;color:#17333f}a{color:#087f85}h1{font-size:20px;overflow-wrap:anywhere}.line{display:flex;min-width:0;scroll-margin-top:12px}.line>a{min-width:5em;color:#71828c;text-decoration:none;user-select:none}code{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 monospace;flex:1;min-width:0}.line:target{background:#ffefb8}.meta{overflow-wrap:anywhere;color:#62747e}</style><a href="../index.html">返回总面经</a> · <a href="../source-index.html">源码索引</a><h1>网关 / src/gateway/app/ManagementReactor.h</h1><p class="meta">源码基线：2026-10-08 · SHA-256 19513879c87809f1a70f74aac8ddd1a3d091c6b51ba03486c4e6c9444e44a443</p><p>这是编写面经时的离线只读快照。行号保留原文件位置；代码更改后请先审阅答案，再刷新基线。</p><div><span class="line" id="L1"><a href="#L1" aria-label="第 1 行">1</a><code>#pragma once</code></span>
+<span class="line" id="L2"><a href="#L2" aria-label="第 2 行">2</a><code></code></span>
+<span class="line" id="L3"><a href="#L3" aria-label="第 3 行">3</a><code>#include &quot;gateway/io/event/EventLoop.h&quot;</code></span>
+<span class="line" id="L4"><a href="#L4" aria-label="第 4 行">4</a><code></code></span>
+<span class="line" id="L5"><a href="#L5" aria-label="第 5 行">5</a><code>#include &lt;atomic&gt;</code></span>
+<span class="line" id="L6"><a href="#L6" aria-label="第 6 行">6</a><code>#include &lt;functional&gt;</code></span>
+<span class="line" id="L7"><a href="#L7" aria-label="第 7 行">7</a><code>#include &lt;thread&gt;</code></span>
+<span class="line" id="L8"><a href="#L8" aria-label="第 8 行">8</a><code></code></span>
+<span class="line" id="L9"><a href="#L9" aria-label="第 9 行">9</a><code>namespace gateway {</code></span>
+<span class="line" id="L10"><a href="#L10" aria-label="第 10 行">10</a><code></code></span>
+<span class="line" id="L11"><a href="#L11" aria-label="第 11 行">11</a><code>// 独立管理事件入口。回调只投递拥有数据的事件；资源重建和 join 由外部拥有者执行。</code></span>
+<span class="line" id="L12"><a href="#L12" aria-label="第 12 行">12</a><code>class ManagementReactor {</code></span>
+<span class="line" id="L13"><a href="#L13" aria-label="第 13 行">13</a><code>public:</code></span>
+<span class="line" id="L14"><a href="#L14" aria-label="第 14 行">14</a><code>    using Callback = std::function&lt;void()&gt;;</code></span>
+<span class="line" id="L15"><a href="#L15" aria-label="第 15 行">15</a><code></code></span>
+<span class="line" id="L16"><a href="#L16" aria-label="第 16 行">16</a><code>    // 必须在创建任何后台线程前调用，使所有线程继承托管信号屏蔽集。失败抛异常。</code></span>
+<span class="line" id="L17"><a href="#L17" aria-label="第 17 行">17</a><code>    static void blockManagedSignals();</code></span>
+<span class="line" id="L18"><a href="#L18" aria-label="第 18 行">18</a><code></code></span>
+<span class="line" id="L19"><a href="#L19" aria-label="第 19 行">19</a><code>    // 当前线程须已屏蔽 SIGHUP/SIGTERM/SIGINT。所有 fd 同步创建并注册成功后才启动线程。</code></span>
+<span class="line" id="L20"><a href="#L20" aria-label="第 20 行">20</a><code>    // reload/shutdown/failed 在 gateway-admin 线程调用，不得阻塞、join 或销毁本组件。</code></span>
+<span class="line" id="L21"><a href="#L21" aria-label="第 21 行">21</a><code>    ManagementReactor(Callback reload, Callback shutdown, Callback failed);</code></span>
+<span class="line" id="L22"><a href="#L22" aria-label="第 22 行">22</a><code>    ~ManagementReactor();</code></span>
+<span class="line" id="L23"><a href="#L23" aria-label="第 23 行">23</a><code>    ManagementReactor(const ManagementReactor&amp;) = delete;</code></span>
+<span class="line" id="L24"><a href="#L24" aria-label="第 24 行">24</a><code>    ManagementReactor&amp; operator=(const ManagementReactor&amp;) = delete;</code></span>
+<span class="line" id="L25"><a href="#L25" aria-label="第 25 行">25</a><code></code></span>
+<span class="line" id="L26"><a href="#L26" aria-label="第 26 行">26</a><code>    // 由拥有者线程调用，允许顺序重复调用。唤醒空闲 epoll 并 join，不产生 shutdown 事件。</code></span>
+<span class="line" id="L27"><a href="#L27" aria-label="第 27 行">27</a><code>    void stop();</code></span>
+<span class="line" id="L28"><a href="#L28" aria-label="第 28 行">28</a><code></code></span>
+<span class="line" id="L29"><a href="#L29" aria-label="第 29 行">29</a><code>private:</code></span>
+<span class="line" id="L30"><a href="#L30" aria-label="第 30 行">30</a><code>    void onSignals();</code></span>
+<span class="line" id="L31"><a href="#L31" aria-label="第 31 行">31</a><code>    void onStop();</code></span>
+<span class="line" id="L32"><a href="#L32" aria-label="第 32 行">32</a><code>    void run() noexcept;</code></span>
+<span class="line" id="L33"><a href="#L33" aria-label="第 33 行">33</a><code></code></span>
+<span class="line" id="L34"><a href="#L34" aria-label="第 34 行">34</a><code>    Callback reload_;</code></span>
+<span class="line" id="L35"><a href="#L35" aria-label="第 35 行">35</a><code>    Callback shutdown_;</code></span>
+<span class="line" id="L36"><a href="#L36" aria-label="第 36 行">36</a><code>    Callback failed_;</code></span>
+<span class="line" id="L37"><a href="#L37" aria-label="第 37 行">37</a><code>    // loop_ 独占两个 channel/fd；构造异常自动回收，析构前必须先 join thread_。</code></span>
+<span class="line" id="L38"><a href="#L38" aria-label="第 38 行">38</a><code>    EventLoop loop_;</code></span>
+<span class="line" id="L39"><a href="#L39" aria-label="第 39 行">39</a><code>    int signal_fd_ = -1;</code></span>
+<span class="line" id="L40"><a href="#L40" aria-label="第 40 行">40</a><code>    int stop_fd_ = -1;</code></span>
+<span class="line" id="L41"><a href="#L41" aria-label="第 41 行">41</a><code>    std::atomic&lt;bool&gt; stopping_{false};</code></span>
+<span class="line" id="L42"><a href="#L42" aria-label="第 42 行">42</a><code>    bool shutdown_sent_ = false; // 仅管理 Reactor 线程读写。</code></span>
+<span class="line" id="L43"><a href="#L43" aria-label="第 43 行">43</a><code>    std::thread thread_;</code></span>
+<span class="line" id="L44"><a href="#L44" aria-label="第 44 行">44</a><code>};</code></span>
+<span class="line" id="L45"><a href="#L45" aria-label="第 45 行">45</a><code></code></span>
+<span class="line" id="L46"><a href="#L46" aria-label="第 46 行">46</a><code>} // namespace gateway</code></span></div></html>

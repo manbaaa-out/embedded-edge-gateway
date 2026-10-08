@@ -1,66 +1,93 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" font-family="Noto Sans CJK SC,Microsoft YaHei,Arial,sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="1100" viewBox="0 0 1480 1100" font-family="Noto Sans CJK SC,Microsoft YaHei,Arial,sans-serif" role="img" aria-labelledby="title desc">
+  <title id="title">网关架构：独立管理 Reactor、管理工作线程和共享应用业务线程</title>
+  <desc id="desc">通常九条线程。管理 Reactor 接收信号，重载交管理工作线程，停机直接唤醒串口主线程。串口、MQTT、HTTP 通信入口共用 GatewayCore，SQLite 查询、写入与日志独立执行。</desc>
   <defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto-start-reverse"><path d="M0,0 L10,4 L0,8Z" fill="#52647b"/></marker></defs>
-  <rect width="1280" height="820" fill="#f7f9fc"/>
-  <g fill="#20314c"><text x="48" y="52" font-size="26" font-weight="bold">边缘网关 · 多 I/O 事件循环 + 共享业务线程</text>
-    <text x="48" y="83" font-size="15">单进程；连接与协议状态归各自 I/O 线程，应用状态归 GatewayCore，跨线程以有界消息交接。</text></g>
-  <g stroke="#416fa4" fill="#e9f1fc" stroke-width="1.5">
-    <rect x="48" y="126" width="360" height="174" rx="12"/>
-    <rect x="460" y="126" width="360" height="174" rx="12"/>
-    <rect x="872" y="126" width="360" height="174" rx="12"/>
+  <rect width="1480" height="1100" fill="#f7f9fc"/>
+  <g fill="#20314c"><text x="48" y="49" font-size="26" font-weight="bold">边缘网关 · 管理事件与耗时任务分开，通信入口共用业务线程</text>
+    <text x="48" y="79" font-size="16">单进程，默认稳定运行通常 9 条线程；状态由所属线程串行访问，跨线程通过有界消息交接。</text></g>
+  <g fill="#f2edfb" stroke="#8c70ae" stroke-width="1.5">
+    <rect x="48" y="112" width="650" height="166" rx="12"/><rect x="896" y="112" width="536" height="166" rx="12"/>
   </g>
-  <g fill="#20314c" font-size="16" text-anchor="middle">
-    <text x="228" y="160" font-size="20" font-weight="bold">串口 Reactor · 主线程</text>
-    <text x="228" y="192">epoll / eventfd / timerfd</text>
-    <text x="228" y="222">非阻塞收发 · 组帧 / CRC · SR 会话</text>
-    <text x="228" y="252">CommandTracker · 重传 / 确认 / 超时</text>
-    <text x="228" y="280">唯一串口写者与链路状态所有者</text>
-    <text x="640" y="160" font-size="20" font-weight="bold">MQTT 网络循环 · 库线程</text>
-    <text x="640" y="192">libmosquitto loop_start</text>
-    <text x="640" y="222">网络收发 · MQTT 协议与保活</text>
-    <text x="640" y="252">回调复制 topic / payload 后投递</text>
-    <text x="640" y="280">准入失败返回固定 busy 回执</text>
-    <text x="1052" y="160" font-size="20" font-weight="bold">HTTP I/O 循环 · 专用线程</text>
-    <text x="1052" y="192">Boost.Beast + Asio io_context</text>
-    <text x="1052" y="222">连接 / HTTP 解析 / 异步收发 / 超时</text>
-    <text x="1052" y="252">请求投递业务线程，响应 post 回本循环</text>
-    <text x="1052" y="280">每连接限流，迟到回复安全丢弃</text>
-  </g>
-  <g stroke="#52647b" stroke-width="2" fill="none" marker-start="url(#arrow)" marker-end="url(#arrow)">
-    <path d="M228 309 V371"/><path d="M640 309 V371" marker-start="none"/><path d="M1052 309 V371"/>
-  </g>
-  <g font-size="14" fill="#435673" text-anchor="middle">
-    <text x="228" y="341" dx="95">帧 / 终态 ↔ 命令</text>
-    <text x="640" y="341" dx="99">原始消息</text>
-    <text x="1052" y="341" dx="99">请求 ↔ 响应</text>
-  </g>
-  <rect x="48" y="382" width="1184" height="140" rx="12" fill="#e8f4eb" stroke="#48865b" stroke-width="1.5"/>
-  <g fill="#244b31" text-anchor="middle">
-    <text x="640" y="417" font-size="22" font-weight="bold">GatewayCore · 单一业务执行线程</text>
-    <text x="640" y="451" font-size="17">命令翻译与校验 · 遥测解码与分发 · HTTP 路由与 JSON · MQTT 结果格式化</text>
-    <text x="640" y="485" font-size="15">最多 512 条待完成 / 待发布命令；邮箱 1024 个普通位置 + 552 个完成事件预留位置</text>
-    <text x="640" y="508" font-size="14">业务线程不等待 I/O；阻塞资源操作交给下方专用执行器</text>
+  <g fill="#4c376b" text-anchor="middle" font-size="16">
+    <text x="373" y="146" font-size="21" font-weight="bold">管理 Reactor · gateway-admin</text>
+    <text x="373" y="178">独立 epoll / signalfd / eventfd</text>
+    <text x="373" y="208">SIGHUP：只投递重载任务</text>
+    <text x="373" y="238">TERM / INT：直接发布停机状态并唤醒主串口循环</text>
+    <text x="373" y="261" font-size="14">main 在线程创建前统一屏蔽信号；失败中止启动</text>
+    <text x="1164" y="146" font-size="21" font-weight="bold">管理工作线程 · gateway-manage</text>
+    <text x="1164" y="178">配置读解析 · DB / 串口候选准备</text>
+    <text x="1164" y="208">MQTT 创建 / 替换 / 正常发布串行执行</text>
+    <text x="1164" y="238">1024 普通位置 + 528 完成 / 控制预留</text>
+    <text x="1164" y="261" font-size="14">可能等待 DNS / connect / loop_stop</text>
   </g>
   <g stroke="#52647b" stroke-width="2" fill="none" marker-end="url(#arrow)">
-    <path d="M228 522 V572"/><path d="M640 522 V572" marker-start="url(#arrow)"/><path d="M1052 522 V572"/>
+    <path d="M708 179 H886"/><path d="M258 287 V345"/>
+    <path d="M1090 287 V318 H450 V345"/>
+    <path d="M1432 658 H1460 V191 H1441"/>
   </g>
+  <g fill="#52647b" font-size="14" text-anchor="middle">
+    <text x="797" y="161">SIGHUP 任务</text>
+    <text x="797" y="203">不在回调中等待</text>
+    <text x="168" y="318">停机 / 主 eventfd</text>
+    <text x="749" y="308">串口候选 → 主 eventfd → Reactor 激活</text>
+  </g>
+  <g stroke="#416fa4" fill="#e9f1fc" stroke-width="1.5">
+    <rect x="48" y="355" width="420" height="166" rx="12"/>
+    <rect x="530" y="355" width="420" height="166" rx="12"/>
+    <rect x="1012" y="355" width="420" height="166" rx="12"/>
+  </g>
+  <g fill="#20314c" font-size="16" text-anchor="middle">
+    <text x="258" y="389" font-size="20" font-weight="bold">串口 Reactor · main</text>
+    <text x="258" y="421">epoll / 主 eventfd / timerfd</text>
+    <text x="258" y="452">非阻塞收发 · 组帧 / CRC · SR 状态</text>
+    <text x="258" y="483">CommandTracker · 确认 / 重传 / 超时</text>
+    <text x="258" y="507" font-size="14">独占串口状态；不监听 signalfd</text>
+    <text x="740" y="389" font-size="20" font-weight="bold">MQTT 网络循环 · 库线程</text>
+    <text x="740" y="421">libmosquitto loop_start</text>
+    <text x="740" y="452">收发 / MQTT 协议 / 保活</text>
+    <text x="740" y="483">回调复制 topic / payload 后投递</text>
+    <text x="740" y="507" font-size="14">入口准入失败返回固定 busy 回执</text>
+    <text x="1222" y="389" font-size="20" font-weight="bold">HTTP 循环 · gateway-http</text>
+    <text x="1222" y="421">Boost.Beast + Asio io_context</text>
+    <text x="1222" y="452">连接 / HTTP 解析 / 异步收发 / 超时</text>
+    <text x="1222" y="483">请求交 Core，响应 post 回本循环</text>
+    <text x="1222" y="507" font-size="14">每连接限流，迟到回复安全丢弃</text>
+  </g>
+  <g stroke="#52647b" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M258 530 V580" marker-start="url(#arrow)"/><path d="M740 530 V580"/><path d="M1222 530 V580" marker-start="url(#arrow)"/>
+  </g>
+  <g font-size="14" fill="#435673" text-anchor="middle">
+    <text x="368" y="560">帧 / 终态 ↔ 命令</text><text x="835" y="560">原始消息</text><text x="1325" y="560">请求 ↔ 响应</text>
+  </g>
+  <rect x="48" y="590" width="1384" height="140" rx="12" fill="#e8f4eb" stroke="#48865b" stroke-width="1.5"/>
+  <g fill="#244b31" text-anchor="middle">
+    <text x="740" y="623" font-size="22" font-weight="bold">GatewayCore · gateway-core · 单一应用业务线程</text>
+    <text x="740" y="657" font-size="17">命令翻译与校验 · 遥测解码与分发 · HTTP 路由与 JSON · MQTT 结果格式化</text>
+    <text x="740" y="689" font-size="15">最多 512 条待完成 / 待发布命令；邮箱 1024 个普通位置 + 552 个完成事件预留位置</text>
+    <text x="740" y="715" font-size="14">业务线程不等 SQL 或节点回应；MQTT 发布请求沿右侧交给管理工作线程</text>
+  </g>
+  <g stroke="#52647b" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M258 738 V794"/><path d="M740 738 V794" marker-start="url(#arrow)"/><path d="M1222 738 V794"/>
+  </g>
+  <g fill="#52647b" font-size="14" text-anchor="middle"><text x="348" y="773">遥测写入</text><text x="865" y="773">查询任务 ↔ 值对象</text><text x="1315" y="773">各线程日志</text></g>
   <g fill="#fdf3df" stroke="#ae863a" stroke-width="1.5">
-    <rect x="48" y="581" width="360" height="131" rx="12"/>
-    <rect x="460" y="581" width="360" height="131" rx="12"/>
-    <rect x="872" y="581" width="360" height="131" rx="12"/>
+    <rect x="48" y="803" width="420" height="139" rx="12"/><rect x="530" y="803" width="420" height="139" rx="12"/><rect x="1012" y="803" width="420" height="139" rx="12"/>
   </g>
   <g fill="#654d20" text-anchor="middle" font-size="16">
-    <text x="228" y="614" font-size="20" font-weight="bold">SQLite 写线程</text>
-    <text x="228" y="647">遥测有界队列 · 批量事务 · WAL</text>
-    <text x="228" y="678">按写队列顺序切库，再发布读连接</text>
-    <text x="640" y="614" font-size="20" font-weight="bold">SQLite 查询线程</text>
-    <text x="640" y="647">只读连接快照 · 最多 32 个在途查询</text>
-    <text x="640" y="678">查询完成回 Core，再回 HTTP 循环</text>
-    <text x="1052" y="614" font-size="20" font-weight="bold">控制线程</text>
-    <text x="1052" y="647">MQTT 发布 / 替换 · 配置 / 资源准备</text>
-    <text x="1052" y="678">串口仅预开，由串口 Reactor 激活</text>
+    <text x="258" y="837" font-size="20" font-weight="bold">SQLite 写线程</text>
+    <text x="258" y="870">遥测有界队列 · 批量事务 · WAL</text>
+    <text x="258" y="903">按写队列顺序切库，再发布读连接</text>
+    <text x="740" y="837" font-size="20" font-weight="bold">SQLite 查询 · gateway-query</text>
+    <text x="740" y="870">只读连接快照 · 最多 32 个在途查询</text>
+    <text x="740" y="903">完成回 Core，再回 HTTP 循环</text>
+    <text x="1222" y="837" font-size="20" font-weight="bold">异步日志线程</text>
+    <text x="1222" y="870">有界双缓冲 · 锁内交接</text>
+    <text x="1222" y="903">实际 write 在锁外执行</text>
   </g>
-  <g fill="#52647b" font-size="14">
-    <text x="48" y="755">MQTT 发布调用完成后释放命令额度；不等于 broker ACK / 云端业务完成，目前没有持久化 outbox。</text>
-    <text x="48" y="783">Asio 提供异步完成式接口；这里按多个独立 I/O 循环描述架构，不把库 API 与 Linux 内部就绪机制混为一谈。</text>
+  <g fill="#52647b" font-size="15">
+    <text x="48" y="983">管理 Reactor 忙闲不依赖管理工作线程；TERM/INT 可先通知停止，最终 join 仍可能等待慢连接，未保证故障退出时间上界。</text>
+    <text x="48" y="1016">MQTT 发布调用后释放命令额度，不等于 broker ACK / 云端完成；目前无持久化 outbox。</text>
+    <text x="48" y="1049">Asio 提供异步完成式接口；架构按独立 I/O 循环描述，不把库 API 与 Linux 内部就绪机制混为一谈。</text>
+    <text x="48" y="1082">重建 MQTT 时新旧库线程可能短暂并存；“通常 9 线程”描述稳定运行结构，不是性能或最大线程数承诺。</text>
   </g>
 </svg>
