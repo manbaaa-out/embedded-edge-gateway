@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gateway/app/GatewayCore.h"
+#include "gateway/app/ManagementReactor.h"
 #include "gateway/cloud/MqttClient.h"
 #include "gateway/core/concurrent/TaskExecutor.h"
 #include "gateway/core/concurrent/ThreadSafeQueue.h"
@@ -16,11 +17,10 @@
 
 namespace gateway {
 
-// 组合根：主线程独占串口 Reactor/SR，HTTP 和 MQTT 各有网络循环。
-// GatewayCore 独占应用逻辑；control_ 序列化发布和阻塞资源准备，查询/写入各有执行器。
+// 组合根：串口、MQTT、HTTP 和管理信号分别由独立 I/O 循环接收。
+// GatewayCore 处理应用业务；管理工作线程顺序执行资源准备与 MQTT 发布/替换。
 class GatewayApp {
 public:
-    static bool blockManagedSignals();
     GatewayApp();
     ~GatewayApp();
     GatewayApp(const GatewayApp&) = delete;
@@ -32,12 +32,10 @@ private:
     void registerSerialEvent();
     bool registerDownlinkEvent();
     void registerCommandTimerEvent();
-    void registerSignalEvent();
     void onSerialEvent();
     void onSerialWriteEvent();
     void onDownlinkEvent();
     void onCommandTimerEvent();
-    void onSignalEvent();
     void dispatchFrame(const Frame& frame);
     void applyTrackerActions(const TrackerActions& actions);
     void queueTransmission(const CommandSend& send);
@@ -45,8 +43,9 @@ private:
     void notifyDownlink();
     bool submitCommand(uint64_t id, DownCmd command);
     bool publish(std::string topic, std::string payload, int qos, std::function<void()> done);
+    void requestStop(); // 管理线程只设置原子状态并唤醒主线程，不跨线程操作串口 loop。
     void requestReload();
-    void reloadConfig(); // control_ 线程；仅资源交付动作回到串口 Reactor。
+    void reloadConfig(); // management_worker_ 线程；仅资源交付动作回到串口 Reactor。
     std::unique_ptr<MqttClient> createMqttClient(const Config& config);
     void startHttpMonitor(int port);
     bool reloadDatabase(const Config& config);
@@ -65,16 +64,18 @@ private:
     std::shared_ptr<channel> serial_channel_;
     int downlink_fd_ = -1;
     int command_timer_fd_ = -1;
-    int signal_fd_ = -1;
-    // 替换和 publish 仅在 control_ 访问；启动前初始化、control_ join 后销毁。
+    // 替换和 publish 仅在 management_worker_ 访问；启动前初始化、management_worker_ join 后销毁。
     std::unique_ptr<MqttClient> mqtt_client_;
     std::unique_ptr<GatewayCore> core_;
     std::atomic<bool> stopping_{false};
     std::atomic<bool> reload_pending_{false};
     std::atomic<bool> http_stop_{false};
     std::atomic<bool> http_failed_{false};
+    std::atomic<bool> management_failed_{false};
     std::thread http_thread_;
-    TaskExecutor control_{"gateway-control", 1024, GatewayCore::kMaxCommands + 16};
+    TaskExecutor management_worker_{"gateway-manage", 1024, GatewayCore::kMaxCommands + 16};
+    // 最后创建、最先停止；其回调只向上述仍存活的状态/执行器交付事件。
+    std::unique_ptr<ManagementReactor> management_reactor_;
 };
 
 } // namespace gateway

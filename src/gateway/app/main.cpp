@@ -22,14 +22,13 @@ int main(int argc, char* argv[]) {
     // conf_path 指向进程参数存储或字符串常量，生命周期覆盖整个 main()。
     const char* conf_path = (argc > 1) ? argv[1] : "/etc/gateway.conf";
 
-    // 屏蔽失败不会阻止采集启动，但 signalfd 热加载和优雅退出将不可依赖。
-    (void) gateway::GatewayApp::blockManagedSignals();
-
+    // 必须在线程创建前屏蔽信号，确保信号只由管理 Reactor 的 signalfd 消费。
     try {
+        gateway::ManagementReactor::blockManagedSignals();
         gateway::ConfigManager::init(conf_path);
     } catch (const std::exception& e) {
         // e 保存配置文件打开、解析或校验失败的具体原因。
-        LOG_ERROR("config init failed: %s", e.what());
+        LOG_ERROR("signal/config init failed: %s", e.what());
         return 1;
     }
 

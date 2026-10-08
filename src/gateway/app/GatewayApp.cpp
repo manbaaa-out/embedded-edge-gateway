@@ -1,13 +1,13 @@
 /**
  * @file GatewayApp.cpp
- * @brief 实现网关资源装配、四类事件源注册和跨线程事件汇聚。
+ * @brief 实现网关资源装配、串口与管理事件源装配和跨线程事件汇聚。
  *
  * 实现按生命周期、事件注册、事件入口、协议分派和资源重载排列。主 Reactor 是
  * 串口和 CommandTracker 的唯一访问线程。MQTT、HTTP、遥测通过有界邮箱交给
  * GatewayCore；业务完成后通过命令队列和 eventfd 回到串口 Reactor。
  *
  * 启动阶段无法创建必需资源时向进程入口传播异常；SIGHUP 重载按数据库、MQTT、
- * 串口分别处理资源重建失败，让其他路径继续运行。退出时关闭入口并等待 HTTP，
+ * 串口分别处理资源重建失败，让其他路径继续运行。退出时先停止管理 Reactor，再等待 HTTP，
  * 排空业务与查询，再排空控制任务并等待 MQTT，最后排空遥测写队列。
  */
 
@@ -19,9 +19,7 @@
 
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
-#include <sys/signalfd.h>
 #include <sys/timerfd.h>
-#include <signal.h>
 #include <unistd.h>
 
 #include <cerrno>
@@ -44,33 +42,9 @@ constexpr std::size_t kDownlinkBatchSize = 32;
 /** 自定义 ACK、拒绝回执和查询结果的 MQTT QoS；1 表示至少一次传递语义。 */
 constexpr int kMqttCommandResultQos = 1;
 
-/**
- * @brief 填充由网关主循环管理的 Unix 信号集合。
- * @param mask 输出参数；函数会先清空，再加入热加载和两种退出信号。
- *
- * blockManagedSignals() 与 registerSignalEvent() 共用该函数，确保屏蔽集合和
- * signalfd 监听集合始终一致。
- */
-void fillManagedSignals(sigset_t& mask) {
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGHUP);
-    sigaddset(&mask, SIGTERM);
-    sigaddset(&mask, SIGINT);
-}
 }  // namespace
 
-// 生命周期：先准备业务资源，再注册事件源，最后启动对外服务。
-
-bool GatewayApp::blockManagedSignals() {
-    // mask 保存调用线程及其后继线程需要屏蔽的信号集合。
-    sigset_t mask;
-    fillManagedSignals(mask);
-    if (sigprocmask(SIG_BLOCK, &mask, nullptr) == -1) {
-        LOG_WARN("sigprocmask failed: %s — 热加载与优雅停机不可用", strerror(errno));
-        return false;
-    }
-    return true;
-}
+// 生命周期：准备业务资源，装配独立的串口/管理循环，再启动对外服务。
 
 GatewayApp::GatewayApp() {
     // config 是构造期间使用的一致配置快照，避免同一批资源读取到不同版本。
@@ -93,6 +67,7 @@ GatewayApp::GatewayApp() {
 GatewayApp::~GatewayApp() {
     // 先停止入口：网络回调仍可发生，但不再访问业务邮箱。HTTP 回调全部返回后 join。
     stopping_.store(true);
+    if (management_reactor_) management_reactor_->stop(); // 先 join 管理事件生产者。
     cmd_queue_.shutdown();
     replacements_.shutdown();
     http_stop_.store(true);
@@ -105,7 +80,7 @@ GatewayApp::~GatewayApp() {
         requests_.clear();
         core_->stop(); // 排空业务，再等查询完成，再排空其回调。
     }
-    control_.stop(); // 已生成的上行消息交给库；所有资源准备/替换任务结束。
+    management_worker_.stop(); // 已生成的上行消息交给库；所有资源准备/替换任务结束。
     mqtt_client_.reset(); // join MQTT 网络循环，保证回调不再引用本对象。
     // pipeline_ 随后排空遥测写队列，read_db_ 仍有效。
 }
@@ -116,7 +91,6 @@ int GatewayApp::run() {
     if (!registerDownlinkEvent()) return 1;
     // SR 的有限重试依赖定时器，创建失败不能继续接受下行命令。
     registerCommandTimerEvent();
-    registerSignalEvent();
 
     core_ = std::make_unique<GatewayCore>(*pipeline_,
         [this](uint64_t id, DownCmd command) { return submitCommand(id, std::move(command)); },
@@ -131,20 +105,26 @@ int GatewayApp::run() {
     // mqtt_client_ 接管已配置并启动的客户端；网络线程可以入队，由稍后的主循环消费。
     auto initialized = std::make_shared<std::promise<void>>();
     auto ready = initialized->get_future();
-    if (!control_.post([this, config, initialized] {
+    if (!management_worker_.post([this, config, initialized] {
         try {
             mqtt_client_ = createMqttClient(*config);
             initialized->set_value();
         } catch (...) { initialized->set_exception(std::current_exception()); }
     })) throw std::runtime_error("MQTT initialization queue closed");
-    ready.get(); // 仅启动阶段等待；进入 Reactor 后不等待后台工作。
-    // HTTP 线程在完整应用对象上启动，后续异常能够由 GatewayApp 析构完成 join。
-    startHttpMonitor(config->http_port);
+    // 初始 MQTT 任务已先入队，管理 Reactor 随后提交的重载不会抢在初始化前执行。
+    // 管理 Reactor 独占 signalfd；回调仅交接事件，不执行资源重建或等待工作线程。
+    management_reactor_ = std::make_unique<ManagementReactor>(
+        [this] { requestReload(); },
+        [this] { requestStop(); },
+        [this] { management_failed_.store(true); requestStop(); });
+    ready.get(); // 仅启动阶段等待；管理 Reactor 此时已独立接收信号。
+    // 启动期积压的退出信号也可由管理线程接收，eventfd 保留通知直到主循环处理。
+    if (!stopping_.load()) startHttpMonitor(config->http_port);
 
-    // 主线程进入阻塞派发，直到信号入口调用 quit() 或循环抛出异常。
+    // 主线程只在自身事件回调中 quit；管理/HTTP 线程通过原子状态和 eventfd 通知。
     loop_.loop();
     LOG_INFO("%s", "main loop exited, shutting down");
-    return http_failed_.load() ? 1 : 0;
+    return (http_failed_.load() || management_failed_.load()) ? 1 : 0;
 }
 
 // 事件注册：每个 fd 只绑定一个同层级入口，不在注册代码中展开业务逻辑。
@@ -202,25 +182,7 @@ void GatewayApp::registerCommandTimerEvent() {
     command_timer_fd_ = ch->fd;
 }
 
-void GatewayApp::registerSignalEvent() {
-    // mask 与进程启动时屏蔽的集合一致，作为 signalfd 的输入过滤器。
-    sigset_t mask;
-    fillManagedSignals(mask);
-
-    // ch 拥有 signalfd，并把异步信号转换为主 Reactor 中的普通可读事件。
-    auto ch = std::make_shared<channel>();
-    ch->fd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
-    if (ch->fd == -1) {
-        LOG_WARN("signalfd failed: %s — 热加载与优雅停机不可用", strerror(errno));
-        return;
-    }
-    ch->events = EPOLLIN;
-    ch->on_read = [this] { onSignalEvent(); };
-    loop_.addChannel(ch);
-    signal_fd_ = ch->fd;
-}
-
-// 四类事件入口：全部在同一 Reactor 线程执行，串口发送与 ACK/重试共享时间线。
+// 串口、跨线程通知和定时事件只在串口 Reactor 执行；管理信号由独立循环接收。
 
 void GatewayApp::onSerialEvent() {
     // ET 模式下排空到 EAGAIN；NodeLink 同步调用 dispatchFrame()。
@@ -244,7 +206,7 @@ void GatewayApp::onDownlinkEvent() {
         LOG_DEBUG("%s", "eventfd read returned short");
     }
 
-    if (http_failed_.load()) { loop_.quit(); return; }
+    if (stopping_.load() || http_failed_.load()) { loop_.quit(); return; }
     while (auto fresh = replacements_.try_pop()) {
         loop_.removeChannel(link_->fd());
         serial_channel_.reset();
@@ -295,27 +257,6 @@ void GatewayApp::onCommandTimerEvent() {
     if (::read(command_timer_fd_, &expirations, sizeof(expirations)) != sizeof(expirations)) return;
     applyTrackerActions(tracker_.tick(CommandTracker::Clock::now()));
     if (!cmd_queue_.empty()) notifyDownlink();
-}
-
-void GatewayApp::onSignalEvent() {
-    // info 保存单个已排队信号的编号和内核元数据；当前逻辑只读取 ssi_signo。
-    struct signalfd_siginfo info;
-    // 在同一回调中排空当前所有待处理信号，统一通过主线程执行控制动作。
-    while (::read(signal_fd_, &info, sizeof(info)) == static_cast<ssize_t>(sizeof(info))) {
-        switch (info.ssi_signo) {
-        case SIGHUP:
-            requestReload();
-            break;
-        case SIGTERM:
-        case SIGINT:
-            LOG_INFO("signal %u received, shutting down", info.ssi_signo);
-            loop_.quit();
-            break;
-        default:
-            LOG_WARN("unexpected signal %u on signalfd", info.ssi_signo);
-            break;
-        }
-    }
 }
 
 // Reactor 内的协议分派：推进 SR 状态，将应用输入投递给 GatewayCore。
@@ -384,7 +325,7 @@ bool GatewayApp::submitCommand(uint64_t id, DownCmd command) {
 bool GatewayApp::publish(std::string topic, std::string payload, int qos, std::function<void()> done) {
     // 客户端发布/替换由同一线程串行化；命令终态独享准入额度对应的预留位置。
     const bool completion = static_cast<bool>(done);
-    const bool accepted = control_.post(
+    const bool accepted = management_worker_.post(
         [this, topic = std::move(topic), payload = std::move(payload), qos, done = std::move(done)] {
             if (mqtt_client_) mqtt_client_->publish(topic, payload, qos);
             if (done) done();
@@ -393,10 +334,20 @@ bool GatewayApp::publish(std::string topic, std::string payload, int qos, std::f
     return accepted;
 }
 
+void GatewayApp::requestStop() {
+    stopping_.store(true);
+    notifyDownlink(); // 不受管理工作队列是否繁忙影响；实际排空与 join 留给 main。
+}
+
 void GatewayApp::requestReload() {
-    if (reload_pending_.exchange(true)) return;
-    if (!control_.post([this] {
-        if (!stopping_.load()) reloadConfig();
+    if (stopping_.load() || reload_pending_.exchange(true)) return;
+    if (!management_worker_.post([this] {
+        try {
+            if (!stopping_.load()) reloadConfig();
+        } catch (...) {
+            reload_pending_.store(false); // 异常也必须释放合并状态，允许后续重载。
+            throw;
+        }
         reload_pending_.store(false);
     }, true)) reload_pending_.store(false);
 }

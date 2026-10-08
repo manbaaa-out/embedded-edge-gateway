@@ -7,11 +7,13 @@ Only processes, temporary files and ports created by this test are used.
 
 import concurrent.futures
 import contextlib
+import errno
 import http.client
 import json
 import os
 from pathlib import Path
 import pty
+import platform
 import resource
 import shutil
 import signal
@@ -262,6 +264,161 @@ def running(binary, fd_limit=None):
 def database_rows(path):
     with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2) as connection:
         return connection.execute("SELECT device_id,value,ts FROM device_data ORDER BY id").fetchall()
+
+
+def task_names(pid):
+    tasks = {}
+    for task in (Path("/proc") / str(pid) / "task").iterdir():
+        try:
+            tasks[int(task.name)] = (task / "comm").read_text().strip()
+        except FileNotFoundError:
+            pass  # A library thread can disappear while a snapshot is being taken.
+    return tasks
+
+
+def check_management_thread_ownership(app):
+    names = eventually(lambda: (snapshot if len(snapshot := task_names(app.process.pid)) == 9 else None),
+                       "Expected nine gateway threads after startup", health=app.health)
+    for name in ("gateway-admin", "gateway-manage", "gateway-core", "gateway-query", "gateway-http"):
+        assert name in names.values(), f"Missing thread {name}: {names}"
+    admin_tid = next(tid for tid, name in names.items() if name == "gateway-admin")
+    assert admin_tid != app.process.pid, "Management Reactor runs in the serial/main thread"
+    managed_mask = sum(1 << (number - 1) for number in (signal.SIGHUP, signal.SIGTERM, signal.SIGINT))
+    for tid, name in names.items():
+        status = (Path("/proc") / str(app.process.pid) / "task" / str(tid) / "status").read_text()
+        blocked = next(int(line.split()[1], 16) for line in status.splitlines()
+                       if line.startswith("SigBlk:"))
+        assert blocked & managed_mask == managed_mask, f"{name}/{tid} did not inherit managed signal mask"
+
+    proc = Path("/proc") / str(app.process.pid)
+    descriptors = {}
+    for fd in (proc / "fd").iterdir():
+        try:
+            descriptors[int(fd.name)] = fd.readlink().as_posix()
+        except FileNotFoundError:
+            pass
+    signal_fds = {fd for fd, target in descriptors.items() if target == "anon_inode:[signalfd]"}
+    serial_fds = {fd for fd, target in descriptors.items() if target == app.values["serial_path"]}
+    assert len(signal_fds) == 1 and serial_fds, f"Unexpected signal/serial fds: {descriptors}"
+    epolls = {}
+    for fd, target in descriptors.items():
+        if target == "anon_inode:[eventpoll]":
+            epolls[fd] = {int(line.split()[1]) for line in (proc / "fdinfo" / str(fd)).read_text().splitlines()
+                          if line.startswith("tfd:")}
+    signal_owners = [fd for fd, watched in epolls.items() if watched & signal_fds]
+    serial_owners = [fd for fd, watched in epolls.items() if watched & serial_fds]
+    assert len(signal_owners) == 1, f"signalfd must belong to exactly one epoll: {epolls}"
+    assert len(serial_owners) == 1, f"Serial must belong to exactly one epoll: {epolls}"
+    assert signal_owners[0] != serial_owners[0], "Main serial epoll still owns signalfd"
+
+    # syscall exposure depends on kernel ptrace policy. fdinfo topology and masks above
+    # remain mandatory; when permitted, identify the actual thread waiting on each epoll.
+    epoll_calls = {"x86_64": {232, 281, 441}, "aarch64": {22, 441},
+                   "armv7l": {252, 346, 441}}.get(platform.machine())
+    if epoll_calls is None:
+        return
+    for tid, expected_fd in ((admin_tid, signal_owners[0]), (app.process.pid, serial_owners[0])):
+        unavailable = []
+
+        def waiting_on_expected_epoll():
+            try:
+                call = (proc / "task" / str(tid) / "syscall").read_text().split()
+            except PermissionError:
+                unavailable.append(True)
+                return True
+            return (len(call) >= 2 and call[0] != "running" and int(call[0]) in epoll_calls
+                    and int(call[1], 0) == expected_fd)
+
+        eventually(waiting_on_expected_epoll, f"Thread {tid} does not wait on its expected epoll",
+                   health=app.health)
+        if unavailable:
+            print("NOTE /proc task syscall restricted; verified thread masks and separate fdinfo registrations")
+            break
+
+
+@contextlib.contextmanager
+def blocked_config_reload(app):
+    """Hold the real config reader on a FIFO; always restore its input before cleanup."""
+    contents = app.config.read_bytes()
+    writer = None
+    app.config.unlink()
+    os.mkfifo(app.config)
+    try:
+        app.process.send_signal(signal.SIGHUP)
+
+        def attach_writer():
+            nonlocal writer
+            try:
+                writer = os.open(app.config, os.O_WRONLY | os.O_NONBLOCK)
+                return True  # A nonblocking writer opens only when a real reader exists.
+            except OSError as error:
+                if error.errno != errno.ENXIO:
+                    raise
+                return False
+
+        eventually(attach_writer, "Management worker never opened the injected config FIFO", health=app.health)
+        # Keeping this writer open, without data, prevents getline from seeing bytes or EOF.
+        yield
+    finally:
+        restored = app.config.with_suffix(".restored")
+        restored.write_bytes(contents)
+        restored.replace(app.config)
+        if writer is not None:
+            try:
+                assert len(contents) <= 4096, "Test configuration must fit one atomic FIFO write"
+                assert os.write(writer, contents) == len(contents)
+            except BrokenPipeError:
+                pass  # The process may have died during an earlier assertion.
+            finally:
+                os.close(writer)
+
+
+def consume_repeated_hup(app):
+    # Standard signals may coalesce in the kernel. Wait for each HUP to be consumed
+    # before sending another so the test also exercises application reload coalescing.
+    for _ in range(4):
+        app.process.send_signal(signal.SIGHUP)
+
+        def hup_consumed():
+            status = (Path("/proc") / str(app.process.pid) / "status").read_text()
+            pending = [int(line.split()[1], 16) for line in status.splitlines()
+                       if line.startswith(("SigPnd:", "ShdPnd:"))]
+            return not any(mask & (1 << (signal.SIGHUP - 1)) for mask in pending)
+
+        eventually(hup_consumed, "Management Reactor stopped consuming SIGHUP", health=app.health)
+
+
+def check_management_reactor(binary):
+    for stop_signal in (signal.SIGTERM, signal.SIGINT):
+        with running(binary) as app:
+            check_management_thread_ownership(app)
+            completed_reloads = 0
+            if stop_signal == signal.SIGTERM:
+                with blocked_config_reload(app):
+                    consume_repeated_hup(app)
+                    app.node.send(0x02, (2026).to_bytes(2, "big"))
+                    eventually(lambda: any(row["value"] == 2026 for row in app.rows("illuminance")),
+                               "Serial/HTTP stopped while resource worker was blocked", health=app.health)
+                # This response traverses the resource-worker queue after all repeated HUPs;
+                # extra reloads would therefore appear in the final, flushed log below.
+                app.peer.publish("query_light", [""])
+                app.wait_message("gateway/resp/0 ok,42")
+                completed_reloads = 1
+
+            with blocked_config_reload(app):
+                consume_repeated_hup(app)
+                app.process.send_signal(stop_signal)
+                eventually(lambda: "main loop exited, shutting down" in
+                           (app.root / "gateway.log").read_text(),
+                           f"{stop_signal.name} did not stop serial Reactor while resource worker was blocked",
+                           health=app.health)
+                assert app.process.poll() is None, "Shutdown finished before the blocked worker was released"
+            app.process.wait(timeout=6)
+            assert app.process.returncode == 0, f"Unclean shutdown after {stop_signal.name}"
+            log = (app.root / "gateway.log").read_text()
+            assert log.count("SIGHUP received, reloading config...") == completed_reloads + 1, \
+                "SIGHUP submissions were not coalesced while a reload was in flight"
+    print("PASS independent management epoll/thread and signal ownership, reload coalescing, blocked-worker TERM/INT")
 
 
 def check_round_trip_and_http(binary):
@@ -520,7 +677,8 @@ def main():
     binary = Path(sys.argv[1]).resolve()
     assert binary.is_file(), f"Gateway binary does not exist: {binary}"
     for check in (check_round_trip_and_http, check_independent_progress, check_reload_boundaries,
-                  check_resource_reload_under_activity, check_http_descriptor_exhaustion):
+                  check_resource_reload_under_activity, check_http_descriptor_exhaustion,
+                  check_management_reactor):
         check(binary)
 
 
